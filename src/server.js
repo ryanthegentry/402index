@@ -1,6 +1,7 @@
 import express from 'express'
 import { loadListings } from './listings.js'
 import { pollBazaar } from './aggregators/bazaar.js'
+import { pollSatring } from './aggregators/satring.js'
 import { runHealthChecks } from './health/checker.js'
 import apiRoutes from './routes/api.js'
 import pageRoutes from './routes/pages.js'
@@ -18,11 +19,13 @@ app.listen(PORT, () => {
   // Load YAML listings on startup
   loadListings()
 
-  // Run Bazaar poll on startup, then on interval
+  // Run Bazaar + Satring polls on startup, then on interval
   pollBazaar().catch(err => console.error('[server] Initial Bazaar poll failed:', err.message))
+  pollSatring().catch(err => console.error('[server] Initial Satring poll failed:', err.message))
   const bazaarInterval = parseInt(process.env.BAZAAR_POLL_INTERVAL_MS) || 3600000
   setInterval(() => {
     pollBazaar().catch(err => console.error('[server] Bazaar poll failed:', err.message))
+    pollSatring().catch(err => console.error('[server] Satring poll failed:', err.message))
   }, bazaarInterval)
 
   // Run health checks on startup (delayed 30s to let polls finish), then on interval
