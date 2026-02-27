@@ -27,10 +27,11 @@ let healthCheckRunning = false
 const server = app.listen(PORT, () => {
   console.log(`[server] 402index listening on port ${PORT}`)
 
-  // Load YAML listings on startup
+  // Load YAML listings on startup, then apply featured flags immediately
   loadListings()
+  loadFeatured()
 
-  // Run Bazaar + Satring polls on startup, then apply featured flags
+  // Run Bazaar + Satring polls on startup, then re-apply featured flags (catches polled services)
   Promise.all([
     pollBazaar().catch(err => console.error('[server] Initial Bazaar poll failed:', err.message)),
     pollSatring().catch(err => console.error('[server] Initial Satring poll failed:', err.message)),
