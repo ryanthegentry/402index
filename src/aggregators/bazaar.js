@@ -98,7 +98,7 @@ function normalizeItem(item) {
     price_usd: priceUsd,
     payment_asset: paymentAsset,
     payment_network: mapNetworkToPaymentNetwork(accept.network || 'base'),
-    category: categorizeFromDescription(description),
+    category: categorizeFromDescription(description) || 'uncategorized',
     input_schema: accept.outputSchema?.input ? JSON.stringify(accept.outputSchema.input) : null,
     output_schema: accept.outputSchema?.output ? JSON.stringify(accept.outputSchema.output) : null,
     provider,

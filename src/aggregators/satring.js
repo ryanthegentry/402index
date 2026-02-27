@@ -59,7 +59,7 @@ function normalizeService(svc) {
     url: svc.url,
     price_sats: svc.pricing_sats || null,
     price_usd: satsToUsd(svc.pricing_sats),
-    category: mapCategory(svc.categories),
+    category: mapCategory(svc.categories) || 'uncategorized',
     provider: svc.owner_name || null,
     source_id: String(svc.id),
   }
