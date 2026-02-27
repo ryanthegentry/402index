@@ -60,6 +60,12 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_health_checks_service ON health_checks(service_id, checked_at);
+
+  CREATE TABLE IF NOT EXISTS sync_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `)
 
 export default db
