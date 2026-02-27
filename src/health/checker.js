@@ -1,36 +1,75 @@
 import fetch from 'node-fetch'
+import dns from 'dns'
+import { isIPv4, isIPv6 } from 'net'
 import db from '../db.js'
 
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
 const HEALTH_CHECK_RETENTION_DAYS = 30
 
-// Block health checks to private/internal IPs (SSRF protection)
-const BLOCKED_HOSTS = new Set([
-  'localhost', '127.0.0.1', '0.0.0.0', '[::1]',
-  '169.254.169.254', // Cloud metadata
-  'metadata.google.internal',
-])
+// Check if a resolved IP address is private/reserved
+export function isPrivateIp(ip) {
+  if (!ip) return true
 
-function isBlockedUrl(urlStr) {
+  // IPv6 checks
+  if (isIPv6(ip) || ip.includes(':')) {
+    const lower = ip.toLowerCase()
+    if (lower === '::1') return true                          // IPv6 loopback
+    if (lower.startsWith('fe80:')) return true                // Link-local fe80::/10
+    if (lower.startsWith('fd') || lower.startsWith('fc')) return true  // ULA fd00::/8 + fc00::/7
+    // IPv4-mapped IPv6 (::ffff:x.x.x.x)
+    const v4match = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+    if (v4match) return isPrivateIp(v4match[1])
+    return false
+  }
+
+  // IPv4 checks — parse octets
+  const parts = ip.split('.')
+  if (parts.length !== 4) return true // Malformed
+  const octets = parts.map(Number)
+  if (octets.some(o => isNaN(o) || o < 0 || o > 255)) return true
+
+  const [a, b] = octets
+  if (a === 10) return true                           // 10.0.0.0/8
+  if (a === 172 && b >= 16 && b <= 31) return true    // 172.16.0.0/12
+  if (a === 192 && b === 168) return true             // 192.168.0.0/16
+  if (a === 127) return true                          // 127.0.0.0/8
+  if (a === 169 && b === 254) return true             // 169.254.0.0/16 (link-local)
+  if (a === 0) return true                            // 0.0.0.0/8
+  if (a === 100 && b >= 64 && b <= 127) return true   // 100.64.0.0/10 (CGNAT)
+
+  return false
+}
+
+// Validate URL scheme only (hostname checked after DNS resolution)
+function isBlockedScheme(urlStr) {
   try {
     const parsed = new URL(urlStr)
-    if (BLOCKED_HOSTS.has(parsed.hostname)) return true
-    // Block private IPv4 ranges
-    const parts = parsed.hostname.split('.')
-    if (parts.length === 4 && parts.every(p => !isNaN(p))) {
-      const [a, b] = parts.map(Number)
-      if (a === 10) return true                           // 10.0.0.0/8
-      if (a === 172 && b >= 16 && b <= 31) return true    // 172.16.0.0/12
-      if (a === 192 && b === 168) return true             // 192.168.0.0/16
-      if (a === 127) return true                          // 127.0.0.0/8
-      if (a === 0) return true                            // 0.0.0.0/8
-    }
-    // Block non-http(s) schemes
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return true
     return false
   } catch {
     return true // Malformed URL = blocked
+  }
+}
+
+// Resolve hostname and check if it points to a private IP (defeats DNS rebinding)
+export async function resolveAndCheck(urlStr) {
+  const parsed = new URL(urlStr)
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '') // Strip brackets from IPv6
+
+  // If hostname is already an IP literal, check directly
+  if (isIPv4(hostname) || isIPv6(hostname)) {
+    return isPrivateIp(hostname) ? 'blocked: private/internal IP' : null
+  }
+
+  try {
+    const { address } = await dns.promises.lookup(hostname)
+    if (isPrivateIp(address)) {
+      return `blocked: ${hostname} resolves to private IP ${address}`
+    }
+    return null
+  } catch (err) {
+    return `blocked: DNS resolution failed for ${hostname}: ${err.code || err.message}`
   }
 }
 
@@ -84,23 +123,31 @@ async function checkService(service) {
   let errorMessage = null
   let checkStatus = 'error'
 
-  // SSRF protection: block requests to private/internal IPs
-  if (isBlockedUrl(url)) {
-    errorMessage = 'blocked: private/internal URL'
+  // SSRF protection: block non-http(s) schemes
+  if (isBlockedScheme(url)) {
+    errorMessage = 'blocked: non-http(s) scheme'
     checkStatus = 'error'
     insertHealthCheck.run({
-      service_id: id,
-      status: checkStatus,
-      response_time_ms: null,
-      http_status: null,
-      error_message: errorMessage,
+      service_id: id, status: checkStatus, response_time_ms: null, http_status: null, error_message: errorMessage,
     })
     updateService.run({
-      id,
-      health_status: 'down',
-      latency_p50_ms: historicalP50 || null,
-      consecutive_failures: (prevFailures || 0) + 1,
-      uptime_30d: calculateUptime(id),
+      id, health_status: 'down', latency_p50_ms: historicalP50 || null,
+      consecutive_failures: (prevFailures || 0) + 1, uptime_30d: calculateUptime(id),
+    })
+    return { id, healthStatus: 'down', httpStatus: null }
+  }
+
+  // SSRF protection: resolve hostname and check against private IP ranges (defeats DNS rebinding)
+  const blockReason = await resolveAndCheck(url)
+  if (blockReason) {
+    errorMessage = blockReason
+    checkStatus = 'error'
+    insertHealthCheck.run({
+      service_id: id, status: checkStatus, response_time_ms: null, http_status: null, error_message: errorMessage,
+    })
+    updateService.run({
+      id, health_status: 'down', latency_p50_ms: historicalP50 || null,
+      consecutive_failures: (prevFailures || 0) + 1, uptime_30d: calculateUptime(id),
     })
     return { id, healthStatus: 'down', httpStatus: null }
   }
@@ -241,6 +288,8 @@ function pruneOldHealthChecks() {
   ).run()
   if (result.changes > 0) {
     console.log(`[health] Pruned ${result.changes} health checks older than ${HEALTH_CHECK_RETENTION_DAYS} days`)
+    // Reclaim disk space after pruning
+    db.pragma('incremental_vacuum')
   }
 }
 
