@@ -1,0 +1,8 @@
+name: "Test Service (402 Status)"
+url: "https://httpstat.us/402"
+protocol: x402
+price_usd: 0.001
+payment_asset: "USDC"
+category: "testing"
+description: "A test endpoint that always returns 402. Used to verify health checker logic."
+provider: "httpstat.us"
