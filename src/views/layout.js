@@ -392,7 +392,6 @@ export function layout(title, content) {
   <footer>
     <div class="container">
       <span>402 Index — paid API directory for AI agents</span>
-      <span>Powered by <a href="https://golem.network" target="_blank">Golem</a></span>
     </div>
   </footer>
 </body>
