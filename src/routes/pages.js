@@ -56,8 +56,8 @@ router.get('/', (req, res) => {
 
   const orderBy = `ORDER BY
     featured DESC,
-    CASE WHEN category != 'uncategorized' THEN 0 ELSE 1 END,
-    CASE health_status WHEN 'healthy' THEN 0 WHEN 'degraded' THEN 1 WHEN 'unknown' THEN 2 WHEN 'down' THEN 3 END,
+    CASE WHEN featured = 1 THEN 0 ELSE CASE WHEN category != 'uncategorized' THEN 0 ELSE 1 END END,
+    CASE health_status WHEN 'healthy' THEN 0 WHEN 'degraded' THEN 1 WHEN 'down' THEN 2 WHEN 'unknown' THEN 3 END,
     name`
 
   const total = db.prepare(`SELECT COUNT(*) as c FROM services ${where}`).get(params).c
