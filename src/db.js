@@ -14,6 +14,16 @@ const db = new Database(DB_PATH)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 
+// Enable incremental auto_vacuum to reclaim space after deletes.
+// auto_vacuum mode can only be changed on a fresh DB or after a full VACUUM.
+const currentAutoVacuum = db.pragma('auto_vacuum', { simple: true })
+if (currentAutoVacuum !== 2) { // 2 = INCREMENTAL
+  console.log('[db] Converting to auto_vacuum=INCREMENTAL (one-time VACUUM)...')
+  db.pragma('auto_vacuum = INCREMENTAL')
+  db.exec('VACUUM')
+  console.log('[db] VACUUM complete, auto_vacuum=INCREMENTAL enabled')
+}
+
 // Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS services (
