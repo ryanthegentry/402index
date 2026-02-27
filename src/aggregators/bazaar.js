@@ -108,10 +108,19 @@ function normalizeItem(item) {
 
 const findExisting = db.prepare('SELECT id FROM services WHERE url = ? AND protocol = ?')
 
+const getSyncState = db.prepare('SELECT value FROM sync_state WHERE key = ?')
+const setSyncState = db.prepare(`
+  INSERT INTO sync_state (key, value) VALUES (?, ?)
+  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+`)
+
 export async function pollBazaar() {
   console.log('[bazaar] Starting poll...')
 
-  let offset = 0
+  // Resume from last saved offset
+  const savedOffset = getSyncState.get('bazaar_offset')
+  let offset = savedOffset ? parseInt(savedOffset.value) || 0 : 0
+  if (offset > 0) console.log(`[bazaar] Resuming from saved offset ${offset}`)
   let total = null
   let newCount = 0
   let updatedCount = 0
@@ -191,10 +200,19 @@ export async function pollBazaar() {
 
     offset += PAGE_SIZE
 
+    // Persist offset so next poll can resume here if we get rate-limited
+    setSyncState.run('bazaar_offset', String(offset))
+
     // Rate limit courtesy delay between pages
     if (total !== null && offset < total) {
       await sleep(PAGE_DELAY_MS)
     }
+  }
+
+  // If we reached the end (or past it), reset offset for next full pass
+  if (total !== null && offset >= total) {
+    setSyncState.run('bazaar_offset', '0')
+    console.log(`[bazaar] Completed full catalog pass, resetting offset to 0`)
   }
 
   const totalSynced = newCount + updatedCount
