@@ -60,35 +60,37 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
     </div>
     <div class="container">
       <div class="filters">
-        <form method="get" action="/">
-          <select name="protocol">
+        <form method="get" action="/"${hasFilters ? ' class="filters-open"' : ''}>
+          <select name="protocol" onchange="this.form.submit()">
             <option value="">All protocols</option>
             <option value="x402"${filters.protocol === 'x402' ? ' selected' : ''}>x402</option>
             <option value="L402"${filters.protocol === 'L402' ? ' selected' : ''}>L402</option>
           </select>
-          <select name="category">
+          <select name="category" onchange="this.form.submit()">
             <option value="">All categories</option>
             ${catOptions}
           </select>
-          <select name="health">
+          <select name="health" onchange="this.form.submit()">
             <option value="">All health</option>
             <option value="healthy"${filters.health === 'healthy' ? ' selected' : ''}>Healthy</option>
             <option value="degraded"${filters.health === 'degraded' ? ' selected' : ''}>Degraded</option>
             <option value="down"${filters.health === 'down' ? ' selected' : ''}>Down</option>
             <option value="unknown"${filters.health === 'unknown' ? ' selected' : ''}>Unknown</option>
           </select>
-          <select name="source">
+          <select name="source" onchange="this.form.submit()">
             <option value="">All sources</option>
             <option value="exclusive"${filters.source === 'exclusive' ? ' selected' : ''}>Exclusive</option>
             <option value="satring"${filters.source === 'satring' ? ' selected' : ''}>Satring</option>
             <option value="bazaar"${filters.source === 'bazaar' ? ' selected' : ''}>Bazaar</option>
           </select>
           <input type="text" name="q" placeholder="Search name or description..." value="${escapeHtml(filters.q || '')}">
-          <label><input type="checkbox" name="featured" value="true"${filters.featured ? ' checked' : ''}> Featured only</label>
+          <button type="button" class="filter-toggle" onclick="this.form.classList.toggle('filters-open')">Filters ▾</button>
+          <label><input type="checkbox" name="featured" value="true"${filters.featured ? ' checked' : ''} onchange="this.form.submit()"> Featured only</label>
           <button type="submit" class="filter-btn">Filter</button>
           ${hasFilters ? '<a href="/" class="filter-clear">Clear</a>' : ''}
         </form>
       </div>
+      <div class="table-wrap">
       <table class="services-table">
         <thead>
           <tr>
@@ -105,6 +107,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
           ${rows || '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">No services found</td></tr>'}
         </tbody>
       </table>
+      </div>
       <div class="pagination">
         <span>Showing ${offset + 1}–${Math.min(offset + limit, total)} of ${total}</span>
         <span>

@@ -366,14 +366,202 @@ export function layout(title, content) {
       justify-content: space-between;
     }
 
+    /* Filter toggle (mobile only) */
+    .filter-toggle {
+      display: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: var(--mono);
+    }
+    .filter-toggle:hover { color: var(--text); border-color: var(--accent); }
+
+    /* Table container */
+    .table-wrap { overflow-x: auto; }
+
+    /* API docs page */
+    .docs-content {
+      max-width: 800px;
+      padding: 32px 0;
+      line-height: 1.8;
+    }
+    .docs-content h1 { font-size: 28px; color: var(--text-bright); margin-bottom: 8px; }
+    .docs-subtitle { color: var(--text-muted); margin-bottom: 32px; font-size: 15px; }
+    .docs-content h2 {
+      font-size: 20px;
+      color: var(--text-bright);
+      margin: 32px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .base-url {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px 16px;
+      font-family: var(--mono);
+      font-size: 14px;
+      color: var(--accent);
+      margin: 8px 0 32px;
+    }
+    .endpoint {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .endpoint-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .endpoint-method {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--green);
+      background: rgba(52, 211, 153, 0.1);
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+    .endpoint-path {
+      font-family: var(--mono);
+      font-size: 14px;
+      color: var(--text-bright);
+    }
+    .endpoint p { margin: 8px 0; color: var(--text); }
+    .params-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 12px 0;
+    }
+    .params-table th {
+      text-align: left;
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .params-table td {
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .params-table td:first-child {
+      font-family: var(--mono);
+      color: var(--accent);
+      white-space: nowrap;
+    }
+    .params-table td:nth-child(2) {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .example-block {
+      position: relative;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px 60px 12px 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-x: auto;
+      margin: 12px 0;
+      white-space: pre;
+      color: var(--text);
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: var(--mono);
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+    .response-sample {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 16px;
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: pre;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .coming-soon {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      padding: 20px;
+      margin: 24px 0;
+    }
+    .coming-soon h3 {
+      color: var(--text-bright);
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+    .coming-soon p { margin: 0; }
+
     /* Responsive */
     @media (max-width: 768px) {
       .detail-grid { grid-template-columns: 1fr; }
+
+      /* Stats bar: total on first line, breakdown on second */
+      .stats-bar .container > span:first-child { width: 100%; }
+      .stats-bar .container { gap: 4px 16px; }
+
+      /* Filters: collapsible on mobile */
+      .filter-toggle { display: inline-block; }
+      .filters form { gap: 8px; }
+      .filters input[type="text"] { order: -2; flex: 1; min-width: 0; width: auto; }
+      .filters .filter-toggle { order: -1; }
+      .filters form:not(.filters-open) select,
+      .filters form:not(.filters-open) label,
+      .filters form:not(.filters-open) .filter-btn,
+      .filters form:not(.filters-open) .filter-clear { display: none; }
+      .filters form.filters-open select { width: 100%; }
+
+      /* Table: hide Category(4), Latency(6), Source(7) — keep Service, Protocol, Price, Health */
       .services-table { font-size: 12px; }
-      .services-table th:nth-child(n+5),
-      .services-table td:nth-child(n+5) { display: none; }
-      .filters form { flex-direction: column; }
-      .filters input[type="text"] { width: 100%; }
+      .services-table th:nth-child(4),
+      .services-table td:nth-child(4),
+      .services-table th:nth-child(6),
+      .services-table td:nth-child(6),
+      .services-table th:nth-child(7),
+      .services-table td:nth-child(7) { display: none; }
+      .svc-name, .svc-url { max-width: 180px; }
+
+      /* About page code blocks */
+      .about-content { max-width: 100%; }
+      .about-content pre { white-space: pre-wrap; word-break: break-word; }
+
+      /* API docs */
+      .docs-content { max-width: 100%; }
+      .endpoint { padding: 14px; }
+      .params-table td:first-child { font-size: 12px; }
+      .example-block { white-space: pre-wrap; word-break: break-all; }
+      .response-sample { white-space: pre-wrap; word-break: break-word; }
+
+      /* Footer */
+      footer .container { flex-direction: column; gap: 8px; }
     }
   </style>
 </head>
@@ -384,7 +572,7 @@ export function layout(title, content) {
       <nav>
         <a href="/">Directory</a>
         <a href="/about">About</a>
-        <a href="/api/v1/health">API</a>
+        <a href="/api-docs">API</a>
       </nav>
     </div>
   </header>
