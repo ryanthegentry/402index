@@ -2,22 +2,14 @@ import express from 'express'
 import { loadListings } from './listings.js'
 import { pollBazaar } from './aggregators/bazaar.js'
 import { runHealthChecks } from './health/checker.js'
+import apiRoutes from './routes/api.js'
+import pageRoutes from './routes/pages.js'
 
 const app = express()
 const PORT = process.env.PORT || 3402
 
-// Placeholder routes
-app.get('/api/v1/health', (req, res) => {
-  res.json({ status: 'ok' })
-})
-
-app.get('/api/v1/services', (req, res) => {
-  res.json({ services: [], total: 0, limit: 50, offset: 0 })
-})
-
-app.get('/', (req, res) => {
-  res.send('<h1>402 Index</h1><p>Coming soon.</p>')
-})
+app.use('/api/v1', apiRoutes)
+app.use('/', pageRoutes)
 
 // Start server
 app.listen(PORT, () => {
