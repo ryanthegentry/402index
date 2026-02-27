@@ -4,7 +4,7 @@ import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const DB_PATH = join(__dirname, '..', 'data', '402index.db')
+const DB_PATH = process.env.DB_PATH || join(__dirname, '..', 'data', '402index.db')
 
 mkdirSync(dirname(DB_PATH), { recursive: true })
 
