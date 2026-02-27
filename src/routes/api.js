@@ -25,7 +25,7 @@ router.get('/services', (req, res) => {
   const params = {}
 
   if (protocol) {
-    conditions.push('protocol = @protocol')
+    conditions.push('protocol = @protocol COLLATE NOCASE')
     params.protocol = protocol
   }
   if (category) {
