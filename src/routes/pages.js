@@ -3,6 +3,7 @@ import db from '../db.js'
 import { homePage } from '../views/home.js'
 import { detailPage } from '../views/detail.js'
 import { aboutPage } from '../views/about.js'
+import { apiDocsPage } from '../views/api-docs.js'
 
 const router = Router()
 
@@ -99,6 +100,11 @@ router.get('/service/:id', (req, res) => {
 // About
 router.get('/about', (req, res) => {
   res.send(aboutPage())
+})
+
+// API docs
+router.get('/api-docs', (req, res) => {
+  res.send(apiDocsPage())
 })
 
 export default router
