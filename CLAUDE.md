@@ -59,6 +59,13 @@ npm test             # Run tests
 - **Dedup on URL + protocol.** When re-polling Bazaar/Satring, match on endpoint URL + protocol. Update metadata, preserve our health data.
 - **YAML listings are the source of truth for exclusive providers.** Script reads them on startup and syncs to DB.
 
+## TODOs
+
+- [ ] Filter dropdowns should apply immediately on selection (JS onchange) instead of requiring "Filter" button click
+- [ ] 30 Satring services have null price_sats — data cleanup needed
+- [ ] 60 services have null/zero price_usd — data cleanup or better conversion logic
+- [ ] Bazaar polling caps at ~3000-4500 per run due to Coinbase rate limits (429s). Subsequent hourly polls pick up more, but a full sync of all ~13K services takes multiple runs.
+
 ## Important Context
 
 - Read `docs/technical-spec.md` for full schema and API design
