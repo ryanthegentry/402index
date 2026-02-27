@@ -65,7 +65,6 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
             <option value="">All protocols</option>
             <option value="x402"${filters.protocol === 'x402' ? ' selected' : ''}>x402</option>
             <option value="L402"${filters.protocol === 'L402' ? ' selected' : ''}>L402</option>
-            <option value="both"${filters.protocol === 'both' ? ' selected' : ''}>Both</option>
           </select>
           <select name="category">
             <option value="">All categories</option>
