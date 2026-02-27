@@ -69,7 +69,7 @@ provider: "Example Corp"</pre>
 
         <h2>For AI agent developers</h2>
         <p>
-          Use our <a href="/api/v1/health">REST API</a> to query the directory programmatically.
+          Use our <a href="/api-docs">REST API</a> to query the directory programmatically.
           Filter by protocol, category, price, health status, and more.
         </p>
         <pre>GET /api/v1/services?health=healthy&category=real-time-data&max_price_usd=0.01</pre>
