@@ -77,10 +77,8 @@ provider: "Example Corp"</pre>
           An MCP server is coming soon for direct integration with Claude, GPT, and other AI assistants.
         </p>
 
-        <h2>About</h2>
-        <p>
-          402 Index is built by <a href="https://bixi.com">BIXI</a> — infrastructure for
-          AI agents to autonomously discover and pay for services.
+        <p style="margin-top:24px">
+          402 Index is an open directory of paid APIs for AI agents.
         </p>
       </div>
     </div>
