@@ -1,6 +1,8 @@
 # Featured services — matched by URL for stability across DB rebuilds.
 # This file is the single source of truth for featured status.
 featured_urls:
+  - url: "https://www.ganamos.earth/"
+    comment: "Ganamos"
   - url: "https://scout.hugen.tokyo/scout/report"
     comment: "Multi-source intelligence report"
   - url: "https://scout.hugen.tokyo/scout/github"
