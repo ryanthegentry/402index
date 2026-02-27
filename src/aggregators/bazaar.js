@@ -215,7 +215,14 @@ export async function pollBazaar() {
     console.log(`[bazaar] Completed full catalog pass, resetting offset to 0`)
   }
 
+  const totalProcessed = newCount + updatedCount + errorCount
   const totalSynced = newCount + updatedCount
+
+  // Alert if >50% of items failed normalization — API format may have changed
+  if (totalProcessed > 0 && errorCount > 0.5 * totalProcessed) {
+    console.error(`[bazaar] ALERT: >50% of Bazaar items failed to normalize (${errorCount}/${totalProcessed}). API format may have changed!`)
+  }
+
   console.log(`[bazaar] Synced ${totalSynced} services from Bazaar (${newCount} new, ${updatedCount} updated${errorCount > 0 ? `, ${errorCount} errors` : ''})`)
   return { new: newCount, updated: updatedCount, errors: errorCount }
 }
