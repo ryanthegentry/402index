@@ -3,6 +3,36 @@ import db from '../db.js'
 
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
+const HEALTH_CHECK_RETENTION_DAYS = 30
+
+// Block health checks to private/internal IPs (SSRF protection)
+const BLOCKED_HOSTS = new Set([
+  'localhost', '127.0.0.1', '0.0.0.0', '[::1]',
+  '169.254.169.254', // Cloud metadata
+  'metadata.google.internal',
+])
+
+function isBlockedUrl(urlStr) {
+  try {
+    const parsed = new URL(urlStr)
+    if (BLOCKED_HOSTS.has(parsed.hostname)) return true
+    // Block private IPv4 ranges
+    const parts = parsed.hostname.split('.')
+    if (parts.length === 4 && parts.every(p => !isNaN(p))) {
+      const [a, b] = parts.map(Number)
+      if (a === 10) return true                           // 10.0.0.0/8
+      if (a === 172 && b >= 16 && b <= 31) return true    // 172.16.0.0/12
+      if (a === 192 && b === 168) return true             // 192.168.0.0/16
+      if (a === 127) return true                          // 127.0.0.0/8
+      if (a === 0) return true                            // 0.0.0.0/8
+    }
+    // Block non-http(s) schemes
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return true
+    return false
+  } catch {
+    return true // Malformed URL = blocked
+  }
+}
 
 const getServices = db.prepare('SELECT id, url, protocol, latency_p50_ms, consecutive_failures FROM services')
 
@@ -54,13 +84,34 @@ async function checkService(service) {
   let errorMessage = null
   let checkStatus = 'error'
 
+  // SSRF protection: block requests to private/internal IPs
+  if (isBlockedUrl(url)) {
+    errorMessage = 'blocked: private/internal URL'
+    checkStatus = 'error'
+    insertHealthCheck.run({
+      service_id: id,
+      status: checkStatus,
+      response_time_ms: null,
+      http_status: null,
+      error_message: errorMessage,
+    })
+    updateService.run({
+      id,
+      health_status: 'down',
+      latency_p50_ms: historicalP50 || null,
+      consecutive_failures: (prevFailures || 0) + 1,
+      uptime_30d: calculateUptime(id),
+    })
+    return { id, healthStatus: 'down', httpStatus: null }
+  }
+
   try {
-    // Step 1: Try HEAD first
+    // Step 1: Try HEAD first (manual redirect to prevent SSRF via redirects)
     const startHead = Date.now()
     const headRes = await fetch(url, {
       method: 'HEAD',
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      redirect: 'follow',
+      redirect: 'manual',
     })
     httpStatus = headRes.status
     responseTimeMs = Date.now() - startHead
@@ -71,7 +122,7 @@ async function checkService(service) {
       const getRes = await fetch(url, {
         method: 'GET',
         signal: AbortSignal.timeout(TIMEOUT_MS),
-        redirect: 'follow',
+        redirect: 'manual',
       })
       httpStatus = getRes.status
       responseTimeMs = Date.now() - startGet
@@ -184,7 +235,19 @@ function calculateUptime(serviceId) {
   return Math.round((row.up / row.total) * 10000) / 10000
 }
 
+function pruneOldHealthChecks() {
+  const result = db.prepare(
+    `DELETE FROM health_checks WHERE checked_at < datetime('now', '-${HEALTH_CHECK_RETENTION_DAYS} days')`
+  ).run()
+  if (result.changes > 0) {
+    console.log(`[health] Pruned ${result.changes} health checks older than ${HEALTH_CHECK_RETENTION_DAYS} days`)
+  }
+}
+
 export async function runHealthChecks() {
+  // Prune old records before running new checks
+  pruneOldHealthChecks()
+
   const services = getServices.all()
   console.log(`[health] Checking ${services.length} services...`)
 

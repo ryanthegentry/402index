@@ -9,6 +9,9 @@ import pageRoutes from './routes/pages.js'
 const app = express()
 const PORT = process.env.PORT || 3402
 
+// Security: don't leak technology stack
+app.disable('x-powered-by')
+
 app.use('/api/v1', apiRoutes)
 app.use('/', pageRoutes)
 
