@@ -94,6 +94,17 @@ export function loadFeatured() {
     const result = db.prepare(`UPDATE services SET featured = 1 WHERE url IN (${placeholders})`).run(...urls)
 
     console.log(`[featured] Marked ${result.changes} service(s) as featured (${urls.length} URLs in file)`)
+
+    // Log any featured URLs that didn't match a service in the DB
+    if (result.changes < urls.length) {
+      const matchedUrls = db.prepare(`SELECT url FROM services WHERE url IN (${placeholders})`).all(...urls).map(r => r.url)
+      const matchedSet = new Set(matchedUrls)
+      for (const url of urls) {
+        if (!matchedSet.has(url)) {
+          console.warn(`[featured] WARNING: Featured URL not found in DB: ${url}`)
+        }
+      }
+    }
   } catch (err) {
     console.error('[featured] Error loading featured.yaml:', err.message)
   }
