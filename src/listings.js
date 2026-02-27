@@ -54,7 +54,7 @@ export function loadListings() {
         price_usd: listing.price_usd || null,
         payment_asset: listing.payment_asset || null,
         payment_network: listing.payment_network || null,
-        category: listing.category || null,
+        category: listing.category || 'uncategorized',
         input_schema: listing.input ? JSON.stringify(listing.input) : null,
         output_schema: listing.output ? JSON.stringify(listing.output) : null,
         provider: listing.provider || null,
