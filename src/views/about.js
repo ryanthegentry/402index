@@ -54,8 +54,7 @@ export function aboutPage() {
         </p>
         <p>
           <strong>3. Submit a YAML listing.</strong> Create a YAML file describing your service
-          and submit a pull request to our
-          <a href="https://github.com/402index/402index">GitHub repo</a>.
+          and send it to <a href="mailto:hello@402index.io">hello@402index.io</a>.
         </p>
         <pre>name: "My Weather API"
 url: "https://api.example.com/weather"

@@ -1,6 +1,8 @@
 import fetch from 'node-fetch'
 import { v4 as uuidv4 } from 'uuid'
 import db from '../db.js'
+import { getBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
+import { normalizeUrl } from '../services/url-normalize.js'
 
 const SATRING_URL = 'https://satring.com/api/v1/services'
 const PAGE_SIZE = 20 // Satring max per page
@@ -21,14 +23,11 @@ const upsert = db.prepare(`
 
 const findExisting = db.prepare("SELECT id FROM services WHERE url = ? AND protocol = 'L402'")
 
-// Rough BTC/USD conversion for sats → USD
-// In production, you'd fetch a real exchange rate
 const SATS_PER_BTC = 100_000_000
-const BTC_USD = 90_000 // approximate, updated manually
 
 function satsToUsd(sats) {
   if (sats == null || sats === 0) return null
-  return (sats / SATS_PER_BTC) * BTC_USD
+  return (sats / SATS_PER_BTC) * getCachedBtcUsdRate()
 }
 
 function mapCategory(categories) {
@@ -56,7 +55,7 @@ function normalizeService(svc) {
     id: uuidv4(),
     name: svc.name || svc.url,
     description: svc.description || null,
-    url: svc.url,
+    url: normalizeUrl(svc.url),
     price_sats: svc.pricing_sats || null,
     price_usd: satsToUsd(svc.pricing_sats),
     category: mapCategory(svc.categories) || 'uncategorized',
@@ -72,6 +71,9 @@ export async function pollSatring() {
   }
 
   console.log('[satring] Starting poll...')
+
+  // Refresh BTC/USD rate before converting sats prices
+  await getBtcUsdRate()
 
   let page = 1
   let totalPages = null

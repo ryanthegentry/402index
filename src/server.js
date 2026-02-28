@@ -1,8 +1,10 @@
 import express from 'express'
+import helmet from 'helmet'
 import { loadListings, loadFeatured } from './listings.js'
 import { pollBazaar } from './aggregators/bazaar.js'
 import { pollSatring } from './aggregators/satring.js'
 import { runHealthChecks } from './health/checker.js'
+import { notFoundHandler, errorHandler } from './middleware/error-handler.js'
 import apiRoutes from './routes/api.js'
 import pageRoutes from './routes/pages.js'
 
@@ -14,11 +16,20 @@ if (process.env.NODE_ENV !== 'production') {
   console.warn('[server] WARNING: NODE_ENV is not "production" (current: %s)', process.env.NODE_ENV || 'undefined')
 }
 
-// Security: don't leak technology stack
-app.disable('x-powered-by')
+// Security headers
+app.use(helmet({ contentSecurityPolicy: false }))
+
+// Trust proxy in production (Railway, Fly.io)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1)
+}
 
 app.use('/api/v1', apiRoutes)
 app.use('/', pageRoutes)
+
+// 404 catch-all + error handler (must be after routes)
+app.use(notFoundHandler)
+app.use(errorHandler)
 
 // Track in-flight health check for graceful shutdown
 let healthCheckRunning = false
