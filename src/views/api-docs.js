@@ -10,7 +10,7 @@ export function apiDocsPage() {
     <div class="container">
       <div class="docs-content">
         <h1>402 Index API</h1>
-        <p class="docs-subtitle">Programmatic access to the paid API directory. Free, no auth required.</p>
+        <p class="docs-subtitle">Programmatic access to the paid API directory. Free tier available, L402 payments for higher limits.</p>
 
         <h2>Base URL</h2>
         <div class="base-url">https://402index.io/api/v1</div>
@@ -101,10 +101,25 @@ export function apiDocsPage() {
           offset: 0
         }, null, 2))}</div>
 
+        <h2>Rate Limits &amp; L402 Payments</h2>
+        <p>API endpoints are rate-limited to ensure fair usage. Pay via Lightning Network to unlock higher limits.</p>
+        <table class="params-table">
+          <thead>
+            <tr><th>Tier</th><th>Limit</th><th>How</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Free</td><td>100 req/min per IP</td><td>No auth needed</td></tr>
+            <tr><td>L402</td><td>1,000 req/min per IP</td><td><code>Authorization: L402 &lt;macaroon&gt;:&lt;preimage&gt;</code></td></tr>
+          </tbody>
+        </table>
+        <p>When you exceed the free tier, the API returns <code>402 Payment Required</code> with a Lightning invoice in the <code>WWW-Authenticate</code> header. Pay the invoice, then include the L402 token in subsequent requests.</p>
+        <p>Exempt from rate limiting: <code>/</code>, <code>/about</code>, <code>/api-docs</code>, <code>/service/*</code>, <code>/api/v1/health</code></p>
+        <p><em>402 Index is the first service listed in its own directory — we eat our own dog food.</em></p>
+
         <div class="coming-soon">
-          <h3>MCP Server — Coming Soon</h3>
-          <p>An MCP server is coming for direct integration with Claude, GPT, and other AI assistants.
-          The MCP server will allow agents to discover and evaluate paid APIs without leaving their workflow.</p>
+          <h3>MCP Server — Available</h3>
+          <p>An MCP server is available for direct integration with Claude, GPT, and other AI assistants.
+          See the <code>mcp-server/</code> directory for setup instructions.</p>
         </div>
       </div>
     </div>

@@ -73,7 +73,8 @@ provider: "Example Corp"</pre>
         </p>
         <pre>GET /api/v1/services?health=healthy&category=real-time-data&max_price_usd=0.01</pre>
         <p>
-          An MCP server is coming soon for direct integration with Claude, GPT, and other AI assistants.
+          An MCP server is available for direct integration with Claude, GPT, and other AI assistants.
+          See the <a href="/api-docs">API docs</a> for details.
         </p>
 
         <p style="margin-top:24px">
