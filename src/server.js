@@ -5,6 +5,8 @@ import { pollBazaar } from './aggregators/bazaar.js'
 import { pollSatring } from './aggregators/satring.js'
 import { runHealthChecks } from './health/checker.js'
 import { notFoundHandler, errorHandler } from './middleware/error-handler.js'
+import { verifyL402 } from './middleware/l402.js'
+import { freeLimiter, l402Limiter } from './middleware/rate-limit.js'
 import apiRoutes from './routes/api.js'
 import pageRoutes from './routes/pages.js'
 
@@ -23,6 +25,11 @@ app.use(helmet({ contentSecurityPolicy: false }))
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1)
 }
+
+// Rate-limited API routes: services, services/:id, categories
+app.use('/api/v1/services', verifyL402, freeLimiter, l402Limiter)
+app.use('/api/v1/categories', verifyL402, freeLimiter, l402Limiter)
+// /api/v1/health is exempt from rate limiting (uptime monitors)
 
 app.use('/api/v1', apiRoutes)
 app.use('/', pageRoutes)
