@@ -14,6 +14,8 @@ router.get('/services', (req, res) => {
     payment_asset,
     q,
     featured,
+    sort,
+    order,
     limit: rawLimit,
     offset: rawOffset,
   } = req.query
@@ -60,7 +62,13 @@ router.get('/services', (req, res) => {
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''
 
-  const orderBy = `ORDER BY
+  const sortColumns = { name: 'name', price: 'price_usd', latency: 'latency_p50_ms', uptime: 'uptime_30d' }
+  const sortCol = sortColumns[sort]
+  const sortDir = order === 'desc' ? 'DESC' : 'ASC'
+
+  const orderBy = sortCol
+    ? `ORDER BY featured DESC, ${sortCol} ${sortDir}`
+    : `ORDER BY
     featured DESC,
     CASE WHEN featured = 1 THEN 0 ELSE CASE WHEN category != 'uncategorized' THEN 0 ELSE 1 END END,
     CASE health_status WHEN 'healthy' THEN 0 WHEN 'degraded' THEN 1 WHEN 'down' THEN 2 WHEN 'unknown' THEN 3 END,
