@@ -1,0 +1,26 @@
+{
+  "name": "@402index/mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for 402 Index — AI agent service discovery",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "402index-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "test": "node --test test/**/*.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

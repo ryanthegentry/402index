@@ -2,3 +2,5 @@ data/
 node_modules/
 *.db
 docs/bazaar-sample.json
+mcp-server/node_modules/
+mcp-server/dist/
