@@ -1,6 +1,7 @@
 import fetch from 'node-fetch'
 import { v4 as uuidv4 } from 'uuid'
 import db from '../db.js'
+import { normalizeUrl } from '../services/url-normalize.js'
 
 const BAZAAR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources'
 const PAGE_SIZE = 100
@@ -71,8 +72,9 @@ function normalizeItem(item) {
   const accept = item.accepts?.[0]
   if (!accept) return null
 
-  const url = item.resource || accept.resource
-  if (!url) return null
+  const rawUrl = item.resource || accept.resource
+  if (!rawUrl) return null
+  const url = normalizeUrl(rawUrl)
 
   const maxAmount = accept.maxAmountRequired
   // USDC has 6 decimals

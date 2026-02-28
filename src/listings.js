@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import yaml from 'js-yaml'
 import { v4 as uuidv4 } from 'uuid'
 import db from './db.js'
+import { normalizeUrl } from './services/url-normalize.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const LISTINGS_DIR = join(__dirname, '..', 'listings')
@@ -49,7 +50,7 @@ export function loadListings() {
         id: uuidv4(),
         name: listing.name || 'Unknown',
         description: listing.description || null,
-        url: listing.url,
+        url: normalizeUrl(listing.url),
         protocol: listing.protocol,
         price_sats: listing.price_sats || null,
         price_usd: listing.price_usd || null,
@@ -80,7 +81,7 @@ export function loadFeatured() {
   try {
     const content = readFileSync(FEATURED_FILE, 'utf8')
     const data = yaml.load(content)
-    const urls = (data?.featured_urls || []).map(e => e.url).filter(Boolean)
+    const urls = (data?.featured_urls || []).map(e => normalizeUrl(e.url)).filter(Boolean)
 
     if (urls.length === 0) {
       console.log('[featured] No featured URLs found')
