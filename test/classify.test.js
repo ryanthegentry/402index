@@ -75,6 +75,19 @@ describe('flagTemplates', () => {
     }
   })
 
+  it('does NOT flag root pathname "/" even with 5+ distinct hosts', () => {
+    const db = createTestDb()
+    for (let i = 0; i < 10; i++) {
+      insertService(db, `root-${i}`, `https://provider${i}.com/`)
+    }
+
+    const count = flagTemplates(db)
+    assert.equal(count, 0)
+    for (let i = 0; i < 10; i++) {
+      assert.equal(db.prepare('SELECT is_template FROM services WHERE id = ?').get(`root-${i}`).is_template, 0)
+    }
+  })
+
   it('handles invalid URLs gracefully', () => {
     const db = createTestDb()
     insertService(db, 'bad', 'not-a-url')

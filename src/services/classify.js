@@ -6,6 +6,9 @@ const DEMO_KEYWORDS = new Set([
 
 const TEMPLATE_THRESHOLD = 5
 
+// Pathnames too generic to indicate a template fork
+const GENERIC_PATHNAMES = new Set(['/', ''])
+
 export function flagTemplates(database = db) {
   const rows = database.prepare('SELECT id, url FROM services').all()
   const byPathname = new Map()
@@ -17,6 +20,8 @@ export function flagTemplates(database = db) {
     } catch {
       continue
     }
+    // Skip generic root paths — every site has "/" so it's not a signal
+    if (GENERIC_PATHNAMES.has(pathname)) continue
     if (!byPathname.has(pathname)) byPathname.set(pathname, [])
     byPathname.get(pathname).push(row)
   }
