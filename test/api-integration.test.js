@@ -530,8 +530,11 @@ describe('GET /api/v1/health', () => {
     assert.ok(r.body.total_endpoints > 0, 'should have endpoints')
     assert.ok(typeof r.body.distinct_services === 'number')
     assert.ok(typeof r.body.distinct_providers === 'number')
+    assert.ok(typeof r.body.distinct_providers_raw === 'number')
+    assert.ok(typeof r.body.excluded_templates === 'number')
+    assert.ok(typeof r.body.excluded_demos === 'number')
     assert.ok(r.body.distinct_services <= r.body.total_endpoints, 'distinct services <= total endpoints')
-    assert.ok(r.body.distinct_providers <= r.body.distinct_services, 'distinct providers <= distinct services')
+    assert.ok(r.body.distinct_providers <= r.body.distinct_providers_raw, 'filtered providers <= raw providers')
   })
 
   it('by_protocol values are objects with endpoint/service/provider counts', async () => {
@@ -542,6 +545,8 @@ describe('GET /api/v1/health', () => {
       assert.ok(typeof val.endpoints === 'number', `by_protocol.${proto}.endpoints should be number`)
       assert.ok(typeof val.services === 'number', `by_protocol.${proto}.services should be number`)
       assert.ok(typeof val.providers === 'number', `by_protocol.${proto}.providers should be number`)
+      assert.ok(typeof val.providers_raw === 'number', `by_protocol.${proto}.providers_raw should be number`)
+      assert.ok(val.providers <= val.providers_raw, `by_protocol.${proto}.providers <= providers_raw`)
     }
   })
 

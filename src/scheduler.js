@@ -3,6 +3,7 @@ import { pollBazaar } from './aggregators/bazaar.js'
 import { pollSatring } from './aggregators/satring.js'
 import { pollL402Apps } from './aggregators/l402apps.js'
 import { runHealthChecks } from './health/checker.js'
+import { classifyServices } from './services/classify.js'
 
 let healthCheckRunning = false
 
@@ -14,12 +15,18 @@ function runPolls() {
   return Promise.all([
     pollBazaar().catch(err => console.error('[scheduler] Bazaar poll failed:', err.message)),
     pollSatring().catch(err => console.error('[scheduler] Satring poll failed:', err.message)),
-  ]).then(() => loadFeatured())
+  ]).then(() => {
+    loadFeatured()
+    classifyServices()
+  })
 }
 
 function runL402AppsPoll() {
   return pollL402Apps()
-    .then(() => loadFeatured())
+    .then(() => {
+      loadFeatured()
+      classifyServices()
+    })
     .catch(err => console.error('[scheduler] l402apps poll failed:', err.message))
 }
 

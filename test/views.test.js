@@ -110,6 +110,37 @@ describe('homePage', () => {
     assert.ok(html.includes('endpoints'))
   })
 
+  it('renders protocol counter when both l402Providers and x402Providers are provided', () => {
+    const html = homePage({
+      services: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      filters: {},
+      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, x402Providers: 386 },
+      categories: [],
+    })
+    assert.ok(html.includes('<div class="protocol-bar">'), 'should render protocol bar')
+    assert.ok(html.includes('L402'), 'should show L402 label')
+    assert.ok(html.includes('x402'), 'should show x402 label')
+    assert.ok(html.includes('<strong>24</strong>'), 'should show L402 count')
+    assert.ok(html.includes('<strong>386</strong>'), 'should show x402 count')
+    assert.ok(html.includes('protocol-fill-l402'), 'should have fill bar')
+  })
+
+  it('does NOT render protocol counter when one count is zero', () => {
+    const html = homePage({
+      services: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      filters: {},
+      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 0, x402Providers: 386 },
+      categories: [],
+    })
+    assert.ok(!html.includes('<div class="protocol-bar">'), 'should not render protocol bar when l402 is 0')
+  })
+
   it('escapes HTML in service names', () => {
     const html = homePage({
       services: [{

@@ -74,6 +74,41 @@ export const styles = `
     }
     .stat-value { color: var(--text-bright); }
 
+    /* Protocol bar */
+    .protocol-bar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 0;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    .protocol-bar .container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .protocol-l402 {
+      color: #F7931A;
+      white-space: nowrap;
+    }
+    .protocol-x402 {
+      color: #0052FF;
+      white-space: nowrap;
+    }
+    .protocol-track {
+      flex: 1;
+      height: 6px;
+      background: rgba(0, 82, 255, 0.25);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .protocol-fill-l402 {
+      height: 100%;
+      background: #F7931A;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
     /* Filters */
     .filters {
       padding: 16px 0;
