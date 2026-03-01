@@ -10,7 +10,6 @@ mkdirSync(dirname(DB_PATH), { recursive: true })
 
 const db = new Database(DB_PATH)
 
-// Performance pragmas
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 
@@ -24,7 +23,6 @@ if (currentAutoVacuum !== 2) { // 2 = INCREMENTAL
   console.log('[db] VACUUM complete, auto_vacuum=INCREMENTAL enabled')
 }
 
-// Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS services (
     id TEXT PRIMARY KEY,

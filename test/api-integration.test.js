@@ -10,7 +10,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-const BASE = process.env.API_BASE || 'https://402index.io'
+const BASE = process.env.API_BASE || 'http://localhost:3402'
 const API = `${BASE}/api/v1`
 
 async function api(path) {
@@ -247,18 +247,16 @@ describe('GET /api/v1/services — Edge Cases', () => {
     assert.equal(r.body.services.length, 0, 'negative max_price should return 0 results')
   })
 
-  it('?health=bogus → should return 0 results', async () => {
+  it('?health=bogus → invalid value ignored (returns all)', async () => {
     const r = await api('/services?health=bogus')
     assert.equal(r.status, 200)
-    assert.equal(r.body.total, 0)
-    assert.equal(r.body.services.length, 0)
+    assert.ok(r.body.total > 0, 'invalid health filter should be ignored')
   })
 
-  it('?source=bogus → should return 0 results', async () => {
+  it('?source=bogus → invalid value ignored (returns all)', async () => {
     const r = await api('/services?source=bogus')
     assert.equal(r.status, 200)
-    assert.equal(r.body.total, 0)
-    assert.equal(r.body.services.length, 0)
+    assert.ok(r.body.total > 0, 'invalid source filter should be ignored')
   })
 
   it('?protocol=bogus → should return 0 results', async () => {

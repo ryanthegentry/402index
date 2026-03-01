@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import yaml from 'js-yaml'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 import db from './db.js'
 import { normalizeUrl } from './services/url-normalize.js'
 
@@ -10,7 +10,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const LISTINGS_DIR = join(__dirname, '..', 'listings')
 const FEATURED_FILE = join(LISTINGS_DIR, 'featured.yaml')
 
-const upsert = db.prepare(`
+// Lazy-initialized prepared statements
+const stmts = {}
+function stmt(key, sql) {
+  if (!stmts[key]) stmts[key] = db.prepare(sql)
+  return stmts[key]
+}
+
+const upsert = () => stmt('upsert', `
   INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id)
   VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'exclusive', @source_id)
   ON CONFLICT(url, protocol) DO UPDATE SET
@@ -27,12 +34,15 @@ const upsert = db.prepare(`
     updated_at = datetime('now')
 `)
 
+/**
+ * Load exclusive YAML listing files from the listings/ directory and upsert into DB.
+ * @returns {number} Number of listings successfully loaded
+ */
 export function loadListings() {
   let files
   try {
     files = readdirSync(LISTINGS_DIR).filter(f => (f.endsWith('.yaml') || f.endsWith('.yml')) && f !== 'featured.yaml')
   } catch {
-    console.log('[listings] No listings directory found, skipping')
     return 0
   }
 
@@ -46,8 +56,8 @@ export function loadListings() {
         continue
       }
 
-      upsert.run({
-        id: uuidv4(),
+      upsert().run({
+        id: randomUUID(),
         name: listing.name || 'Unknown',
         description: listing.description || null,
         url: normalizeUrl(listing.url),
@@ -72,38 +82,31 @@ export function loadListings() {
   return loaded
 }
 
+/**
+ * Read featured.yaml and set/unset the featured flag on matching services in DB.
+ * @returns {void}
+ */
 export function loadFeatured() {
-  if (!existsSync(FEATURED_FILE)) {
-    console.log('[featured] No featured.yaml found, skipping')
-    return
-  }
+  if (!existsSync(FEATURED_FILE)) return
 
   try {
     const content = readFileSync(FEATURED_FILE, 'utf8')
     const data = yaml.load(content)
     const urls = (data?.featured_urls || []).map(e => normalizeUrl(e.url)).filter(Boolean)
+    if (urls.length === 0) return
 
-    if (urls.length === 0) {
-      console.log('[featured] No featured URLs found')
-      return
-    }
-
-    // Reset all featured flags, then set the ones in the file
-    db.prepare('UPDATE services SET featured = 0 WHERE featured = 1').run()
-
+    // Idempotent: unfeatured anything NOT in the list, then feature everything that IS
     const placeholders = urls.map(() => '?').join(',')
-    const result = db.prepare(`UPDATE services SET featured = 1 WHERE url IN (${placeholders})`).run(...urls)
+    db.prepare(`UPDATE services SET featured = 0 WHERE featured = 1 AND url NOT IN (${placeholders})`).run(...urls)
+    const result = db.prepare(`UPDATE services SET featured = 1 WHERE url IN (${placeholders}) AND featured = 0`).run(...urls)
 
-    console.log(`[featured] Marked ${result.changes} service(s) as featured (${urls.length} URLs in file)`)
-
-    // Log any featured URLs that didn't match a service in the DB
-    if (result.changes < urls.length) {
-      const matchedUrls = db.prepare(`SELECT url FROM services WHERE url IN (${placeholders})`).all(...urls).map(r => r.url)
-      const matchedSet = new Set(matchedUrls)
-      for (const url of urls) {
-        if (!matchedSet.has(url)) {
-          console.warn(`[featured] WARNING: Featured URL not found in DB: ${url}`)
-        }
+    // Log unmatched featured URLs (actionable warnings)
+    const matchedUrls = db.prepare(`SELECT url FROM services WHERE url IN (${placeholders})`).all(...urls).map(r => r.url)
+    const matchedSet = new Set(matchedUrls)
+    const unmatched = urls.filter(u => !matchedSet.has(u))
+    if (unmatched.length > 0) {
+      for (const url of unmatched) {
+        console.warn(`[featured] URL not found in DB: ${url}`)
       }
     }
   } catch (err) {

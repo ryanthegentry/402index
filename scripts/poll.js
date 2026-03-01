@@ -1,7 +1,7 @@
 // Standalone script: npm run poll
-import { loadListings, loadFeatured } from './listings.js'
-import { pollBazaar } from './aggregators/bazaar.js'
-import { pollSatring } from './aggregators/satring.js'
+import { loadListings, loadFeatured } from '../src/listings.js'
+import { pollBazaar } from '../src/aggregators/bazaar.js'
+import { pollSatring } from '../src/aggregators/satring.js'
 
 async function main() {
   loadListings()

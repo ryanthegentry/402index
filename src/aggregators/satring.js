@@ -1,13 +1,18 @@
-import fetch from 'node-fetch'
-import { v4 as uuidv4 } from 'uuid'
 import db from '../db.js'
-import { getBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
-import { normalizeUrl } from '../services/url-normalize.js'
+import { fetchBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
+import { normalizeRawService } from './satring-utils.js'
 
 const SATRING_URL = 'https://satring.com/api/v1/services'
 const PAGE_SIZE = 20 // Satring max per page
 
-const upsert = db.prepare(`
+// Lazy-initialized prepared statements
+const stmts = {}
+function stmt(key, sql) {
+  if (!stmts[key]) stmts[key] = db.prepare(sql)
+  return stmts[key]
+}
+
+const upsert = () => stmt('upsert', `
   INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id)
   VALUES (@id, @name, @description, @url, 'L402', @price_sats, @price_usd, 'BTC/Lightning', 'lightning', @category, @provider, 'satring', @source_id)
   ON CONFLICT(url, protocol) DO UPDATE SET
@@ -21,48 +26,7 @@ const upsert = db.prepare(`
     updated_at = datetime('now')
 `)
 
-const findExisting = db.prepare("SELECT id FROM services WHERE url = ? AND protocol = 'L402'")
-
-const SATS_PER_BTC = 100_000_000
-
-function satsToUsd(sats) {
-  if (sats == null || sats === 0) return null
-  return (sats / SATS_PER_BTC) * getCachedBtcUsdRate()
-}
-
-function mapCategory(categories) {
-  if (!categories || categories.length === 0) return null
-  // Use first category, map Satring slugs to our hierarchy
-  const slug = categories[0].slug
-  const map = {
-    'ai-ml': 'ai/ml',
-    'finance': 'crypto/prices',
-    'data': 'real-time-data',
-    'weather': 'real-time-data/weather',
-    'search': 'tools/search',
-    'tools': 'tools',
-    'social': 'social',
-    'identity': 'identity',
-    'media': 'media',
-    'compute': 'compute',
-    'storage': 'storage',
-  }
-  return map[slug] || slug
-}
-
-function normalizeService(svc) {
-  return {
-    id: uuidv4(),
-    name: svc.name || svc.url,
-    description: svc.description || null,
-    url: normalizeUrl(svc.url),
-    price_sats: svc.pricing_sats || null,
-    price_usd: satsToUsd(svc.pricing_sats),
-    category: mapCategory(svc.categories) || 'uncategorized',
-    provider: svc.owner_name || null,
-    source_id: String(svc.id),
-  }
-}
+const findExisting = () => stmt('findExisting', "SELECT id FROM services WHERE url = ? AND protocol = 'L402'")
 
 export async function pollSatring() {
   if (process.env.SATRING_ENABLED !== 'true') {
@@ -73,7 +37,7 @@ export async function pollSatring() {
   console.log('[satring] Starting poll...')
 
   // Refresh BTC/USD rate before converting sats prices
-  await getBtcUsdRate()
+  await fetchBtcUsdRate()
 
   let page = 1
   let totalPages = null
@@ -106,15 +70,10 @@ export async function pollSatring() {
 
     for (const svc of services) {
       try {
-        if (!svc.url) {
-          errorCount++
-          continue
-        }
+        const normalized = normalizeRawService(svc, getCachedBtcUsdRate())
+        const existing = findExisting().get(normalized.url)
 
-        const normalized = normalizeService(svc)
-        const existing = findExisting.get(normalized.url)
-
-        upsert.run(normalized)
+        upsert().run(normalized)
 
         if (existing) {
           updatedCount++

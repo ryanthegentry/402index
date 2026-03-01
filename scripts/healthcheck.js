@@ -1,5 +1,5 @@
 // Standalone script: npm run healthcheck
-import { runHealthChecks } from './health/checker.js'
+import { runHealthChecks } from '../src/health/checker.js'
 
 async function main() {
   await runHealthChecks()

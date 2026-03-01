@@ -1,5 +1,4 @@
 import crypto from 'crypto'
-import fetch from 'node-fetch'
 
 class StubL402Provider {
   async createChallenge() { return null }
@@ -11,7 +10,6 @@ class MockL402Provider {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('MockL402Provider cannot be used in production')
     }
-    console.log('[l402] Using mock provider (dev/test only)')
   }
 
   async createChallenge(priceSats, durationHours) {
@@ -38,49 +36,35 @@ class MockL402Provider {
 class GolemL402Provider {
   constructor() {
     this.baseUrl = process.env.GOLEM_INTERNAL_URL || 'http://golem.railway.internal:8402'
-    console.log(`[l402] Using Golem provider at ${this.baseUrl}`)
   }
 
   async createChallenge(priceSats, durationHours) {
-    try {
-      const res = await fetch(`${this.baseUrl}/l402/challenge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ price_sats: priceSats, duration_hours: durationHours }),
-        signal: AbortSignal.timeout(5000),
-      })
-      if (!res.ok) {
-        console.error(`[l402] Golem challenge returned ${res.status}`)
-        return null
-      }
-      return await res.json()
-    } catch (err) {
-      console.error(`[l402] Golem gateway unreachable: ${err.message}`)
-      return null
-    }
+    const res = await fetch(`${this.baseUrl}/l402/challenge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ price_sats: priceSats, duration_hours: durationHours }),
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) throw new Error(`Golem challenge returned ${res.status}`)
+    return await res.json()
   }
 
   async verifyToken(authorization) {
-    try {
-      const res = await fetch(`${this.baseUrl}/l402/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ authorization }),
-        signal: AbortSignal.timeout(5000),
-      })
-      if (!res.ok) {
-        console.error(`[l402] Golem verify returned ${res.status}`)
-        return { valid: false }
-      }
-      return await res.json()
-    } catch (err) {
-      console.error(`[l402] Golem gateway unreachable: ${err.message}`)
-      return { valid: false }
-    }
+    const res = await fetch(`${this.baseUrl}/l402/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ authorization }),
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) throw new Error(`Golem verify returned ${res.status}`)
+    return await res.json()
   }
 }
 
 let provider = null
+
+/** Reset the cached singleton (for testing). */
+export function resetProvider() { provider = null }
 
 export function getProvider() {
   if (provider) return provider

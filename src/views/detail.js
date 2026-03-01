@@ -1,33 +1,5 @@
 import { layout } from './layout.js'
-
-function escapeHtml(str) {
-  if (!str) return ''
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-function healthDot(status) {
-  return `<span class="health-dot health-${status}"></span>${status}`
-}
-
-function protocolBadge(protocol) {
-  const cls = protocol === 'x402' ? 'badge-x402' : protocol === 'L402' ? 'badge-l402' : 'badge-both'
-  return `<span class="badge ${cls}">${protocol}</span>`
-}
-
-function formatPrice(service) {
-  if (service.price_usd != null) return `$${service.price_usd.toFixed(service.price_usd < 0.01 ? 4 : 2)}`
-  if (service.price_sats != null) return `${service.price_sats} sats`
-  return '—'
-}
-
-function formatSchema(json) {
-  if (!json) return null
-  try {
-    return JSON.stringify(JSON.parse(json), null, 2)
-  } catch {
-    return json
-  }
-}
+import { escapeHtml, healthDot, protocolBadge, formatPrice, formatSchema } from './helpers.js'
 
 export function detailPage(service) {
   const healthRows = (service.health_checks || []).map(h => `
@@ -132,7 +104,7 @@ export function detailPage(service) {
       </div>
       ` : ''}
 
-      ${healthRows ? `
+      ${service.health_checks?.length > 0 ? `
       <div class="detail-section" style="margin-bottom:24px">
         <h2>Recent Health Checks</h2>
         <table class="health-history">

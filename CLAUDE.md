@@ -9,16 +9,28 @@ Protocol-agnostic directory of paid APIs (L402 + x402) for AI agents. Distributi
 ├── src/
 │   ├── server.js          # Express app entry point
 │   ├── db.js              # SQLite setup + migrations
+│   ├── scheduler.js       # Background job scheduling
+│   ├── listings.js        # YAML listing loader + featured flags
 │   ├── routes/
 │   │   ├── api.js         # /api/v1/services, /api/v1/health, /api/v1/categories
 │   │   └── pages.js       # HTML routes: /, /service/:id, /about
+│   ├── queries/
+│   │   └── services.js    # Shared query builder + column definitions
 │   ├── aggregators/
 │   │   ├── bazaar.js      # x402 Bazaar polling + normalization
-│   │   └── satring.js     # Satring L402 polling + normalization
+│   │   ├── bazaar-utils.js
+│   │   ├── satring.js     # Satring L402 polling + normalization
+│   │   └── satring-utils.js
 │   ├── health/
 │   │   └── checker.js     # Health check runner (every 15min)
+│   ├── middleware/         # Express middleware (L402, rate limiting)
+│   ├── services/          # Business logic (BTC price, L402 provider, URL normalization)
 │   └── views/             # HTML templates (plain JS template literals, no framework)
+├── scripts/
+│   ├── poll.js            # Standalone: npm run poll
+│   └── healthcheck.js     # Standalone: npm run healthcheck
 ├── listings/              # YAML files for exclusive/manual listings
+├── test/                  # Tests (node:test)
 ├── data/                  # SQLite DB file (gitignored)
 ├── CLAUDE.md
 ├── package.json
@@ -61,7 +73,7 @@ npm test             # Run tests
 
 ## TODOs
 
-- [ ] Filter dropdowns should apply immediately on selection (JS onchange) instead of requiring "Filter" button click
+- [x] Filter dropdowns auto-submit on change (onchange="this.form.submit()")
 - [ ] 30 Satring services have null price_sats — data cleanup needed
 - [ ] 60 services have null/zero price_usd — data cleanup or better conversion logic
 - [ ] Bazaar polling caps at ~3000-4500 per run due to Coinbase rate limits (429s). Subsequent hourly polls pick up more, but a full sync of all ~13K services takes multiple runs.

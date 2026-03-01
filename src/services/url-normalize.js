@@ -1,3 +1,4 @@
+/** Normalize a URL: upgrade to HTTPS, lowercase hostname, strip trailing slashes. */
 export function normalizeUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return rawUrl
   try {

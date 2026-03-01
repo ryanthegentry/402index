@@ -1,0 +1,115 @@
+import { describe, it } from 'node:test'
+import assert from 'node:assert/strict'
+import { buildServiceQuery } from '../src/queries/services.js'
+
+describe('buildServiceQuery', () => {
+  it('returns defaults when called with no options', () => {
+    const result = buildServiceQuery()
+    assert.equal(result.where, '')
+    assert.deepEqual(result.params, {})
+    assert.equal(result.limit, 50)
+    assert.equal(result.offset, 0)
+    assert.ok(result.orderBy.includes('featured DESC'))
+  })
+
+  it('handles limit=0 correctly (clamps to 1, not default 50)', () => {
+    const result = buildServiceQuery({ rawLimit: '0' })
+    assert.equal(result.limit, 1)
+  })
+
+  it('clamps limit to range [1, 200]', () => {
+    assert.equal(buildServiceQuery({ rawLimit: '-5' }).limit, 1)
+    assert.equal(buildServiceQuery({ rawLimit: '500' }).limit, 200)
+    assert.equal(buildServiceQuery({ rawLimit: '100' }).limit, 100)
+  })
+
+  it('defaults limit to 50 for non-numeric input', () => {
+    assert.equal(buildServiceQuery({ rawLimit: 'abc' }).limit, 50)
+    assert.equal(buildServiceQuery({ rawLimit: '' }).limit, 50)
+  })
+
+  it('floors offset to 0', () => {
+    assert.equal(buildServiceQuery({ rawOffset: '-10' }).offset, 0)
+    assert.equal(buildServiceQuery({ rawOffset: 'abc' }).offset, 0)
+    assert.equal(buildServiceQuery({ rawOffset: '5' }).offset, 5)
+  })
+
+  it('builds protocol filter with COLLATE NOCASE', () => {
+    const result = buildServiceQuery({ protocol: 'L402' })
+    assert.ok(result.where.includes('protocol = @protocol COLLATE NOCASE'))
+    assert.equal(result.params.protocol, 'L402')
+  })
+
+  it('builds category filter with prefix match', () => {
+    const result = buildServiceQuery({ category: 'crypto' })
+    assert.ok(result.where.includes('@category'))
+    assert.ok(result.where.includes('@categoryPrefix'))
+    assert.equal(result.params.category, 'crypto')
+    assert.equal(result.params.categoryPrefix, 'crypto/%')
+  })
+
+  it('builds health filter for valid values', () => {
+    for (const v of ['healthy', 'degraded', 'down', 'unknown']) {
+      const result = buildServiceQuery({ health: v })
+      assert.ok(result.where.includes('health_status = @health'))
+      assert.equal(result.params.health, v)
+    }
+  })
+
+  it('ignores invalid health filter values', () => {
+    const result = buildServiceQuery({ health: 'bogus' })
+    assert.ok(!result.where.includes('health_status'))
+    assert.equal(result.params.health, undefined)
+  })
+
+  it('ignores invalid source filter values', () => {
+    const result = buildServiceQuery({ source: 'invalid' })
+    assert.ok(!result.where.includes('source'))
+    assert.equal(result.params.source, undefined)
+  })
+
+  it('ignores max_price_usd when NaN', () => {
+    const result = buildServiceQuery({ max_price_usd: 'abc' })
+    assert.ok(!result.where.includes('price_usd'))
+    assert.equal(result.params.max_price_usd, undefined)
+  })
+
+  it('parses valid max_price_usd', () => {
+    const result = buildServiceQuery({ max_price_usd: '0.01' })
+    assert.ok(result.where.includes('price_usd <= @max_price_usd'))
+    assert.equal(result.params.max_price_usd, 0.01)
+  })
+
+  it('builds q filter as LIKE', () => {
+    const result = buildServiceQuery({ q: 'weather' })
+    assert.ok(result.where.includes('name LIKE @q'))
+    assert.equal(result.params.q, '%weather%')
+  })
+
+  it('builds featured filter for "true" and "1"', () => {
+    const r1 = buildServiceQuery({ featured: 'true' })
+    assert.ok(r1.where.includes('featured = 1'))
+    const r2 = buildServiceQuery({ featured: '1' })
+    assert.ok(r2.where.includes('featured = 1'))
+    const r3 = buildServiceQuery({ featured: 'false' })
+    assert.ok(!r3.where.includes('featured'))
+  })
+
+  it('uses custom sort column when provided', () => {
+    const result = buildServiceQuery({ sort: 'price', order: 'desc' })
+    assert.ok(result.orderBy.includes('price_usd DESC'))
+  })
+
+  it('falls back to default order for invalid sort', () => {
+    const result = buildServiceQuery({ sort: 'bogus' })
+    assert.ok(result.orderBy.includes('health_status'))
+  })
+
+  it('combines multiple filters with AND', () => {
+    const result = buildServiceQuery({ protocol: 'x402', health: 'healthy', source: 'bazaar' })
+    assert.ok(result.where.includes('AND'))
+    assert.equal(result.params.protocol, 'x402')
+    assert.equal(result.params.health, 'healthy')
+    assert.equal(result.params.source, 'bazaar')
+  })
+})
