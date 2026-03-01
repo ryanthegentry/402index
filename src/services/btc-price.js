@@ -1,12 +1,15 @@
-import fetch from 'node-fetch'
-
 const CACHE_TTL_MS = 3600000 // 1 hour
 const FALLBACK_RATE = 90_000
 
 let cachedRate = FALLBACK_RATE
 let lastFetchedAt = 0
 
-export async function getBtcUsdRate() {
+/**
+ * Fetch the current BTC/USD rate from CoinGecko, updating the module cache.
+ * Returns the cached rate if the cache is still fresh or on fetch failure.
+ * @returns {Promise<number>}
+ */
+export async function fetchBtcUsdRate() {
   const now = Date.now()
   if (now - lastFetchedAt < CACHE_TTL_MS && cachedRate !== FALLBACK_RATE) {
     return cachedRate
@@ -33,6 +36,13 @@ export async function getBtcUsdRate() {
   }
 }
 
+/** @returns {number} The last-known BTC/USD rate (no network call). */
 export function getCachedBtcUsdRate() {
   return cachedRate
+}
+
+/** Reset the price cache (for testing). */
+export function resetCache() {
+  cachedRate = FALLBACK_RATE
+  lastFetchedAt = 0
 }

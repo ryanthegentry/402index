@@ -1,9 +1,5 @@
 import { layout } from './layout.js'
-
-function escapeHtml(str) {
-  if (!str) return ''
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
+import { escapeHtml } from './helpers.js'
 
 export function apiDocsPage() {
   return layout('API Documentation', `
@@ -35,6 +31,7 @@ export function apiDocsPage() {
               <tr><td>featured</td><td>boolean</td><td>Only featured services: <code>true</code></td></tr>
               <tr><td>q</td><td>string</td><td>Search by name or description</td></tr>
               <tr><td>max_price_usd</td><td>number</td><td>Maximum price in USD</td></tr>
+              <tr><td>payment_asset</td><td>string</td><td>Filter by payment asset (e.g. <code>USDC</code>, <code>BTC/Lightning</code>)</td></tr>
               <tr><td>sort</td><td>string</td><td>Sort by: <code>name</code>, <code>price</code>, <code>latency</code>, <code>uptime</code></td></tr>
               <tr><td>order</td><td>string</td><td>Sort order: <code>asc</code> or <code>desc</code></td></tr>
               <tr><td>limit</td><td>integer</td><td>Results per page (default 50, max 200)</td></tr>
@@ -116,7 +113,7 @@ export function apiDocsPage() {
         <p>Exempt from rate limiting: <code>/</code>, <code>/about</code>, <code>/api-docs</code>, <code>/service/*</code>, <code>/api/v1/health</code></p>
         <p><em>402 Index is the first service listed in its own directory — we eat our own dog food.</em></p>
 
-        <div class="coming-soon">
+        <div class="info-callout">
           <h3>MCP Server — Available</h3>
           <p>An MCP server is available for direct integration with Claude, GPT, and other AI assistants.
           See the <code>mcp-server/</code> directory for setup instructions.</p>

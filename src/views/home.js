@@ -1,24 +1,5 @@
 import { layout } from './layout.js'
-
-function healthDot(status) {
-  return `<span class="health-dot health-${status}"></span>${status}`
-}
-
-function protocolBadge(protocol) {
-  const cls = protocol === 'x402' ? 'badge-x402' : protocol === 'L402' ? 'badge-l402' : 'badge-both'
-  return `<span class="badge ${cls}">${protocol}</span>`
-}
-
-function formatPrice(service) {
-  if (service.price_usd != null) return `$${service.price_usd.toFixed(service.price_usd < 0.01 ? 4 : 2)}`
-  if (service.price_sats != null) return `${service.price_sats} sats`
-  return '<span style="color:var(--text-muted)">—</span>'
-}
-
-function escapeHtml(str) {
-  if (!str) return ''
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
+import { escapeHtml, healthDot, protocolBadge, formatPrice } from './helpers.js'
 
 export function homePage({ services, total, limit, offset, filters, stats, categories }) {
   const currentPage = Math.floor(offset / limit) + 1
@@ -104,7 +85,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
           </tr>
         </thead>
         <tbody>
-          ${rows || '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">No services found</td></tr>'}
+          ${services.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">No services found</td></tr>' : rows}
         </tbody>
       </table>
       </div>

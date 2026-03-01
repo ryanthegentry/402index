@@ -1,11 +1,24 @@
 const isProduction = process.env.NODE_ENV === 'production'
 
+/**
+ * Express middleware that creates a 404 error and passes it to the error handler.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
 export function notFoundHandler(req, res, next) {
   const err = new Error('Not Found')
   err.status = 404
   next(err)
 }
 
+/**
+ * Express error-handling middleware. Returns JSON for /api/ routes, HTML otherwise.
+ * @param {Error & {status?: number}} err
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} _next
+ */
 export function errorHandler(err, req, res, _next) {
   const status = err.status || 500
   const message = status === 404 ? 'Not Found' : 'Internal Server Error'

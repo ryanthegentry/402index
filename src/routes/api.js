@@ -1,86 +1,12 @@
 import { Router } from 'express'
 import db from '../db.js'
+import { queryServices, API_COLUMNS } from '../queries/services.js'
 
 const router = Router()
 
-// GET /api/v1/services
 router.get('/services', (req, res) => {
-  const {
-    protocol,
-    category,
-    health,
-    source,
-    max_price_usd,
-    payment_asset,
-    q,
-    featured,
-    sort,
-    order,
-    limit: rawLimit,
-    offset: rawOffset,
-  } = req.query
-
-  const limit = Math.min(Math.max(parseInt(rawLimit) || 50, 1), 200)
-  const offset = Math.max(parseInt(rawOffset) || 0, 0)
-
-  const conditions = []
-  const params = {}
-
-  if (protocol) {
-    conditions.push('protocol = @protocol COLLATE NOCASE')
-    params.protocol = protocol
-  }
-  if (category) {
-    // Prefix match: 'crypto' matches 'crypto/nft', 'crypto/defi', etc.
-    conditions.push("(category = @category OR category LIKE @categoryPrefix)")
-    params.category = category
-    params.categoryPrefix = category + '/%'
-  }
-  if (health) {
-    conditions.push('health_status = @health')
-    params.health = health
-  }
-  if (source) {
-    conditions.push('source = @source')
-    params.source = source
-  }
-  if (max_price_usd) {
-    conditions.push('price_usd <= @max_price_usd')
-    params.max_price_usd = parseFloat(max_price_usd)
-  }
-  if (payment_asset) {
-    conditions.push('payment_asset = @payment_asset')
-    params.payment_asset = payment_asset
-  }
-  if (q) {
-    conditions.push("(name LIKE @q OR description LIKE @q)")
-    params.q = `%${q}%`
-  }
-  if (featured === 'true' || featured === '1') {
-    conditions.push('featured = 1')
-  }
-
-  const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''
-
-  const sortColumns = { name: 'name', price: 'price_usd', latency: 'latency_p50_ms', uptime: 'uptime_30d' }
-  const sortCol = sortColumns[sort]
-  const sortDir = order === 'desc' ? 'DESC' : 'ASC'
-
-  const orderBy = sortCol
-    ? `ORDER BY featured DESC, ${sortCol} ${sortDir}`
-    : `ORDER BY
-    featured DESC,
-    CASE WHEN featured = 1 THEN 0 ELSE CASE WHEN category != 'uncategorized' THEN 0 ELSE 1 END END,
-    CASE health_status WHEN 'healthy' THEN 0 WHEN 'degraded' THEN 1 WHEN 'down' THEN 2 WHEN 'unknown' THEN 3 END,
-    name`
-
-  const total = db.prepare(`SELECT COUNT(*) as c FROM services ${where}`).get(params).c
-  const services = db.prepare(
-    `SELECT id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at
-     FROM services ${where} ${orderBy} LIMIT @limit OFFSET @offset`
-  ).all({ ...params, limit, offset })
-
-  res.json({ services, total, limit, offset })
+  const { limit: rawLimit, offset: rawOffset, ...filters } = req.query
+  res.json(queryServices(db, { ...filters, rawLimit, rawOffset }, API_COLUMNS))
 })
 
 // GET /api/v1/services/:id

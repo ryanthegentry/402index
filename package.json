@@ -7,8 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "poll": "node src/poll.js",
-    "healthcheck": "node src/healthcheck.js",
+    "poll": "node scripts/poll.js",
+    "healthcheck": "node scripts/healthcheck.js",
     "test": "node --test test/**/*.test.js"
   },
   "dependencies": {
@@ -16,9 +16,7 @@
     "express": "^4.21.0",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
-    "js-yaml": "^4.1.0",
-    "node-fetch": "^3.3.0",
-    "uuid": "^10.0.0"
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

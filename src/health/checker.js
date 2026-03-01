@@ -1,4 +1,3 @@
-import fetch from 'node-fetch'
 import dns from 'dns'
 import { isIPv4, isIPv6 } from 'net'
 import db from '../db.js'
@@ -7,7 +6,11 @@ const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
 const HEALTH_CHECK_RETENTION_DAYS = 30
 
-// Check if a resolved IP address is private/reserved
+/**
+ * Check if a resolved IP address is private/reserved.
+ * @param {string|null} ip - IPv4 or IPv6 address to check
+ * @returns {boolean} True if the IP is private, reserved, or malformed
+ */
 export function isPrivateIp(ip) {
   if (!ip) return true
 
@@ -52,7 +55,11 @@ function isBlockedScheme(urlStr) {
   }
 }
 
-// Resolve hostname and check if it points to a private IP (defeats DNS rebinding)
+/**
+ * Resolve hostname and check if it points to a private IP (defeats DNS rebinding).
+ * @param {string} urlStr - URL whose hostname will be resolved via DNS
+ * @returns {Promise<string|null>} Block reason string if private/unreachable, or null if safe
+ */
 export async function resolveAndCheck(urlStr) {
   const parsed = new URL(urlStr)
   const hostname = parsed.hostname.replace(/^\[|\]$/g, '') // Strip brackets from IPv6
@@ -73,14 +80,21 @@ export async function resolveAndCheck(urlStr) {
   }
 }
 
-const getServices = db.prepare('SELECT id, url, protocol, latency_p50_ms, consecutive_failures FROM services')
+// Lazy-initialized prepared statements (avoids coupling to db.js import order)
+const stmts = {}
+function stmt(key, sql) {
+  if (!stmts[key]) stmts[key] = db.prepare(sql)
+  return stmts[key]
+}
 
-const insertHealthCheck = db.prepare(`
+const getServices = () => stmt('getServices', 'SELECT id, url, protocol, latency_p50_ms, consecutive_failures FROM services')
+
+const insertHealthCheck = () => stmt('insertHealthCheck', `
   INSERT INTO health_checks (service_id, status, response_time_ms, http_status, error_message)
   VALUES (@service_id, @status, @response_time_ms, @http_status, @error_message)
 `)
 
-const updateService = db.prepare(`
+const updateService = () => stmt('updateService', `
   UPDATE services SET
     health_status = @health_status,
     latency_p50_ms = @latency_p50_ms,
@@ -92,7 +106,7 @@ const updateService = db.prepare(`
   WHERE id = @id
 `)
 
-const getUptime = db.prepare(`
+const getUptime = () => stmt('getUptime', `
   SELECT
     COUNT(*) as total,
     SUM(CASE WHEN status IN ('healthy', 'degraded') THEN 1 ELSE 0 END) as up
@@ -101,7 +115,7 @@ const getUptime = db.prepare(`
     AND checked_at > datetime('now', '-30 days')
 `)
 
-const getRecentLatencies = db.prepare(`
+const getRecentLatencies = () => stmt('getRecentLatencies', `
   SELECT response_time_ms FROM health_checks
   WHERE service_id = ? AND response_time_ms IS NOT NULL
   ORDER BY checked_at DESC
@@ -109,61 +123,40 @@ const getRecentLatencies = db.prepare(`
 `)
 
 function calculateP50(serviceId) {
-  const rows = getRecentLatencies.all(serviceId)
+  const rows = getRecentLatencies().all(serviceId)
   if (rows.length === 0) return null
   const sorted = rows.map(r => r.response_time_ms).sort((a, b) => a - b)
   return sorted[Math.floor(sorted.length / 2)]
 }
 
-async function checkService(service) {
-  const { id, url, protocol, latency_p50_ms: historicalP50, consecutive_failures: prevFailures } = service
-
-  let httpStatus = null
-  let responseTimeMs = null
-  let errorMessage = null
-  let checkStatus = 'error'
-
+/**
+ * Perform the HTTP check (HEAD then GET if needed).
+ * @returns {{ httpStatus: number|null, responseTimeMs: number|null, errorMessage: string|null }}
+ */
+async function performHttpCheck(url) {
   // SSRF protection: block non-http(s) schemes
   if (isBlockedScheme(url)) {
-    errorMessage = 'blocked: non-http(s) scheme'
-    checkStatus = 'error'
-    insertHealthCheck.run({
-      service_id: id, status: checkStatus, response_time_ms: null, http_status: null, error_message: errorMessage,
-    })
-    updateService.run({
-      id, health_status: 'down', latency_p50_ms: historicalP50 || null,
-      consecutive_failures: (prevFailures || 0) + 1, uptime_30d: calculateUptime(id),
-    })
-    return { id, healthStatus: 'down', httpStatus: null }
+    return { httpStatus: null, responseTimeMs: null, errorMessage: 'blocked: non-http(s) scheme' }
   }
 
-  // SSRF protection: resolve hostname and check against private IP ranges (defeats DNS rebinding)
+  // SSRF protection: resolve hostname and check against private IP ranges
   const blockReason = await resolveAndCheck(url)
   if (blockReason) {
-    errorMessage = blockReason
-    checkStatus = 'error'
-    insertHealthCheck.run({
-      service_id: id, status: checkStatus, response_time_ms: null, http_status: null, error_message: errorMessage,
-    })
-    updateService.run({
-      id, health_status: 'down', latency_p50_ms: historicalP50 || null,
-      consecutive_failures: (prevFailures || 0) + 1, uptime_30d: calculateUptime(id),
-    })
-    return { id, healthStatus: 'down', httpStatus: null }
+    return { httpStatus: null, responseTimeMs: null, errorMessage: blockReason }
   }
 
   try {
-    // Step 1: Try HEAD first (manual redirect to prevent SSRF via redirects)
+    // Try HEAD first (manual redirect to prevent SSRF via redirects)
     const startHead = Date.now()
     const headRes = await fetch(url, {
       method: 'HEAD',
       signal: AbortSignal.timeout(TIMEOUT_MS),
       redirect: 'manual',
     })
-    httpStatus = headRes.status
-    responseTimeMs = Date.now() - startHead
+    let httpStatus = headRes.status
+    let responseTimeMs = Date.now() - startHead
 
-    // Step 2: If not 402, retry with GET (some endpoints only return 402 on GET)
+    // If not 402, retry with GET (some endpoints only return 402 on GET)
     if (httpStatus !== 402) {
       const startGet = Date.now()
       const getRes = await fetch(url, {
@@ -174,118 +167,106 @@ async function checkService(service) {
       httpStatus = getRes.status
       responseTimeMs = Date.now() - startGet
     }
+
+    return { httpStatus, responseTimeMs, errorMessage: null }
   } catch (err) {
-    errorMessage = err.name === 'TimeoutError' || err.code === 'ABORT_ERR'
-      ? 'timeout'
-      : err.message
-
-    if (errorMessage === 'timeout') {
-      checkStatus = 'timeout'
-    }
+    const errorMessage = (err.name === 'TimeoutError' || err.code === 'ABORT_ERR') ? 'timeout' : err.message
+    return { httpStatus: null, responseTimeMs: null, errorMessage }
   }
+}
 
-  // Determine health status
-  let healthStatus = 'unknown'
-
+/**
+ * Classify HTTP result into two status domains:
+ * - checkStatus: raw result for health_checks table ('healthy'|'degraded'|'down'|'timeout'|'error')
+ * - healthStatus: derived aggregate for services table ('healthy'|'degraded'|'down'|'unknown')
+ */
+export function classifyHealthStatus(httpStatus, errorMessage, prevFailures, historicalP50, responseTimeMs) {
   if (errorMessage) {
-    // Failed to connect
     const newFailures = (prevFailures || 0) + 1
-    checkStatus = checkStatus === 'timeout' ? 'timeout' : 'error'
-    healthStatus = newFailures >= 3 ? 'down' : 'unknown'
-
-    insertHealthCheck.run({
-      service_id: id,
-      status: checkStatus,
-      response_time_ms: null,
-      http_status: null,
-      error_message: errorMessage,
-    })
-
-    updateService.run({
-      id,
-      health_status: healthStatus,
-      latency_p50_ms: historicalP50 || null,
-      consecutive_failures: newFailures,
-      uptime_30d: calculateUptime(id),
-    })
-
-    return { id, healthStatus, httpStatus: null }
-  }
-
-  // Got a response
-  if (httpStatus === 402) {
-    // 402 = paywall active = healthy
-    checkStatus = 'healthy'
-    healthStatus = 'healthy'
-
-    // Check for latency degradation
-    if (historicalP50 && responseTimeMs > historicalP50 * 2) {
-      checkStatus = 'degraded'
-      healthStatus = 'degraded'
+    return {
+      healthStatus: newFailures >= 3 ? 'down' : 'unknown',
+      checkStatus: errorMessage === 'timeout' ? 'timeout' : 'error',
+      consecutiveFailures: newFailures,
     }
-  } else if (httpStatus === 200) {
-    // 200 on a paywall service = possible misconfiguration
-    checkStatus = 'degraded'
-    healthStatus = 'degraded'
-  } else if (httpStatus >= 500) {
-    checkStatus = 'down'
-    const newFailures = (prevFailures || 0) + 1
-    healthStatus = newFailures >= 3 ? 'down' : 'degraded'
-
-    insertHealthCheck.run({
-      service_id: id,
-      status: checkStatus,
-      response_time_ms: responseTimeMs,
-      http_status: httpStatus,
-      error_message: `HTTP ${httpStatus}`,
-    })
-
-    updateService.run({
-      id,
-      health_status: healthStatus,
-      latency_p50_ms: calculateP50(id) ?? historicalP50,
-      consecutive_failures: newFailures,
-      uptime_30d: calculateUptime(id),
-    })
-
-    return { id, healthStatus, httpStatus }
-  } else {
-    // Other status codes (3xx, 4xx except 402) — treat as degraded
-    checkStatus = 'degraded'
-    healthStatus = 'degraded'
   }
 
-  insertHealthCheck.run({
-    service_id: id,
+  if (httpStatus === 402) {
+    // 402 = paywall active = healthy (unless latency degraded)
+    if (historicalP50 && responseTimeMs > historicalP50 * 2) {
+      return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: 0 }
+    }
+    return { healthStatus: 'healthy', checkStatus: 'healthy', consecutiveFailures: 0 }
+  }
+
+  if (httpStatus === 200) {
+    // 200 on a paywall = possible misconfiguration
+    return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0 }
+  }
+
+  if (httpStatus >= 500) {
+    const newFailures = (prevFailures || 0) + 1
+    return {
+      healthStatus: newFailures >= 3 ? 'down' : 'degraded',
+      checkStatus: 'down',
+      consecutiveFailures: newFailures,
+    }
+  }
+
+  // Other status codes (3xx, 4xx except 402)
+  return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0 }
+}
+
+/** Persist health check result and update service record. */
+function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50 }) {
+  insertHealthCheck().run({
+    service_id: serviceId,
     status: checkStatus,
     response_time_ms: responseTimeMs,
     http_status: httpStatus,
-    error_message: null,
+    error_message: errorMessage || (httpStatus >= 500 ? `HTTP ${httpStatus}` : null),
   })
 
-  const newP50 = calculateP50(id) ?? responseTimeMs
+  const newP50 = errorMessage ? (historicalP50 || null) : (calculateP50(serviceId) ?? responseTimeMs)
 
-  updateService.run({
-    id,
+  updateService().run({
+    id: serviceId,
     health_status: healthStatus,
     latency_p50_ms: newP50,
-    consecutive_failures: healthStatus === 'healthy' ? 0 : (prevFailures || 0),
-    uptime_30d: calculateUptime(id),
+    consecutive_failures: consecutiveFailures,
+    uptime_30d: calculateUptime(serviceId),
+  })
+}
+
+/** Check a single service: HTTP probe, classify result, persist. */
+async function checkService(service) {
+  const { id, url, latency_p50_ms: historicalP50, consecutive_failures: prevFailures } = service
+
+  const httpResult = await performHttpCheck(url)
+  const classification = classifyHealthStatus(
+    httpResult.httpStatus, httpResult.errorMessage, prevFailures, historicalP50, httpResult.responseTimeMs
+  )
+
+  persistHealthResult(id, {
+    ...classification,
+    httpStatus: httpResult.httpStatus,
+    responseTimeMs: httpResult.responseTimeMs,
+    errorMessage: httpResult.errorMessage,
+    historicalP50,
   })
 
-  return { id, healthStatus, httpStatus }
+  return { id, healthStatus: classification.healthStatus, httpStatus: httpResult.httpStatus }
 }
 
 function calculateUptime(serviceId) {
-  const row = getUptime.get(serviceId)
+  const row = getUptime().get(serviceId)
   if (!row || row.total === 0) return null
   return Math.round((row.up / row.total) * 10000) / 10000
 }
 
 function pruneOldHealthChecks() {
   const result = db.prepare(
-    `DELETE FROM health_checks WHERE checked_at < datetime('now', '-${HEALTH_CHECK_RETENTION_DAYS} days')`
-  ).run()
+    "DELETE FROM health_checks WHERE checked_at < datetime('now', @retention)"
+  ).run({ retention: `-${HEALTH_CHECK_RETENTION_DAYS} days` })
   if (result.changes > 0) {
     console.log(`[health] Pruned ${result.changes} health checks older than ${HEALTH_CHECK_RETENTION_DAYS} days`)
     // Reclaim disk space after pruning
@@ -293,11 +274,15 @@ function pruneOldHealthChecks() {
   }
 }
 
+/**
+ * Run health checks for all services (prunes old records first).
+ * @returns {Promise<{healthy: number, degraded: number, down: number, unknown: number, error: number}>} Counts by status
+ */
 export async function runHealthChecks() {
   // Prune old records before running new checks
   pruneOldHealthChecks()
 
-  const services = getServices.all()
+  const services = getServices().all()
   console.log(`[health] Checking ${services.length} services...`)
 
   const results = { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 }
