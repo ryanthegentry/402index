@@ -49,20 +49,28 @@ router.get('/health', (req, res) => {
     .forEach(r => { bySource[r.source] = r.c })
 
   // Distinct services (by hostname) and providers — computed in JS since SQLite
-  // lacks a reliable URL hostname extractor
-  const allServices = db.prepare('SELECT url, protocol, provider FROM services').all()
+  // lacks a reliable URL hostname extractor. Hostname = provider key.
+  const allServices = db.prepare('SELECT url, protocol, is_template, is_demo FROM services').all()
   const hostnameSets = { total: new Set(), L402: new Set(), x402: new Set() }
-  const providerSets = { total: new Set(), L402: new Set(), x402: new Set() }
+  const rawProviders = { total: new Set(), L402: new Set(), x402: new Set() }
+  const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set() }
 
   for (const svc of allServices) {
     const host = extractHostname(svc.url)
     hostnameSets.total.add(host)
     hostnameSets[svc.protocol]?.add(host)
-    if (svc.provider) {
-      providerSets.total.add(svc.provider)
-      providerSets[svc.protocol]?.add(svc.provider)
+
+    rawProviders.total.add(host)
+    rawProviders[svc.protocol]?.add(host)
+
+    if (!svc.is_template && !svc.is_demo) {
+      filteredProviders.total.add(host)
+      filteredProviders[svc.protocol]?.add(host)
     }
   }
+
+  const excludedTemplates = db.prepare('SELECT COUNT(*) as c FROM services WHERE is_template = 1').get().c
+  const excludedDemos = db.prepare('SELECT COUNT(*) as c FROM services WHERE is_demo = 1').get().c
 
   const lastBazaarSync = db.prepare(
     "SELECT MAX(updated_at) as t FROM services WHERE source = 'bazaar'"
@@ -84,12 +92,16 @@ router.get('/health', (req, res) => {
     status: 'ok',
     total_endpoints: total,
     distinct_services: hostnameSets.total.size,
-    distinct_providers: providerSets.total.size,
+    distinct_providers_raw: rawProviders.total.size,
+    distinct_providers: filteredProviders.total.size,
+    excluded_templates: excludedTemplates,
+    excluded_demos: excludedDemos,
     by_protocol: Object.fromEntries(
       Object.entries(byProtocol).map(([proto, endpoints]) => [proto, {
         endpoints,
         services: hostnameSets[proto]?.size || 0,
-        providers: providerSets[proto]?.size || 0,
+        providers_raw: rawProviders[proto]?.size || 0,
+        providers: filteredProviders[proto]?.size || 0,
       }])
     ),
     by_health: byHealth,

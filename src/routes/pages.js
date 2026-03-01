@@ -24,16 +24,23 @@ router.get('/', (req, res) => {
     stats.total += row.c
   }
 
-  // Distinct services (by hostname) and providers
+  // Distinct services (by hostname) and providers (hostname-based, filtered)
   const distinctHosts = new Set()
-  const distinctProviders = new Set()
-  const allUrls = db.prepare('SELECT url, provider FROM services').all()
-  for (const { url, provider } of allUrls) {
-    try { distinctHosts.add(new URL(url).hostname) } catch { /* skip */ }
-    if (provider) distinctProviders.add(provider)
+  const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set() }
+  const allUrls = db.prepare('SELECT url, protocol, is_template, is_demo FROM services').all()
+  for (const svc of allUrls) {
+    let host
+    try { host = new URL(svc.url).hostname } catch { continue }
+    distinctHosts.add(host)
+    if (!svc.is_template && !svc.is_demo) {
+      filteredProviders.total.add(host)
+      filteredProviders[svc.protocol]?.add(host)
+    }
   }
   stats.distinctServices = distinctHosts.size
-  stats.distinctProviders = distinctProviders.size
+  stats.distinctProviders = filteredProviders.total.size
+  stats.l402Providers = filteredProviders.L402.size
+  stats.x402Providers = filteredProviders.x402.size
 
   // Categories for dropdown
   const categories = db.prepare(

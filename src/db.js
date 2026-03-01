@@ -124,4 +124,14 @@ if (schemaRow && schemaRow.sql.includes("source IN (")) {
   console.log('[db] Migration complete')
 }
 
+// Migration: add classification columns for template/demo detection
+for (const col of ['is_template', 'is_demo', 'verified']) {
+  try {
+    db.exec(`ALTER TABLE services ADD COLUMN ${col} INTEGER DEFAULT 0`)
+    console.log(`[db] Added column: ${col}`)
+  } catch {
+    // Column already exists — expected after first run
+  }
+}
+
 export default db

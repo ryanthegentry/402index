@@ -29,6 +29,21 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   const prevOffset = Math.max(0, offset - limit)
   const nextOffset = offset + limit
 
+  const l402 = stats.l402Providers || 0
+  const x402 = stats.x402Providers || 0
+  const l402Pct = (l402 + x402) > 0 ? Math.round((l402 / (l402 + x402)) * 100) : 0
+
+  const protocolBar = (l402 > 0 && x402 > 0) ? `
+    <div class="protocol-bar">
+      <div class="container">
+        <span class="protocol-l402">L402 <strong>${l402}</strong></span>
+        <div class="protocol-track">
+          <div class="protocol-fill-l402" style="width: ${l402Pct}%"></div>
+        </div>
+        <span class="protocol-x402">x402 <strong>${x402}</strong></span>
+      </div>
+    </div>` : ''
+
   return layout('Directory', `
     <div class="stats-bar">
       <div class="container">
@@ -40,6 +55,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
         <span><span class="stat-value" style="color:var(--red)">${stats.down}</span> down</span>
       </div>
     </div>
+    ${protocolBar}
     <div class="container">
       <div class="filters">
         <form method="get" action="/"${hasFilters ? ' class="filters-open"' : ''}>
