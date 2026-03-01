@@ -38,7 +38,7 @@ db.exec(`
     input_schema TEXT,
     output_schema TEXT,
     provider TEXT,
-    source TEXT NOT NULL CHECK(source IN ('bazaar', 'satring', 'exclusive', 'self-registered')),
+    source TEXT NOT NULL,
     source_id TEXT,
     featured INTEGER DEFAULT 0,
     registered_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -75,5 +75,53 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `)
+
+// Migration: remove CHECK constraint on source to support compound values (e.g. 'satring,l402apps')
+const schemaRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='services'").get()
+if (schemaRow && schemaRow.sql.includes("source IN (")) {
+  console.log('[db] Migrating: removing source CHECK constraint...')
+  db.pragma('foreign_keys = OFF')
+  db.exec(`
+    BEGIN IMMEDIATE;
+    CREATE TABLE services_v2 (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      url TEXT NOT NULL,
+      protocol TEXT NOT NULL CHECK(protocol IN ('L402', 'x402', 'both')),
+      price_sats INTEGER,
+      price_usd REAL,
+      payment_asset TEXT,
+      payment_network TEXT,
+      category TEXT,
+      input_schema TEXT,
+      output_schema TEXT,
+      provider TEXT,
+      source TEXT NOT NULL,
+      source_id TEXT,
+      featured INTEGER DEFAULT 0,
+      registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      health_status TEXT DEFAULT 'unknown' CHECK(health_status IN ('healthy', 'degraded', 'down', 'unknown')),
+      uptime_30d REAL,
+      latency_p50_ms INTEGER,
+      last_checked TEXT,
+      last_seen_healthy TEXT,
+      consecutive_failures INTEGER DEFAULT 0
+    );
+    INSERT INTO services_v2 SELECT * FROM services;
+    DROP TABLE services;
+    ALTER TABLE services_v2 RENAME TO services;
+    CREATE INDEX idx_services_protocol ON services(protocol);
+    CREATE INDEX idx_services_category ON services(category);
+    CREATE INDEX idx_services_source ON services(source);
+    CREATE INDEX idx_services_health ON services(health_status);
+    CREATE UNIQUE INDEX idx_services_url_protocol ON services(url, protocol);
+    COMMIT;
+  `)
+  db.pragma('foreign_keys = ON')
+  db.pragma('foreign_key_check')
+  console.log('[db] Migration complete')
+}
 
 export default db

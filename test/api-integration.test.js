@@ -526,38 +526,44 @@ describe('GET /api/v1/health', () => {
     const r = await api('/health')
     assert.equal(r.status, 200)
     assert.equal(r.body.status, 'ok')
-    assert.ok(typeof r.body.total_services === 'number')
-    assert.ok(r.body.total_services > 0, 'should have services')
+    assert.ok(typeof r.body.total_endpoints === 'number')
+    assert.ok(r.body.total_endpoints > 0, 'should have endpoints')
+    assert.ok(typeof r.body.distinct_services === 'number')
+    assert.ok(typeof r.body.distinct_providers === 'number')
+    assert.ok(r.body.distinct_services <= r.body.total_endpoints, 'distinct services <= total endpoints')
+    assert.ok(r.body.distinct_providers <= r.body.distinct_services, 'distinct providers <= distinct services')
   })
 
-  it('by_protocol values are objects with numeric counts', async () => {
+  it('by_protocol values are objects with endpoint/service/provider counts', async () => {
     const r = await api('/health')
     assert.ok(typeof r.body.by_protocol === 'object')
-    for (const [proto, count] of Object.entries(r.body.by_protocol)) {
-      assert.ok(typeof count === 'number', `by_protocol.${proto} should be number`)
-      assert.ok(count > 0)
+    for (const [proto, val] of Object.entries(r.body.by_protocol)) {
+      assert.ok(typeof val === 'object', `by_protocol.${proto} should be object`)
+      assert.ok(typeof val.endpoints === 'number', `by_protocol.${proto}.endpoints should be number`)
+      assert.ok(typeof val.services === 'number', `by_protocol.${proto}.services should be number`)
+      assert.ok(typeof val.providers === 'number', `by_protocol.${proto}.providers should be number`)
     }
   })
 
-  it('by_health values sum to total_services', async () => {
+  it('by_health values sum to total_endpoints', async () => {
     const r = await api('/health')
     const sum = Object.values(r.body.by_health).reduce((a, b) => a + b, 0)
-    assert.equal(sum, r.body.total_services,
-      `by_health sum (${sum}) should equal total_services (${r.body.total_services})`)
+    assert.equal(sum, r.body.total_endpoints,
+      `by_health sum (${sum}) should equal total_endpoints (${r.body.total_endpoints})`)
   })
 
-  it('by_protocol values sum to total_services', async () => {
+  it('by_protocol endpoint values sum to total_endpoints', async () => {
     const r = await api('/health')
-    const sum = Object.values(r.body.by_protocol).reduce((a, b) => a + b, 0)
-    assert.equal(sum, r.body.total_services,
-      `by_protocol sum (${sum}) should equal total_services (${r.body.total_services})`)
+    const sum = Object.values(r.body.by_protocol).reduce((a, b) => a + b.endpoints, 0)
+    assert.equal(sum, r.body.total_endpoints,
+      `by_protocol endpoints sum (${sum}) should equal total_endpoints (${r.body.total_endpoints})`)
   })
 
-  it('by_source values sum to total_services', async () => {
+  it('by_source values sum to total_endpoints', async () => {
     const r = await api('/health')
     const sum = Object.values(r.body.by_source).reduce((a, b) => a + b, 0)
-    assert.equal(sum, r.body.total_services,
-      `by_source sum (${sum}) should equal total_services (${r.body.total_services})`)
+    assert.equal(sum, r.body.total_endpoints,
+      `by_source sum (${sum}) should equal total_endpoints (${r.body.total_endpoints})`)
   })
 
   it('sync timestamps are ISO strings or null', async () => {

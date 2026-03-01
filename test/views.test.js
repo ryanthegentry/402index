@@ -93,7 +93,7 @@ describe('homePage', () => {
     })
 
     assert.ok(html.includes('Test Service'))
-    assert.ok(html.includes('services indexed'))
+    assert.ok(html.includes('endpoints'))
     assert.ok(html.includes('>100<'))
   })
 
@@ -107,7 +107,7 @@ describe('homePage', () => {
       stats: { total: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
       categories: [],
     })
-    assert.ok(html.includes('services indexed'))
+    assert.ok(html.includes('endpoints'))
   })
 
   it('escapes HTML in service names', () => {

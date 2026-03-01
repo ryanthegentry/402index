@@ -23,6 +23,15 @@ router.get('/services/:id', (req, res) => {
   res.json({ ...service, health_checks })
 })
 
+// Extract hostname from a URL (strips scheme and path)
+function extractHostname(url) {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
+}
+
 // GET /api/v1/health
 router.get('/health', (req, res) => {
   const total = db.prepare('SELECT COUNT(*) as c FROM services').get().c
@@ -39,6 +48,22 @@ router.get('/health', (req, res) => {
   db.prepare('SELECT source, COUNT(*) as c FROM services GROUP BY source').all()
     .forEach(r => { bySource[r.source] = r.c })
 
+  // Distinct services (by hostname) and providers — computed in JS since SQLite
+  // lacks a reliable URL hostname extractor
+  const allServices = db.prepare('SELECT url, protocol, provider FROM services').all()
+  const hostnameSets = { total: new Set(), L402: new Set(), x402: new Set() }
+  const providerSets = { total: new Set(), L402: new Set(), x402: new Set() }
+
+  for (const svc of allServices) {
+    const host = extractHostname(svc.url)
+    hostnameSets.total.add(host)
+    hostnameSets[svc.protocol]?.add(host)
+    if (svc.provider) {
+      providerSets.total.add(svc.provider)
+      providerSets[svc.protocol]?.add(svc.provider)
+    }
+  }
+
   const lastBazaarSync = db.prepare(
     "SELECT MAX(updated_at) as t FROM services WHERE source = 'bazaar'"
   ).get()?.t || null
@@ -47,18 +72,31 @@ router.get('/health', (req, res) => {
     "SELECT MAX(updated_at) as t FROM services WHERE source = 'satring'"
   ).get()?.t || null
 
+  const lastL402AppsSync = db.prepare(
+    "SELECT MAX(updated_at) as t FROM services WHERE source LIKE '%l402apps%'"
+  ).get()?.t || null
+
   const lastHealthCheck = db.prepare(
     'SELECT MAX(checked_at) as t FROM health_checks'
   ).get()?.t || null
 
   res.json({
     status: 'ok',
-    total_services: total,
-    by_protocol: byProtocol,
+    total_endpoints: total,
+    distinct_services: hostnameSets.total.size,
+    distinct_providers: providerSets.total.size,
+    by_protocol: Object.fromEntries(
+      Object.entries(byProtocol).map(([proto, endpoints]) => [proto, {
+        endpoints,
+        services: hostnameSets[proto]?.size || 0,
+        providers: providerSets[proto]?.size || 0,
+      }])
+    ),
     by_health: byHealth,
     by_source: bySource,
     last_bazaar_sync: lastBazaarSync,
     last_satring_sync: lastSatringSync,
+    last_l402apps_sync: lastL402AppsSync,
     last_health_check_run: lastHealthCheck,
   })
 })

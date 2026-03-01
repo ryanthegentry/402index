@@ -32,11 +32,12 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   return layout('Directory', `
     <div class="stats-bar">
       <div class="container">
-        <span><span class="stat-value">${stats.total}</span> services indexed</span>
+        <span><span class="stat-value">${stats.total.toLocaleString()}</span> endpoints</span>
+        <span><span class="stat-value">${stats.distinctServices?.toLocaleString() || '—'}</span> services</span>
+        <span><span class="stat-value">${stats.distinctProviders?.toLocaleString() || '—'}</span> providers</span>
         <span><span class="stat-value" style="color:var(--green)">${stats.healthy}</span> healthy</span>
         <span><span class="stat-value" style="color:var(--yellow)">${stats.degraded}</span> degraded</span>
         <span><span class="stat-value" style="color:var(--red)">${stats.down}</span> down</span>
-        <span><span class="stat-value">${stats.unknown}</span> unknown</span>
       </div>
     </div>
     <div class="container">
@@ -63,6 +64,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
             <option value="exclusive"${filters.source === 'exclusive' ? ' selected' : ''}>Exclusive</option>
             <option value="satring"${filters.source === 'satring' ? ' selected' : ''}>Satring</option>
             <option value="bazaar"${filters.source === 'bazaar' ? ' selected' : ''}>Bazaar</option>
+            <option value="l402apps"${filters.source === 'l402apps' ? ' selected' : ''}>L402 Apps</option>
           </select>
           <input type="text" name="q" placeholder="Search name or description..." value="${escapeHtml(filters.q || '')}">
           <button type="button" class="filter-toggle" onclick="this.form.classList.toggle('filters-open')">Filters ▾</button>

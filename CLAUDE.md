@@ -20,7 +20,9 @@ Protocol-agnostic directory of paid APIs (L402 + x402) for AI agents. Distributi
 │   │   ├── bazaar.js      # x402 Bazaar polling + normalization
 │   │   ├── bazaar-utils.js
 │   │   ├── satring.js     # Satring L402 polling + normalization
-│   │   └── satring-utils.js
+│   │   ├── satring-utils.js
+│   │   ├── l402apps.js    # l402apps.com polling (HTML scrape, daily)
+│   │   └── l402apps-utils.js
 │   ├── health/
 │   │   └── checker.js     # Health check runner (every 15min)
 │   ├── middleware/         # Express middleware (L402, rate limiting)
