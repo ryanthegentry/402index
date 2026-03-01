@@ -2,11 +2,13 @@
 import { loadListings, loadFeatured } from '../src/listings.js'
 import { pollBazaar } from '../src/aggregators/bazaar.js'
 import { pollSatring } from '../src/aggregators/satring.js'
+import { pollL402Apps } from '../src/aggregators/l402apps.js'
 
 async function main() {
   loadListings()
   await pollBazaar()
   await pollSatring()
+  await pollL402Apps()
   loadFeatured()
   process.exit(0)
 }

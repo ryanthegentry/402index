@@ -24,6 +24,17 @@ router.get('/', (req, res) => {
     stats.total += row.c
   }
 
+  // Distinct services (by hostname) and providers
+  const distinctHosts = new Set()
+  const distinctProviders = new Set()
+  const allUrls = db.prepare('SELECT url, provider FROM services').all()
+  for (const { url, provider } of allUrls) {
+    try { distinctHosts.add(new URL(url).hostname) } catch { /* skip */ }
+    if (provider) distinctProviders.add(provider)
+  }
+  stats.distinctServices = distinctHosts.size
+  stats.distinctProviders = distinctProviders.size
+
   // Categories for dropdown
   const categories = db.prepare(
     'SELECT category, COUNT(*) as count FROM services WHERE category IS NOT NULL GROUP BY category ORDER BY count DESC'
