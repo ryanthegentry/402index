@@ -1,10 +1,12 @@
 import dns from 'dns'
+import { statfs } from 'fs/promises'
 import { isIPv4, isIPv6 } from 'net'
-import db from '../db.js'
+import { dirname } from 'path'
+import db, { DB_PATH } from '../db.js'
 
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
-const HEALTH_CHECK_RETENTION_DAYS = 30
+const HEALTH_CHECK_RETENTION_DAYS = 3
 
 /**
  * Check if a resolved IP address is private/reserved.
@@ -274,11 +276,47 @@ function pruneOldHealthChecks() {
   }
 }
 
+/** Check disk usage and take action if volume is filling up. */
+async function checkDiskSpace() {
+  try {
+    const stats = await statfs(dirname(DB_PATH))
+    const totalBytes = stats.blocks * stats.bsize
+    const freeBytes = stats.bfree * stats.bsize
+    const usedPct = ((totalBytes - freeBytes) / totalBytes) * 100
+
+    if (usedPct > 90) {
+      console.warn(`[health] CRITICAL: Disk ${usedPct.toFixed(1)}% full — emergency prune (1 day retention)`)
+      const result = db.prepare(
+        "DELETE FROM health_checks WHERE checked_at < datetime('now', '-1 day')"
+      ).run()
+      console.warn(`[health] Emergency prune deleted ${result.changes} rows`)
+      db.pragma('incremental_vacuum')
+      return 'continue'
+    }
+
+    if (usedPct > 80) {
+      console.warn(`[health] WARNING: Disk ${usedPct.toFixed(1)}% full — skipping health check run`)
+      return 'skip'
+    }
+
+    return 'continue'
+  } catch (err) {
+    console.warn(`[health] Could not check disk space: ${err.message} — continuing anyway`)
+    return 'continue'
+  }
+}
+
 /**
  * Run health checks for all services (prunes old records first).
  * @returns {Promise<{healthy: number, degraded: number, down: number, unknown: number, error: number}>} Counts by status
  */
 export async function runHealthChecks() {
+  // Check disk space — skip run if volume is too full
+  const diskCheck = await checkDiskSpace()
+  if (diskCheck === 'skip') {
+    return { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 }
+  }
+
   // Prune old records before running new checks
   pruneOldHealthChecks()
 
