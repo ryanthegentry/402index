@@ -1,17 +1,38 @@
 import Database from 'better-sqlite3'
-import { mkdirSync } from 'fs'
+import { mkdirSync, unlinkSync, existsSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const DB_PATH = process.env.DB_PATH || join(__dirname, '..', 'data', '402index.db')
+export const DB_PATH = process.env.DB_PATH || join(__dirname, '..', 'data', '402index.db')
 
 mkdirSync(dirname(DB_PATH), { recursive: true })
 
-const db = new Database(DB_PATH)
+function openDatabase() {
+  try {
+    return new Database(DB_PATH)
+  } catch (err) {
+    const msg = err.message || ''
+    if (err.code === 'SQLITE_IOERR' || err.code === 'SQLITE_CORRUPT' ||
+        msg.includes('SQLITE_IOERR') || msg.includes('SQLITE_CORRUPT') ||
+        msg.includes('database disk image is malformed')) {
+      console.warn(`[db] Corrupt/unreadable database: ${msg}`)
+      console.warn('[db] Deleting and recreating (data rebuilt from polls + YAML)...')
+      for (const suffix of ['', '-shm', '-wal']) {
+        const f = DB_PATH + suffix
+        if (existsSync(f)) unlinkSync(f)
+      }
+      return new Database(DB_PATH)
+    }
+    throw err
+  }
+}
 
-db.pragma('journal_mode = WAL')
+const db = openDatabase()
+
+db.pragma('journal_mode = DELETE')
 db.pragma('foreign_keys = ON')
+db.pragma('busy_timeout = 5000')
 
 // Enable incremental auto_vacuum to reclaim space after deletes.
 // auto_vacuum mode can only be changed on a fresh DB or after a full VACUUM.
@@ -133,5 +154,27 @@ for (const col of ['is_template', 'is_demo', 'verified']) {
     // Column already exists — expected after first run
   }
 }
+
+// Prune health_checks older than 3 days (startup + every 24h)
+function pruneHealthChecks() {
+  try {
+    const result = db.prepare(
+      "DELETE FROM health_checks WHERE checked_at < datetime('now', '-3 days')"
+    ).run()
+    if (result.changes > 0) {
+      console.log(`[db] Pruned ${result.changes} health checks older than 3 days`)
+      db.pragma('incremental_vacuum')
+    }
+  } catch (err) {
+    console.warn(`[db] Prune failed: ${err.message}`)
+  }
+}
+
+pruneHealthChecks()
+setInterval(pruneHealthChecks, 24 * 60 * 60 * 1000).unref()
+
+// Graceful shutdown
+process.on('SIGTERM', () => { db.close(); process.exit(0) })
+process.on('SIGINT', () => { db.close(); process.exit(0) })
 
 export default db
