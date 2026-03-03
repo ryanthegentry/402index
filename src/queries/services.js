@@ -52,7 +52,7 @@ export function buildServiceQuery(opts = {}) {
   const parsedOffset = parseInt(rawOffset)
   const offset = Math.max(Number.isNaN(parsedOffset) ? 0 : parsedOffset, 0)
 
-  const conditions = []
+  const conditions = ["(status = 'active' OR status IS NULL)"]
   const params = {}
 
   if (protocol) {

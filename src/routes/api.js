@@ -4,6 +4,7 @@ import db from '../db.js'
 import { queryServices, API_COLUMNS } from '../queries/services.js'
 import { normalizeUrl } from '../services/url-normalize.js'
 import { verifyL402 } from '../services/l402-verify.js'
+import { sendRegistrationNotification } from '../services/notify.js'
 
 const router = Router()
 
@@ -14,7 +15,7 @@ router.get('/services', (req, res) => {
 
 // GET /api/v1/services/:id
 router.get('/services/:id', (req, res) => {
-  const service = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id)
+  const service = db.prepare("SELECT * FROM services WHERE id = ? AND (status = 'active' OR status IS NULL)").get(req.params.id)
   if (!service) {
     return res.status(404).json({ error: 'Service not found' })
   }
@@ -37,23 +38,25 @@ function extractHostname(url) {
 
 // GET /api/v1/health
 router.get('/health', (req, res) => {
-  const total = db.prepare('SELECT COUNT(*) as c FROM services').get().c
+  const ACTIVE_FILTER = "WHERE status = 'active' OR status IS NULL"
+
+  const total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER}`).get().c
 
   const byProtocol = {}
-  db.prepare('SELECT protocol, COUNT(*) as c FROM services GROUP BY protocol').all()
+  db.prepare(`SELECT protocol, COUNT(*) as c FROM services ${ACTIVE_FILTER} GROUP BY protocol`).all()
     .forEach(r => { byProtocol[r.protocol] = r.c })
 
   const byHealth = {}
-  db.prepare('SELECT health_status, COUNT(*) as c FROM services GROUP BY health_status').all()
+  db.prepare(`SELECT health_status, COUNT(*) as c FROM services ${ACTIVE_FILTER} GROUP BY health_status`).all()
     .forEach(r => { byHealth[r.health_status] = r.c })
 
   const bySource = {}
-  db.prepare('SELECT source, COUNT(*) as c FROM services GROUP BY source').all()
+  db.prepare(`SELECT source, COUNT(*) as c FROM services ${ACTIVE_FILTER} GROUP BY source`).all()
     .forEach(r => { bySource[r.source] = r.c })
 
   // Distinct services (by hostname) and providers — computed in JS since SQLite
   // lacks a reliable URL hostname extractor. Hostname = provider key.
-  const allServices = db.prepare('SELECT url, protocol, is_template, is_demo FROM services').all()
+  const allServices = db.prepare(`SELECT url, protocol, is_template, is_demo FROM services ${ACTIVE_FILTER}`).all()
   const hostnameSets = { total: new Set(), L402: new Set(), x402: new Set() }
   const rawProviders = { total: new Set(), L402: new Set(), x402: new Set() }
   const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set() }
@@ -119,7 +122,7 @@ router.get('/health', (req, res) => {
 // GET /api/v1/categories
 router.get('/categories', (req, res) => {
   const rows = db.prepare(
-    'SELECT category, COUNT(*) as count FROM services WHERE category IS NOT NULL GROUP BY category ORDER BY count DESC'
+    "SELECT category, COUNT(*) as count FROM services WHERE category IS NOT NULL AND (status = 'active' OR status IS NULL) GROUP BY category ORDER BY count DESC"
   ).all()
 
   // Build tree: { "crypto": { count: 100, subcategories: { "nft": 13, "defi": 45 } } }
@@ -145,8 +148,8 @@ function stmt(key, sql) {
 }
 
 const registerUpsert = () => stmt('registerUpsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, health_status)
-  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, 'healthy')
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, health_status, status)
+  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, 'healthy', 'pending')
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = excluded.name,
     description = COALESCE(excluded.description, services.description),
@@ -158,12 +161,13 @@ const registerUpsert = () => stmt('registerUpsert', `
     provider = COALESCE(excluded.provider, services.provider),
     contact_email = COALESCE(excluded.contact_email, services.contact_email),
     health_status = 'healthy',
+    status = 'pending',
     updated_at = datetime('now')
   RETURNING *
 `)
 
 const REQUIRED_FIELDS = ['url', 'name', 'protocol']
-const VALID_PROTOCOLS = new Set(['L402', 'x402', 'both'])
+const MAX_LENGTHS = { name: 200, description: 2000, url: 2000, provider: 200, category: 100, payment_asset: 50, payment_network: 50, contact_email: 254 }
 
 // POST /api/v1/register
 router.post('/register', async (req, res) => {
@@ -182,19 +186,34 @@ router.post('/register', async (req, res) => {
       })
     }
 
-    // Validate protocol
-    const protocol = String(body.protocol)
-    if (!VALID_PROTOCOLS.has(protocol)) {
+    // Validate protocol — only L402 accepted
+    if (body.protocol !== 'L402') {
       return res.status(400).json({
-        error: `Invalid protocol: "${body.protocol}". Must be one of: ${[...VALID_PROTOCOLS].join(', ')}`,
+        error: 'Invalid protocol. Only "L402" is currently accepted.',
       })
     }
 
-    // Only L402 verification is implemented
-    if (protocol !== 'L402') {
-      return res.status(422).json({
-        error: `${protocol} verification is not yet supported. Only L402 registration is currently available.`,
-      })
+    // Validate URL scheme
+    let parsedUrl
+    try {
+      parsedUrl = new URL(body.url)
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL format' })
+    }
+    if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+      return res.status(400).json({ error: 'URL must use http or https scheme' })
+    }
+
+    // Validate max lengths
+    for (const [field, max] of Object.entries(MAX_LENGTHS)) {
+      if (body[field] && String(body[field]).length > max) {
+        return res.status(400).json({ error: `${field} exceeds maximum length of ${max} characters` })
+      }
+    }
+
+    // Validate email format (basic @ check)
+    if (body.contact_email && !body.contact_email.includes('@')) {
+      return res.status(400).json({ error: 'Invalid contact_email format' })
     }
 
     // Normalize URL
@@ -216,13 +235,13 @@ router.post('/register', async (req, res) => {
       })
     }
 
-    // Upsert into services
+    // Insert with status='pending' for admin review
     const params = {
       id: randomUUID(),
       name: body.name,
       description: body.description || null,
       url,
-      protocol,
+      protocol: 'L402',
       price_sats: body.price_sats != null ? Number(body.price_sats) : null,
       price_usd: body.price_usd != null ? Number(body.price_usd) : null,
       payment_asset: body.payment_asset || null,
@@ -233,8 +252,14 @@ router.post('/register', async (req, res) => {
     }
 
     const service = registerUpsert().get(params)
+
+    // Fire-and-forget email notification
+    sendRegistrationNotification(service).catch(err => {
+      console.error('[register] Notification failed:', err.message)
+    })
+
     return res.status(201).json({
-      message: 'Service registered successfully',
+      message: 'Service registered and pending review',
       service,
       verification: {
         httpStatus: probe.httpStatus,
@@ -247,6 +272,39 @@ router.post('/register', async (req, res) => {
     console.error('[register] Error:', err.message)
     return res.status(500).json({ error: 'Internal server error' })
   }
+})
+
+// ─── Admin Endpoints ──────────────────────────────────────────────────────────
+
+const getPending = () => stmt('getPending', "SELECT * FROM services WHERE status = 'pending' ORDER BY registered_at DESC")
+
+const approveService = () => stmt('approveService', `
+  UPDATE services SET status = 'active', updated_at = datetime('now') WHERE id = @id AND status = 'pending'
+`)
+
+const rejectService = () => stmt('rejectService', `
+  DELETE FROM services WHERE id = @id AND status = 'pending'
+`)
+
+router.get('/admin/pending', (req, res) => {
+  const services = getPending().all()
+  res.json({ services, total: services.length })
+})
+
+router.post('/admin/approve/:id', (req, res) => {
+  const result = approveService().run({ id: req.params.id })
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'No pending service with that ID' })
+  }
+  res.json({ message: 'Service approved', id: req.params.id })
+})
+
+router.post('/admin/reject/:id', (req, res) => {
+  const result = rejectService().run({ id: req.params.id })
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'No pending service with that ID' })
+  }
+  res.json({ message: 'Service rejected and deleted', id: req.params.id })
 })
 
 export default router

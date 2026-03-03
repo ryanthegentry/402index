@@ -67,24 +67,55 @@ describe('POST /api/v1/register — Validation', () => {
     assert.ok(r.body.error.includes('Invalid protocol'))
   })
 
-  it('rejects x402 protocol with clear message → 422', async () => {
+  it('rejects x402 protocol → 400', async () => {
     const r = await register({
       url: 'https://example.com/api',
       name: 'Test x402 Service',
       protocol: 'x402',
     })
-    assert.equal(r.status, 422)
-    assert.ok(r.body.error.includes('not yet supported'))
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('L402'))
   })
 
-  it('rejects "both" protocol → 422', async () => {
+  it('rejects "both" protocol → 400', async () => {
     const r = await register({
       url: 'https://example.com/api',
       name: 'Test',
       protocol: 'both',
     })
-    assert.equal(r.status, 422)
-    assert.ok(r.body.error.includes('not yet supported'))
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('L402'))
+  })
+
+  it('rejects oversized name → 400', async () => {
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'A'.repeat(201),
+      protocol: 'L402',
+    })
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('name'))
+  })
+
+  it('rejects invalid URL scheme → 400', async () => {
+    const r = await register({
+      url: 'ftp://example.com/api',
+      name: 'Test',
+      protocol: 'L402',
+    })
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('http'))
+  })
+
+  it('rejects invalid email format → 400', async () => {
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'Test',
+      protocol: 'L402',
+      contact_email: 'not-an-email',
+    })
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('email'))
   })
 })
 
@@ -111,14 +142,14 @@ describe('POST /api/v1/register — SSRF Protection', () => {
     assert.ok(r.body.detail.includes('blocked') || r.body.detail.includes('private'))
   })
 
-  it('blocks non-http scheme → 422', async () => {
+  it('blocks non-http scheme → 400', async () => {
     const r = await register({
       url: 'ftp://example.com/file',
       name: 'FTP Test',
       protocol: 'L402',
     })
-    assert.equal(r.status, 422)
-    assert.ok(r.body.detail.includes('http'))
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('http'))
   })
 })
 

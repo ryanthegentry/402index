@@ -163,6 +163,14 @@ try {
   // Column already exists
 }
 
+// Migration: add status column for pending approval flow
+try {
+  db.exec("ALTER TABLE services ADD COLUMN status TEXT DEFAULT 'active'")
+  console.log('[db] Added column: status')
+} catch {
+  // Column already exists
+}
+
 // Prune health_checks older than 3 days (startup + every 24h)
 function pruneHealthChecks() {
   try {
