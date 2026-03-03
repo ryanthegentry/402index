@@ -250,4 +250,58 @@ describe('verifyL402', () => {
     assert.equal(result.hasInvoice, false)
     assert.equal(result.hasMacaroon, true)
   })
+
+  it('follows a 307 redirect to a 402 endpoint', async () => {
+    let callCount = 0
+    global.fetch = async (url) => {
+      callCount++
+      if (callCount === 1) {
+        return mockResponse(307, { 'location': 'https://www.example.com/api' })
+      }
+      return mockResponse(402, {
+        'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtest"',
+      })
+    }
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, true)
+    assert.equal(result.httpStatus, 402)
+    assert.equal(callCount, 2)
+  })
+
+  it('follows 301 redirect to a 402 endpoint', async () => {
+    let callCount = 0
+    global.fetch = async () => {
+      callCount++
+      if (callCount === 1) {
+        return mockResponse(301, { 'location': 'https://example.com/redirected' })
+      }
+      return mockResponse(402, {
+        'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtest"',
+      })
+    }
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, true)
+    assert.equal(callCount, 2)
+  })
+
+  it('fails with too many redirects (>3)', async () => {
+    global.fetch = async () => mockResponse(307, { 'location': 'https://example.com/loop' })
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('Too many redirects'))
+  })
+
+  it('blocks redirect to private IP (SSRF on hop)', async () => {
+    global.fetch = async () => mockResponse(307, { 'location': 'https://127.0.0.1/internal' })
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('private') || result.error.includes('blocked'))
+  })
+
+  it('fails when redirect has no Location header', async () => {
+    global.fetch = async () => mockResponse(307)
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('Location'))
+  })
 })

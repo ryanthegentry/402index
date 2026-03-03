@@ -19,7 +19,7 @@ export function adminPage() {
         <div id="dashboard" style="display:none">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
             <h1>402index Admin <span id="pending-count" style="font-size:16px;color:var(--text-muted);font-weight:400"></span></h1>
-            <button onclick="logout()" style="padding:6px 14px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);cursor:pointer;font-size:13px;font-family:var(--sans)">Logout</button>
+            <button id="logout-btn" style="padding:6px 14px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);cursor:pointer;font-size:13px;font-family:var(--sans)">Logout</button>
           </div>
           <div id="toast" style="display:none;position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:6px;font-size:13px;z-index:100"></div>
           <div id="pending-list"></div>
@@ -177,8 +177,8 @@ export function adminPage() {
         + '<span class="verify-tag' + (s.verified ? ' ok' : '') + '">verified: ' + (s.verified ? 'yes' : 'no') + '</span>'
         + '</div>'
         + '<div class="reg-card-actions">'
-        + '<button class="btn-approve" onclick="approveService(\'' + escHtml(s.id) + '\', this)">Approve</button>'
-        + '<button class="btn-reject" onclick="rejectService(\'' + escHtml(s.id) + '\', \'' + escHtml(s.name).replace(/'/g, "\\x27") + '\', this)">Reject</button>'
+        + '<button class="btn-approve" data-id="' + escHtml(s.id) + '">Approve</button>'
+        + '<button class="btn-reject" data-id="' + escHtml(s.id) + '" data-name="' + escHtml(s.name) + '">Reject</button>'
         + '</div>'
         + '</div>'
     }
@@ -255,6 +255,20 @@ export function adminPage() {
       document.getElementById('auth-error').style.display = 'none'
       showDashboard()
       loadPending()
+    })
+
+    // Logout button
+    document.getElementById('logout-btn').addEventListener('click', logout)
+
+    // Event delegation for approve/reject buttons
+    document.getElementById('pending-list').addEventListener('click', function(e) {
+      var btn = e.target.closest('.btn-approve, .btn-reject')
+      if (!btn) return
+      if (btn.classList.contains('btn-approve')) {
+        approveService(btn.dataset.id, btn)
+      } else if (btn.classList.contains('btn-reject')) {
+        rejectService(btn.dataset.id, btn.dataset.name, btn)
+      }
     })
 
     // Auto-login if secret in sessionStorage

@@ -186,8 +186,8 @@ router.post('/register', async (req, res) => {
       })
     }
 
-    // Validate protocol — only L402 accepted
-    if (body.protocol !== 'L402') {
+    // Validate protocol — only L402 accepted (case-insensitive)
+    if (String(body.protocol).toUpperCase() !== 'L402') {
       return res.status(400).json({
         error: 'Invalid protocol. Only "L402" is currently accepted.',
       })

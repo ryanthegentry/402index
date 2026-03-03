@@ -87,6 +87,26 @@ describe('POST /api/v1/register — Validation', () => {
     assert.ok(r.body.error.includes('L402'))
   })
 
+  it('accepts lowercase "l402" protocol (case-insensitive)', async () => {
+    // Should pass validation and hit the L402 probe (which will fail on example.com → 422)
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'Lowercase Protocol Test',
+      protocol: 'l402',
+    })
+    // 422 = passed validation, failed probe (example.com returns 200, not 402)
+    assert.equal(r.status, 422, 'lowercase l402 should pass validation (not 400)')
+  })
+
+  it('accepts mixed-case "L402" variations', async () => {
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'Mixed Case Test',
+      protocol: 'l402',
+    })
+    assert.equal(r.status, 422, 'mixed case l402 should pass validation (not 400)')
+  })
+
   it('rejects oversized name → 400', async () => {
     const r = await register({
       url: 'https://example.com/api',
