@@ -36,12 +36,19 @@ class MockL402Provider {
 class GolemL402Provider {
   constructor() {
     this.baseUrl = process.env.GOLEM_INTERNAL_URL || 'http://golem.railway.internal:8402'
+    this.apiKey = process.env.GOLEM_API_KEY
+    if (!this.apiKey) {
+      throw new Error('GOLEM_API_KEY is required for GolemL402Provider')
+    }
   }
 
   async createChallenge(priceSats, durationHours) {
     const res = await fetch(`${this.baseUrl}/l402/challenge`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + this.apiKey,
+      },
       body: JSON.stringify({ price_sats: priceSats, duration_hours: durationHours }),
       signal: AbortSignal.timeout(5000),
     })
@@ -52,7 +59,10 @@ class GolemL402Provider {
   async verifyToken(authorization) {
     const res = await fetch(`${this.baseUrl}/l402/verify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + this.apiKey,
+      },
       body: JSON.stringify({ authorization }),
       signal: AbortSignal.timeout(5000),
     })
