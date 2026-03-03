@@ -155,6 +155,14 @@ for (const col of ['is_template', 'is_demo', 'verified']) {
   }
 }
 
+// Migration: add contact_email for self-registered services
+try {
+  db.exec('ALTER TABLE services ADD COLUMN contact_email TEXT')
+  console.log('[db] Added column: contact_email')
+} catch {
+  // Column already exists
+}
+
 // Prune health_checks older than 3 days (startup + every 24h)
 function pruneHealthChecks() {
   try {

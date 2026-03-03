@@ -1,5 +1,6 @@
 import express from 'express'
 import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import { notFoundHandler, errorHandler } from './middleware/error-handler.js'
 import { verifyL402 } from './middleware/l402.js'
 import { freeLimiter, l402Limiter } from './middleware/rate-limit.js'
@@ -20,6 +21,16 @@ app.use(helmet({ contentSecurityPolicy: false }))
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1)
 }
+
+// Registration endpoint: JSON body parsing + IP-based rate limit (10/hour)
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: parseInt(process.env.REGISTER_RATE_LIMIT) || 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many registrations. Limit: 10 per hour per IP.' },
+})
+app.use('/api/v1/register', express.json(), registerLimiter)
 
 // Rate-limited API routes: services, services/:id, categories
 app.use('/api/v1/services', verifyL402, freeLimiter, l402Limiter)

@@ -47,7 +47,7 @@ export function isPrivateIp(ip) {
 }
 
 // Validate URL scheme only (hostname checked after DNS resolution)
-function isBlockedScheme(urlStr) {
+export function isBlockedScheme(urlStr) {
   try {
     const parsed = new URL(urlStr)
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return true
@@ -138,13 +138,13 @@ function calculateP50(serviceId) {
 async function performHttpCheck(url) {
   // SSRF protection: block non-http(s) schemes
   if (isBlockedScheme(url)) {
-    return { httpStatus: null, responseTimeMs: null, errorMessage: 'blocked: non-http(s) scheme' }
+    return { httpStatus: null, responseTimeMs: null, errorMessage: 'blocked: non-http(s) scheme', wwwAuthenticate: null }
   }
 
   // SSRF protection: resolve hostname and check against private IP ranges
   const blockReason = await resolveAndCheck(url)
   if (blockReason) {
-    return { httpStatus: null, responseTimeMs: null, errorMessage: blockReason }
+    return { httpStatus: null, responseTimeMs: null, errorMessage: blockReason, wwwAuthenticate: null }
   }
 
   try {
@@ -157,6 +157,7 @@ async function performHttpCheck(url) {
     })
     let httpStatus = headRes.status
     let responseTimeMs = Date.now() - startHead
+    let wwwAuthenticate = headRes.headers.get('www-authenticate')
 
     // If not 402, retry with GET (some endpoints only return 402 on GET)
     if (httpStatus !== 402) {
@@ -168,12 +169,13 @@ async function performHttpCheck(url) {
       })
       httpStatus = getRes.status
       responseTimeMs = Date.now() - startGet
+      wwwAuthenticate = getRes.headers.get('www-authenticate')
     }
 
-    return { httpStatus, responseTimeMs, errorMessage: null }
+    return { httpStatus, responseTimeMs, errorMessage: null, wwwAuthenticate }
   } catch (err) {
     const errorMessage = (err.name === 'TimeoutError' || err.code === 'ABORT_ERR') ? 'timeout' : err.message
-    return { httpStatus: null, responseTimeMs: null, errorMessage }
+    return { httpStatus: null, responseTimeMs: null, errorMessage, wwwAuthenticate: null }
   }
 }
 
@@ -241,12 +243,20 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
 
 /** Check a single service: HTTP probe, classify result, persist. */
 async function checkService(service) {
-  const { id, url, latency_p50_ms: historicalP50, consecutive_failures: prevFailures } = service
+  const { id, url, protocol, latency_p50_ms: historicalP50, consecutive_failures: prevFailures } = service
 
   const httpResult = await performHttpCheck(url)
   const classification = classifyHealthStatus(
     httpResult.httpStatus, httpResult.errorMessage, prevFailures, historicalP50, httpResult.responseTimeMs
   )
+
+  // For L402 services: 402 without WWW-Authenticate header → degraded
+  if (protocol === 'L402' && httpResult.httpStatus === 402 && classification.healthStatus === 'healthy') {
+    if (!httpResult.wwwAuthenticate || !/L402|LSAT/i.test(httpResult.wwwAuthenticate)) {
+      classification.healthStatus = 'degraded'
+      classification.checkStatus = 'degraded'
+    }
+  }
 
   persistHealthResult(id, {
     ...classification,
