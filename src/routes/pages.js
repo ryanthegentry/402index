@@ -5,6 +5,7 @@ import { homePage } from '../views/home.js'
 import { detailPage } from '../views/detail.js'
 import { aboutPage } from '../views/about.js'
 import { apiDocsPage } from '../views/api-docs.js'
+import { adminPage } from '../views/admin.js'
 import { layout } from '../views/layout.js'
 
 const router = Router()
@@ -72,6 +73,11 @@ router.get('/about', (req, res) => {
 // API docs
 router.get('/api-docs', (req, res) => {
   res.send(apiDocsPage())
+})
+
+// Admin dashboard (auth is client-side via API calls)
+router.get('/admin', (req, res) => {
+  res.send(adminPage())
 })
 
 export default router

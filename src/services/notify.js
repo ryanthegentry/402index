@@ -26,7 +26,7 @@ export async function sendRegistrationNotification(service) {
       <tr><td><strong>Category</strong></td><td>${esc(service.category || '—')}</td></tr>
       <tr><td><strong>Status</strong></td><td>${esc(service.status || 'pending')}</td></tr>
     </table>
-    <p>Review: approve or reject via the admin API.</p>
+    <p>Review pending registrations: <a href="https://402index.io/admin">https://402index.io/admin</a></p>
   `
 
   try {
