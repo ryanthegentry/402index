@@ -1,6 +1,17 @@
 import rateLimit from 'express-rate-limit'
 import { getProvider } from '../services/l402-provider.js'
 
+function extractClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for']
+  if (forwarded) {
+    const first = forwarded.split(',')[0].trim()
+    // Strip trailing :port (but not from IPv6 brackets like [::1])
+    const portStripped = first.replace(/:\d+$/, '')
+    return portStripped || req.ip
+  }
+  return req.ip
+}
+
 const L402_ENABLED = () => process.env.L402_ENABLED === 'true'
 const L402_PRICE_SATS = () => parseInt(process.env.L402_PRICE_SATS) || 500
 const L402_DURATION_HOURS = () => parseInt(process.env.L402_DURATION_HOURS) || 24
@@ -40,6 +51,8 @@ export const freeLimiter = rateLimit({
   limit: 100,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  keyGenerator: extractClientIp,
+  validate: { keyGeneratorIpFallback: false },
   skip: (req) => req.l402Verified === true,
   handler: async (req, res) => {
     if (L402_ENABLED()) {
@@ -62,6 +75,8 @@ export const l402Limiter = rateLimit({
   limit: 1000,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  keyGenerator: extractClientIp,
+  validate: { keyGeneratorIpFallback: false },
   skip: (req) => req.l402Verified !== true,
   handler: (_req, res) => {
     res.status(429).set('Retry-After', '60').json({
