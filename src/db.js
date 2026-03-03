@@ -181,6 +181,35 @@ try {
   console.warn(`[db] Category migration note: ${err.message}`)
 }
 
+// Migration: remove l402apps homepage listings (not actual L402 endpoints)
+const homepageUrls = [
+  'https://getalby.com/',
+  'https://www.amboss.tech/',
+  'https://ganamos.earth/',
+  'https://ordinalsbot.com/',
+  'https://satring.com/',
+  'https://community.sphinx.chat/bounties',
+  'https://voltage.cloud/',
+  'https://moneydevkit.com/',
+  'https://sphinx.chat/',
+  'https://www.l402apps.com/lottery',
+]
+try {
+  const deleteHomepageChecks = db.prepare('DELETE FROM health_checks WHERE service_id IN (SELECT id FROM services WHERE url = ?)')
+  const deleteHomepage = db.prepare('DELETE FROM services WHERE url = ?')
+  let removed = 0
+  for (const url of homepageUrls) {
+    deleteHomepageChecks.run(url)
+    const result = deleteHomepage.run(url)
+    removed += result.changes
+  }
+  if (removed > 0) {
+    console.log(`[db] Removed ${removed} homepage listings from l402apps`)
+  }
+} catch (err) {
+  console.warn(`[db] Homepage cleanup note: ${err.message}`)
+}
+
 // Prune health_checks older than 3 days (startup + every 24h)
 function pruneHealthChecks() {
   try {
