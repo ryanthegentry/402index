@@ -58,6 +58,81 @@ function makeParams(overrides = {}) {
   }
 }
 
+describe('reject sets status=rejected (no FK violation)', () => {
+  it('reject updates status instead of deleting (avoids FK constraint on health_checks)', () => {
+    const url = TEST_URL + '/reject-fk-' + Date.now()
+    const id = randomUUID()
+    const params = makeParams({ id, url })
+    const row = upsertStmt.get(params)
+    inserted.push(row.id)
+    assert.equal(row.status, 'pending')
+
+    // Insert a health_check referencing this service (simulates scraped listing)
+    db.prepare(
+      "INSERT INTO health_checks (service_id, status, http_status, response_time_ms) VALUES (?, 'healthy', 402, 100)"
+    ).run(id)
+
+    // Reject via UPDATE (not DELETE) — should not throw FK constraint error
+    const rejectStmt = db.prepare(
+      "UPDATE services SET status = 'rejected', updated_at = datetime('now') WHERE id = @id AND status = 'pending'"
+    )
+    const result = rejectStmt.run({ id })
+    assert.equal(result.changes, 1, 'should update one row')
+
+    // Verify status is now rejected
+    const after = db.prepare('SELECT status FROM services WHERE id = ?').get(id)
+    assert.equal(after.status, 'rejected')
+
+    // Verify health_check still exists (no cascade delete)
+    const hc = db.prepare('SELECT COUNT(*) as c FROM health_checks WHERE service_id = ?').get(id)
+    assert.ok(hc.c >= 1, 'health_check row should still exist')
+
+    // Clean up health_checks
+    db.prepare('DELETE FROM health_checks WHERE service_id = ?').run(id)
+  })
+
+  it('rejected services excluded from public queries', () => {
+    const url = TEST_URL + '/reject-excluded-' + Date.now()
+    const params = makeParams({ url })
+    const row = upsertStmt.get(params)
+    inserted.push(row.id)
+
+    // Set to rejected
+    db.prepare("UPDATE services SET status = 'rejected' WHERE id = ?").run(row.id)
+
+    // Query with the same base filter used by public API
+    const found = db.prepare(
+      "SELECT COUNT(*) as c FROM services WHERE id = ? AND (status = 'active' OR status IS NULL)"
+    ).get(row.id)
+    assert.equal(found.c, 0, 'rejected service should not appear in public queries')
+  })
+})
+
+describe('notification only fires on new insert (registered_at === updated_at)', () => {
+  it('new insert has registered_at === updated_at', () => {
+    const url = TEST_URL + '/notify-new-' + Date.now()
+    const params = makeParams({ url })
+    const row = upsertStmt.get(params)
+    inserted.push(row.id)
+    assert.equal(row.registered_at, row.updated_at, 'new insert should have matching timestamps')
+  })
+
+  it('upsert update has registered_at !== updated_at', () => {
+    const url = TEST_URL + '/notify-upsert-' + Date.now()
+    const params1 = makeParams({ url })
+    const row1 = upsertStmt.get(params1)
+    inserted.push(row1.id)
+
+    // Advance time by setting registered_at to the past
+    db.prepare("UPDATE services SET registered_at = datetime('now', '-1 hour') WHERE id = ?").run(row1.id)
+
+    // Re-register same URL — updated_at gets datetime('now'), registered_at stays in the past
+    const params2 = makeParams({ url, name: 'Updated' })
+    const row2 = upsertStmt.get(params2)
+    assert.notEqual(row2.registered_at, row2.updated_at, 'upsert should have different timestamps')
+  })
+})
+
 describe('registerUpsert status handling', () => {
   it('new insert gets status=pending', () => {
     const url = TEST_URL + '/new-' + Date.now()
