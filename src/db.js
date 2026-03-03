@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { mkdirSync, unlinkSync, existsSync } from 'fs'
+import { mkdirSync, unlinkSync, existsSync, statSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -210,14 +210,21 @@ try {
   console.warn(`[db] Homepage cleanup note: ${err.message}`)
 }
 
-// Prune health_checks older than 3 days (startup + every 24h)
+// Reclaim space after bulk deletions
+try {
+  db.pragma('incremental_vacuum')
+} catch (err) {
+  console.warn(`[db] Incremental vacuum note: ${err.message}`)
+}
+
+// Prune health_checks older than 1 day (startup + every hour)
 function pruneHealthChecks() {
   try {
     const result = db.prepare(
-      "DELETE FROM health_checks WHERE checked_at < datetime('now', '-3 days')"
+      "DELETE FROM health_checks WHERE checked_at < datetime('now', '-1 day')"
     ).run()
     if (result.changes > 0) {
-      console.log(`[db] Pruned ${result.changes} health checks older than 3 days`)
+      console.log(`[db] Pruned ${result.changes} health checks older than 1 day`)
       db.pragma('incremental_vacuum')
     }
   } catch (err) {
@@ -226,7 +233,24 @@ function pruneHealthChecks() {
 }
 
 pruneHealthChecks()
-setInterval(pruneHealthChecks, 24 * 60 * 60 * 1000).unref()
+setInterval(pruneHealthChecks, 60 * 60 * 1000).unref()
+
+// Disk usage diagnostics
+try {
+  const dbSize = statSync(DB_PATH).size
+  const walSize = existsSync(DB_PATH + '-wal') ? statSync(DB_PATH + '-wal').size : 0
+  const shmSize = existsSync(DB_PATH + '-shm') ? statSync(DB_PATH + '-shm').size : 0
+  const journalSize = existsSync(DB_PATH + '-journal') ? statSync(DB_PATH + '-journal').size : 0
+  const healthCount = db.prepare('SELECT COUNT(*) as c FROM health_checks').get().c
+  const serviceCount = db.prepare('SELECT COUNT(*) as c FROM services').get().c
+  const pageCount = db.pragma('page_count', { simple: true })
+  const pageSize = db.pragma('page_size', { simple: true })
+  console.log(`[db] Disk usage: db=${(dbSize / 1024 / 1024).toFixed(1)}MB, wal=${(walSize / 1024 / 1024).toFixed(1)}MB, shm=${(shmSize / 1024 / 1024).toFixed(1)}MB, journal=${(journalSize / 1024 / 1024).toFixed(1)}MB`)
+  console.log(`[db] Rows: ${serviceCount} services, ${healthCount} health_checks`)
+  console.log(`[db] Pages: ${pageCount} x ${pageSize}B = ${(pageCount * pageSize / 1024 / 1024).toFixed(1)}MB`)
+} catch (err) {
+  console.warn(`[db] Disk diagnostics failed: ${err.message}`)
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => { db.close(); process.exit(0) })

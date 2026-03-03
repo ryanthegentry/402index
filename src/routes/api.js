@@ -313,4 +313,22 @@ router.post('/admin/reject/:id', (req, res) => {
   res.json({ message: 'Service rejected', id: req.params.id })
 })
 
+router.post('/admin/vacuum', (req, res) => {
+  try {
+    const before = db.pragma('page_count', { simple: true }) * db.pragma('page_size', { simple: true })
+    db.exec('VACUUM')
+    const after = db.pragma('page_count', { simple: true }) * db.pragma('page_size', { simple: true })
+    const freed = before - after
+    res.json({
+      message: 'VACUUM complete',
+      before_bytes: before,
+      after_bytes: after,
+      freed_bytes: freed,
+      freed_mb: (freed / 1024 / 1024).toFixed(1),
+    })
+  } catch (err) {
+    res.status(500).json({ error: `VACUUM failed: ${err.message}` })
+  }
+})
+
 export default router
