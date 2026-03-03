@@ -5,7 +5,7 @@ import { buildServiceQuery } from '../src/queries/services.js'
 describe('buildServiceQuery', () => {
   it('returns defaults when called with no options', () => {
     const result = buildServiceQuery()
-    assert.equal(result.where, '')
+    assert.ok(result.where.includes("status = 'active' OR status IS NULL"))
     assert.deepEqual(result.params, {})
     assert.equal(result.limit, 50)
     assert.equal(result.offset, 0)

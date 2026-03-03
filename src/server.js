@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit'
 import { notFoundHandler, errorHandler } from './middleware/error-handler.js'
 import { verifyL402 } from './middleware/l402.js'
 import { freeLimiter, l402Limiter } from './middleware/rate-limit.js'
+import { adminAuth } from './middleware/admin-auth.js'
 import apiRoutes from './routes/api.js'
 import pageRoutes from './routes/pages.js'
 import { startScheduler, shutdown } from './scheduler.js'
@@ -30,12 +31,15 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many registrations. Limit: 10 per hour per IP.' },
 })
-app.use('/api/v1/register', express.json(), registerLimiter)
+app.use('/api/v1/register', express.json({ limit: '10kb' }), registerLimiter)
 
 // Rate-limited API routes: services, services/:id, categories
 app.use('/api/v1/services', verifyL402, freeLimiter, l402Limiter)
 app.use('/api/v1/categories', verifyL402, freeLimiter, l402Limiter)
 // /api/v1/health is exempt from rate limiting (uptime monitors)
+
+// Admin routes: JSON body parsing + auth
+app.use('/api/v1/admin', express.json({ limit: '10kb' }), adminAuth)
 
 app.use('/api/v1', apiRoutes)
 app.use('/', pageRoutes)

@@ -73,7 +73,7 @@ export function apiDocsPage() {
             <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
             <span class="endpoint-path">/api/v1/register</span>
           </div>
-          <p>Register an L402 endpoint. The URL is probed to verify L402 compliance before listing. Rate limited to 10 registrations per hour per IP.</p>
+          <p>Register an L402 endpoint. The URL is probed to verify L402 compliance. Verified services enter a <strong>pending</strong> state for admin review before appearing in public listings. Rate limited to 10 registrations per hour per IP.</p>
           <table class="params-table">
             <thead>
               <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
@@ -106,8 +106,8 @@ export function apiDocsPage() {
               <tr><th>Status</th><th>Meaning</th></tr>
             </thead>
             <tbody>
-              <tr><td><code>201</code></td><td>Created (or updated). Returns the service record and verification details. Re-registering an existing URL+protocol updates the record.</td></tr>
-              <tr><td><code>400</code></td><td>Missing required fields or invalid protocol.</td></tr>
+              <tr><td><code>201</code></td><td>Registered and pending review. Returns the service record (with <code>status: "pending"</code>) and verification details. Re-registering an existing URL+protocol updates the record.</td></tr>
+              <tr><td><code>400</code></td><td>Missing required fields, invalid protocol, invalid URL, or field exceeds max length.</td></tr>
               <tr><td><code>422</code></td><td>L402 verification failed. The response includes actionable details: wrong HTTP status, missing <code>WWW-Authenticate</code> header, unreachable endpoint, or SSRF blocked.</td></tr>
               <tr><td><code>429</code></td><td>Rate limit exceeded (10 registrations per hour per IP).</td></tr>
             </tbody>

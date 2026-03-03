@@ -53,23 +53,10 @@ export function aboutPage() {
           Lightning Network micropayments.
         </p>
         <p>
-          <strong>3. Submit a YAML listing.</strong> Create a YAML file describing your service
-          and send it to <a href="mailto:hello@402index.io">hello@402index.io</a>.
-        </p>
-        <pre>name: "My Weather API"
-url: "https://api.example.com/weather"
-protocol: L402
-price_sats: 5
-price_usd: 0.002
-payment_asset: "BTC/Lightning"
-category: "real-time-data/weather"
-description: "Weather forecasts from NOAA data"
-provider: "Example Corp"</pre>
-        <p>
-          <strong>4. Register via API.</strong> Agents and developers can register L402 endpoints
-          programmatically. Your endpoint must be L402-spec-compliant — it needs to return
-          HTTP <code>402</code> with a <code>WWW-Authenticate: L402</code> header on
-          unauthenticated requests.
+          <strong>3. Register via API.</strong> Agents and developers can register L402 endpoints
+          programmatically. Your endpoint must return HTTP <code>402</code> with a
+          <code>WWW-Authenticate: L402</code> header on unauthenticated requests.
+          Registrations are verified automatically and reviewed before going live.
         </p>
         <pre>curl -X POST https://402index.io/api/v1/register \\
   -H 'Content-Type: application/json' \\
@@ -80,10 +67,21 @@ provider: "Example Corp"</pre>
   "provider": "My Org"
 }'</pre>
         <p>
-          The endpoint is verified automatically — we probe your URL to confirm it returns
-          a valid L402 challenge before listing it. See the <a href="/api-docs">API docs</a>
-          for the full field reference.
+          See the <a href="/api-docs">API docs</a> for the full field reference.
         </p>
+        <p>
+          <strong>4. Email us a listing.</strong> Send a YAML file describing your service
+          to <a href="mailto:hello@402index.io">hello@402index.io</a> for manual review.
+        </p>
+        <pre>name: "My Weather API"
+url: "https://api.example.com/weather"
+protocol: L402
+price_sats: 5
+price_usd: 0.002
+payment_asset: "BTC/Lightning"
+category: "real-time-data/weather"
+description: "Weather forecasts from NOAA data"
+provider: "Example Corp"</pre>
 
         <h2>For AI agent developers</h2>
         <p>
