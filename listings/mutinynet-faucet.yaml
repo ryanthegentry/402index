@@ -5,3 +5,5 @@ description: "Lightning-gated faucet on Bitcoin's Mutinynet testnet. Pay a small
 category: "bitcoin"
 provider: "MutinyWallet"
 price_sats: 50
+payment_asset: "BTC"
+payment_network: "lightning"
