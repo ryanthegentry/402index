@@ -17,20 +17,24 @@ const L402_PRICE_SATS = () => parseInt(process.env.L402_PRICE_SATS) || 500
 const L402_DURATION_HOURS = () => parseInt(process.env.L402_DURATION_HOURS) || 24
 
 async function sendL402Challenge(req, res) {
-  const provider = getProvider()
-  const challenge = await provider.createChallenge(L402_PRICE_SATS(), L402_DURATION_HOURS())
+  try {
+    const provider = getProvider()
+    const challenge = await provider.createChallenge(L402_PRICE_SATS(), L402_DURATION_HOURS())
 
-  if (challenge) {
-    const wwwAuth = `L402 macaroon="${challenge.macaroon}", invoice="${challenge.invoice}"`
-    return res.status(402).set('WWW-Authenticate', wwwAuth).json({
-      error: 'Payment Required',
-      message: 'Rate limit exceeded. Pay the Lightning invoice to continue.',
-      invoice: challenge.invoice,
-      macaroon: challenge.macaroon,
-      payment_hash: challenge.paymentHash,
-      price_sats: L402_PRICE_SATS(),
-      duration_hours: L402_DURATION_HOURS(),
-    })
+    if (challenge) {
+      const wwwAuth = `L402 macaroon="${challenge.macaroon}", invoice="${challenge.invoice}"`
+      return res.status(402).set('WWW-Authenticate', wwwAuth).json({
+        error: 'Payment Required',
+        message: 'Rate limit exceeded. Pay the Lightning invoice to continue.',
+        invoice: challenge.invoice,
+        macaroon: challenge.macaroon,
+        payment_hash: challenge.paymentHash,
+        price_sats: L402_PRICE_SATS(),
+        duration_hours: L402_DURATION_HOURS(),
+      })
+    }
+  } catch (err) {
+    console.error('[l402] Challenge creation failed:', err.message)
   }
 
   // Challenge creation failed — fall back to standard 429
