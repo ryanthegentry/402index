@@ -73,7 +73,7 @@ export function apiDocsPage() {
             <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
             <span class="endpoint-path">/api/v1/register</span>
           </div>
-          <p>Register an L402 endpoint. The URL is probed to verify L402 compliance. Verified services enter a <strong>pending</strong> state for admin review before appearing in public listings. Rate limited to 10 registrations per hour per IP.</p>
+          <p>Register an L402 endpoint. The URL is probed to verify L402 compliance. Registrations are reviewed before appearing in the directory. Rate limited to 10 registrations per hour per IP.</p>
           <table class="params-table">
             <thead>
               <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
