@@ -52,7 +52,7 @@ async function sendL402Challenge(req, res) {
  */
 export const freeLimiter = rateLimit({
   windowMs: 60_000,
-  limit: 100,
+  limit: (req) => req.query.l402 === 'require' ? 0 : 100,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: extractClientIp,
