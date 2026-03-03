@@ -27,7 +27,7 @@ export function apiDocsPage() {
               <tr><td>protocol</td><td>string</td><td>Filter by protocol: <code>l402</code> or <code>x402</code></td></tr>
               <tr><td>category</td><td>string</td><td>Filter by category (prefix match — <code>crypto</code> matches <code>crypto/nft</code>)</td></tr>
               <tr><td>health</td><td>string</td><td>Filter by health: <code>healthy</code>, <code>degraded</code>, <code>down</code>, <code>unknown</code></td></tr>
-              <tr><td>source</td><td>string</td><td>Filter by source: <code>bazaar</code>, <code>satring</code>, <code>l402apps</code>, <code>exclusive</code></td></tr>
+              <tr><td>source</td><td>string</td><td>Filter by source: <code>bazaar</code>, <code>satring</code>, <code>l402apps</code>, <code>exclusive</code>, <code>self-registered</code></td></tr>
               <tr><td>featured</td><td>boolean</td><td>Only featured services: <code>true</code></td></tr>
               <tr><td>q</td><td>string</td><td>Search by name or description</td></tr>
               <tr><td>max_price_usd</td><td>number</td><td>Maximum price in USD</td></tr>
@@ -66,6 +66,52 @@ export function apiDocsPage() {
           </div>
           <p>System health and sync status. Returns endpoint counts, distinct service/provider counts by protocol, health status breakdowns, source counts, and last sync timestamps.</p>
           <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>GET /api/v1/health</div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method" style="background:#49cc90">POST</span>
+            <span class="endpoint-path">/api/v1/register</span>
+          </div>
+          <p>Register an L402 endpoint. The URL is probed to verify L402 compliance before listing. Rate limited to 10 registrations per hour per IP.</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>url</td><td>string</td><td><strong>Required.</strong> The endpoint URL to register</td></tr>
+              <tr><td>name</td><td>string</td><td><strong>Required.</strong> Display name for the service</td></tr>
+              <tr><td>protocol</td><td>string</td><td><strong>Required.</strong> Currently only <code>L402</code> is supported</td></tr>
+              <tr><td>description</td><td>string</td><td>Description of what the service does</td></tr>
+              <tr><td>price_sats</td><td>integer</td><td>Price per request in satoshis</td></tr>
+              <tr><td>price_usd</td><td>number</td><td>Price per request in USD</td></tr>
+              <tr><td>payment_asset</td><td>string</td><td>Payment asset (e.g. <code>BTC/Lightning</code>)</td></tr>
+              <tr><td>payment_network</td><td>string</td><td>Payment network (e.g. <code>lightning</code>)</td></tr>
+              <tr><td>category</td><td>string</td><td>Category (e.g. <code>crypto/bitcoin</code>). Defaults to <code>uncategorized</code></td></tr>
+              <tr><td>provider</td><td>string</td><td>Organization or developer name</td></tr>
+              <tr><td>contact_email</td><td>string</td><td>Contact email (not displayed publicly)</td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X POST https://402index.io/api/v1/register \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "url": "https://api.example.com/resource",
+  "name": "My L402 API",
+  "protocol": "L402",
+  "provider": "My Org"
+}'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Status</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>201</code></td><td>Created. Returns the service record and verification details.</td></tr>
+              <tr><td><code>400</code></td><td>Missing required fields or invalid protocol.</td></tr>
+              <tr><td><code>422</code></td><td>L402 verification failed. The response includes actionable details: wrong HTTP status, missing <code>WWW-Authenticate</code> header, unreachable endpoint, or SSRF blocked.</td></tr>
+              <tr><td><code>429</code></td><td>Rate limit exceeded (10 registrations per hour per IP).</td></tr>
+            </tbody>
+          </table>
         </div>
 
         <h2>Response Format</h2>

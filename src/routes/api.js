@@ -1,6 +1,9 @@
 import { Router } from 'express'
+import { randomUUID } from 'crypto'
 import db from '../db.js'
 import { queryServices, API_COLUMNS } from '../queries/services.js'
+import { normalizeUrl } from '../services/url-normalize.js'
+import { verifyL402 } from '../services/l402-verify.js'
 
 const router = Router()
 
@@ -132,6 +135,118 @@ router.get('/categories', (req, res) => {
   }
 
   res.json({ categories: tree, total: rows.length })
+})
+
+// Lazy-initialized prepared statements for registration
+const stmts = {}
+function stmt(key, sql) {
+  if (!stmts[key]) stmts[key] = db.prepare(sql)
+  return stmts[key]
+}
+
+const registerUpsert = () => stmt('registerUpsert', `
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, health_status)
+  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, 'healthy')
+  ON CONFLICT(url, protocol) DO UPDATE SET
+    name = excluded.name,
+    description = COALESCE(excluded.description, services.description),
+    price_sats = COALESCE(excluded.price_sats, services.price_sats),
+    price_usd = COALESCE(excluded.price_usd, services.price_usd),
+    payment_asset = COALESCE(excluded.payment_asset, services.payment_asset),
+    payment_network = COALESCE(excluded.payment_network, services.payment_network),
+    category = COALESCE(excluded.category, services.category),
+    provider = COALESCE(excluded.provider, services.provider),
+    contact_email = COALESCE(excluded.contact_email, services.contact_email),
+    health_status = 'healthy',
+    updated_at = datetime('now')
+  RETURNING *
+`)
+
+const REQUIRED_FIELDS = ['url', 'name', 'protocol']
+const VALID_PROTOCOLS = new Set(['L402', 'x402', 'both'])
+
+// POST /api/v1/register
+router.post('/register', async (req, res) => {
+  try {
+    const body = req.body
+    if (!body || typeof body !== 'object') {
+      return res.status(400).json({ error: 'Request body must be JSON' })
+    }
+
+    // Validate required fields
+    const missing = REQUIRED_FIELDS.filter(f => !body[f])
+    if (missing.length > 0) {
+      return res.status(400).json({
+        error: `Missing required fields: ${missing.join(', ')}`,
+        required: REQUIRED_FIELDS,
+      })
+    }
+
+    // Validate protocol
+    const protocol = String(body.protocol)
+    if (!VALID_PROTOCOLS.has(protocol)) {
+      return res.status(400).json({
+        error: `Invalid protocol: "${body.protocol}". Must be one of: ${[...VALID_PROTOCOLS].join(', ')}`,
+      })
+    }
+
+    // Only L402 verification is implemented
+    if (protocol !== 'L402') {
+      return res.status(422).json({
+        error: `${protocol} verification is not yet supported. Only L402 registration is currently available.`,
+      })
+    }
+
+    // Normalize URL
+    const url = normalizeUrl(body.url)
+
+    // Run L402 verification probe
+    const probe = await verifyL402(url)
+    if (!probe.valid) {
+      return res.status(422).json({
+        error: 'L402 verification failed',
+        detail: probe.error,
+        probe: {
+          httpStatus: probe.httpStatus,
+          hasWwwAuthenticate: probe.hasWwwAuthenticate,
+          scheme: probe.scheme,
+          hasMacaroon: probe.hasMacaroon,
+          hasInvoice: probe.hasInvoice,
+        },
+      })
+    }
+
+    // Upsert into services
+    const params = {
+      id: randomUUID(),
+      name: body.name,
+      description: body.description || null,
+      url,
+      protocol,
+      price_sats: body.price_sats != null ? Number(body.price_sats) : null,
+      price_usd: body.price_usd != null ? Number(body.price_usd) : null,
+      payment_asset: body.payment_asset || null,
+      payment_network: body.payment_network || null,
+      category: body.category || 'uncategorized',
+      provider: body.provider || null,
+      contact_email: body.contact_email || null,
+    }
+
+    const service = registerUpsert().get(params)
+    return res.status(201).json({
+      message: 'Service registered successfully',
+      service,
+      verification: {
+        httpStatus: probe.httpStatus,
+        scheme: probe.scheme,
+        hasMacaroon: probe.hasMacaroon,
+        hasInvoice: probe.hasInvoice,
+      },
+    })
+  } catch (err) {
+    console.error('[register] Error:', err.message)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
 })
 
 export default router

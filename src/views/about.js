@@ -65,6 +65,25 @@ payment_asset: "BTC/Lightning"
 category: "real-time-data/weather"
 description: "Weather forecasts from NOAA data"
 provider: "Example Corp"</pre>
+        <p>
+          <strong>4. Register via API.</strong> Agents and developers can register L402 endpoints
+          programmatically. Your endpoint must be L402-spec-compliant — it needs to return
+          HTTP <code>402</code> with a <code>WWW-Authenticate: L402</code> header on
+          unauthenticated requests.
+        </p>
+        <pre>curl -X POST https://402index.io/api/v1/register \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "url": "https://api.example.com/resource",
+  "name": "My L402 API",
+  "protocol": "L402",
+  "provider": "My Org"
+}'</pre>
+        <p>
+          The endpoint is verified automatically — we probe your URL to confirm it returns
+          a valid L402 challenge before listing it. See the <a href="/api-docs">API docs</a>
+          for the full field reference.
+        </p>
 
         <h2>For AI agent developers</h2>
         <p>
