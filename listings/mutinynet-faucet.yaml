@@ -1,0 +1,6 @@
+name: "Mutinynet Faucet"
+url: "https://faucet.mutinynet.com/api/l402"
+protocol: "L402"
+description: "Lightning-gated faucet on Bitcoin's Mutinynet testnet. Pay a small L402 invoice to receive testnet sats."
+category: "bitcoin"
+provider: "MutinyWallet"
