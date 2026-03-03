@@ -171,6 +171,16 @@ try {
   // Column already exists
 }
 
+// Migration: rename category crypto/bitcoin → bitcoin
+try {
+  const result = db.prepare("UPDATE services SET category = 'bitcoin' WHERE category = 'crypto/bitcoin'").run()
+  if (result.changes > 0) {
+    console.log(`[db] Migrated ${result.changes} services from crypto/bitcoin to bitcoin`)
+  }
+} catch (err) {
+  console.warn(`[db] Category migration note: ${err.message}`)
+}
+
 // Prune health_checks older than 3 days (startup + every 24h)
 function pruneHealthChecks() {
   try {

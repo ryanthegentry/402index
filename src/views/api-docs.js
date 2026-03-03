@@ -87,7 +87,7 @@ export function apiDocsPage() {
               <tr><td>price_usd</td><td>number</td><td>Price per request in USD</td></tr>
               <tr><td>payment_asset</td><td>string</td><td>Payment asset (e.g. <code>BTC/Lightning</code>)</td></tr>
               <tr><td>payment_network</td><td>string</td><td>Payment network (e.g. <code>lightning</code>)</td></tr>
-              <tr><td>category</td><td>string</td><td>Category (e.g. <code>crypto/bitcoin</code>). Defaults to <code>uncategorized</code></td></tr>
+              <tr><td>category</td><td>string</td><td>Category (e.g. <code>bitcoin</code>). Defaults to <code>uncategorized</code></td></tr>
               <tr><td>provider</td><td>string</td><td>Organization or developer name</td></tr>
               <tr><td>contact_email</td><td>string</td><td>Contact email (not displayed publicly)</td></tr>
             </tbody>

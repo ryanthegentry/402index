@@ -103,9 +103,9 @@ describe('categorize', () => {
   })
 
   it('categorizes Bitcoin/Lightning descriptions', () => {
-    assert.equal(categorize({ description: 'BTC price oracle' }), 'crypto/bitcoin')
-    assert.equal(categorize({ description: 'Lightning Network statistics' }), 'crypto/bitcoin')
-    assert.equal(categorize({ description: 'Mempool fee heatmap' }), 'crypto/bitcoin')
+    assert.equal(categorize({ description: 'BTC price oracle' }), 'bitcoin')
+    assert.equal(categorize({ description: 'Lightning Network statistics' }), 'bitcoin')
+    assert.equal(categorize({ description: 'Mempool fee heatmap' }), 'bitcoin')
   })
 
   it('categorizes identity/trust descriptions', () => {

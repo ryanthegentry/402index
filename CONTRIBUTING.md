@@ -43,7 +43,7 @@ Use one of these categories (or propose a new one):
 | Category | Description |
 |----------|-------------|
 | `ai/ml` | AI inference, LLMs, embeddings |
-| `crypto/bitcoin` | Bitcoin, Lightning, on-chain data |
+| `bitcoin` | Bitcoin, Lightning, on-chain data |
 | `crypto/defi` | DeFi protocols, swaps, liquidity |
 | `crypto/nft` | NFTs, ordinals, inscriptions |
 | `crypto/prices` | Token prices, market data |
