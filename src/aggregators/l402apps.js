@@ -1,6 +1,6 @@
 import db from '../db.js'
 import { fetchBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
-import { parseL402AppsHtml, normalizeApp, normalizeApi } from './l402apps-utils.js'
+import { parseL402AppsHtml, normalizeApi } from './l402apps-utils.js'
 
 const L402APPS_URL = 'https://www.l402apps.com'
 
@@ -49,25 +49,12 @@ export async function pollL402Apps() {
     return { new: 0, updated: 0, errors: 0 }
   }
 
-  const { apps, apis } = parseL402AppsHtml(html)
-  console.log(`[l402apps] Parsed ${apps.length} apps, ${apis.length} APIs`)
+  const { apis } = parseL402AppsHtml(html)
+  console.log(`[l402apps] Parsed ${apis.length} APIs`)
 
   let newCount = 0
   let updatedCount = 0
   let errorCount = 0
-
-  for (const app of apps) {
-    try {
-      const normalized = normalizeApp(app)
-      const existing = findExisting().get(normalized.url)
-      upsertNew().run(normalized)
-      if (existing) updatedCount++
-      else newCount++
-    } catch (err) {
-      errorCount++
-      if (errorCount <= 5) console.error(`[l402apps] Error processing app ${app.name}:`, err.message)
-    }
-  }
 
   for (const api of apis) {
     try {
