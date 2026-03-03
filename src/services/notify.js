@@ -14,6 +14,7 @@ export async function sendRegistrationNotification(service) {
   if (!apiKey) return // Silently skip if not configured
 
   const to = process.env.NOTIFY_EMAIL || 'hello@402index.io'
+  const from = process.env.NOTIFY_FROM || '402index <notifications@402index.io>'
   const subject = `[402index] New registration: ${service.name}`
   const html = `
     <h2>New service registration</h2>
@@ -37,7 +38,7 @@ export async function sendRegistrationNotification(service) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: '402index <notifications@402index.io>',
+        from,
         to,
         subject,
         html,

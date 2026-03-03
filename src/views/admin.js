@@ -178,7 +178,7 @@ export function adminPage() {
         + '</div>'
         + '<div class="reg-card-actions">'
         + '<button class="btn-approve" onclick="approveService(\'' + escHtml(s.id) + '\', this)">Approve</button>'
-        + '<button class="btn-reject" onclick="rejectService(\'' + escHtml(s.id) + '\', \'' + escHtml(s.name).replace(/'/g, "\\\\'") + '\', this)">Reject</button>'
+        + '<button class="btn-reject" onclick="rejectService(\'' + escHtml(s.id) + '\', \'' + escHtml(s.name).replace(/'/g, "\\x27") + '\', this)">Reject</button>'
         + '</div>'
         + '</div>'
     }
@@ -191,7 +191,7 @@ export function adminPage() {
       var count = document.getElementById('pending-count')
       count.textContent = '(' + data.total + ' pending)'
       if (data.services.length === 0) {
-        list.innerHTML = '<div class="empty-state">No pending registrations. You\\'re all caught up.</div>'
+        list.innerHTML = '<div class="empty-state">No pending registrations. You are all caught up.</div>'
         return
       }
       list.innerHTML = data.services.map(renderCard).join('')
@@ -230,11 +230,11 @@ export function adminPage() {
 
     function updateCount(delta) {
       var el = document.getElementById('pending-count')
-      var m = el.textContent.match(/\\d+/)
+      var m = el.textContent.match(/\d+/)
       var n = m ? parseInt(m[0]) + delta : 0
       if (n <= 0) {
         el.textContent = '(0 pending)'
-        document.getElementById('pending-list').innerHTML = '<div class="empty-state">No pending registrations. You\\'re all caught up.</div>'
+        document.getElementById('pending-list').innerHTML = '<div class="empty-state">No pending registrations. You are all caught up.</div>'
       } else {
         el.textContent = '(' + n + ' pending)'
       }

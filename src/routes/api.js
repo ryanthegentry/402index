@@ -161,7 +161,7 @@ const registerUpsert = () => stmt('registerUpsert', `
     provider = COALESCE(excluded.provider, services.provider),
     contact_email = COALESCE(excluded.contact_email, services.contact_email),
     health_status = 'healthy',
-    status = 'pending',
+    status = CASE WHEN services.status = 'active' THEN 'active' ELSE services.status END,
     updated_at = datetime('now')
   RETURNING *
 `)
@@ -258,8 +258,12 @@ router.post('/register', async (req, res) => {
       console.error('[register] Notification failed:', err.message)
     })
 
+    const message = service.status === 'active'
+      ? 'Service updated (already active)'
+      : 'Service registered and pending review'
+
     return res.status(201).json({
-      message: 'Service registered and pending review',
+      message,
       service,
       verification: {
         httpStatus: probe.httpStatus,
