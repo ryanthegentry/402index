@@ -253,10 +253,12 @@ router.post('/register', async (req, res) => {
 
     const service = registerUpsert().get(params)
 
-    // Fire-and-forget email notification
-    sendRegistrationNotification(service).catch(err => {
-      console.error('[register] Notification failed:', err.message)
-    })
+    // Fire-and-forget email notification (only on genuinely new registrations)
+    if (service.registered_at === service.updated_at) {
+      sendRegistrationNotification(service).catch(err => {
+        console.error('[register] Notification failed:', err.message)
+      })
+    }
 
     const message = service.status === 'active'
       ? 'Service updated (already active)'
@@ -287,7 +289,7 @@ const approveService = () => stmt('approveService', `
 `)
 
 const rejectService = () => stmt('rejectService', `
-  DELETE FROM services WHERE id = @id AND status = 'pending'
+  UPDATE services SET status = 'rejected', updated_at = datetime('now') WHERE id = @id AND status = 'pending'
 `)
 
 router.get('/admin/pending', (req, res) => {
@@ -308,7 +310,7 @@ router.post('/admin/reject/:id', (req, res) => {
   if (result.changes === 0) {
     return res.status(404).json({ error: 'No pending service with that ID' })
   }
-  res.json({ message: 'Service rejected and deleted', id: req.params.id })
+  res.json({ message: 'Service rejected', id: req.params.id })
 })
 
 export default router
