@@ -5,6 +5,7 @@ import { aboutPage } from '../src/views/about.js'
 import { apiDocsPage } from '../src/views/api-docs.js'
 import { homePage } from '../src/views/home.js'
 import { detailPage } from '../src/views/detail.js'
+import { adminPage } from '../src/views/admin.js'
 
 describe('layout', () => {
   it('renders valid HTML with title and content', () => {
@@ -220,5 +221,15 @@ describe('detailPage', () => {
 
     assert.ok(html.includes('Input Schema'))
     assert.ok(html.includes('Output Schema'))
+  })
+})
+
+describe('adminPage', () => {
+  it('renders admin page with password form', () => {
+    const html = adminPage()
+    assert.ok(html.includes('402index Admin'))
+    assert.ok(html.includes('type="password"'))
+    assert.ok(html.includes('admin secret'))
+    assert.ok(html.includes('id="auth-form"'))
   })
 })

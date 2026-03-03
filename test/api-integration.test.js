@@ -603,6 +603,12 @@ describe('Page Routes — HTTP Status', () => {
     assert.equal(r.status, 200)
   })
 
+  it('GET /admin → 200 with password form', async () => {
+    const r = await raw('/admin')
+    assert.equal(r.status, 200)
+    assert.ok(r.text.includes('type="password"'))
+  })
+
   it('GET /service/:id → 200 for valid ID', async () => {
     // Get a valid ID first
     const list = await api('/services?limit=1')
