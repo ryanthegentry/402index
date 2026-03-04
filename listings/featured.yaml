@@ -1,8 +1,8 @@
 # Featured services — matched by URL for stability across DB rebuilds.
 # This file is the single source of truth for featured status.
 featured_urls:
-  - url: "https://www.ganamos.earth/"
-    comment: "Ganamos"
+  - url: "https://www.l402apps.com/api/apis"
+    comment: "L402 Apps: Get APIs (L402)"
   - url: "https://atlas.internal.example/v1/chat/completions"
     comment: "Qwen 3.5 Inference (Mac Mini M4)"
   - url: "https://faucet.mutinynet.com/api/l402"

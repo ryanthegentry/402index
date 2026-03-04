@@ -25,15 +25,32 @@ router.get('/', (req, res) => {
     stats.total += row.c
   }
 
-  // Distinct services (by hostname) and providers (hostname-based, filtered)
+  // Total indexed (unfiltered) counts
+  stats.totalIndexed = db.prepare('SELECT COUNT(*) as c FROM services').get().c
+  stats.totalHealthy = db.prepare("SELECT COUNT(*) as c FROM services WHERE health_status = 'healthy'").get().c
+
+  // Distinct services (by hostname) and providers (hostname-based, filtered + unfiltered)
   const distinctHosts = new Set()
   const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set() }
   const chainProviders = { base: new Set(), solana: new Set() }
+  const allProviders = { total: new Set(), L402: new Set(), x402: new Set() }
+  const allChainProviders = { base: new Set(), solana: new Set() }
   const allUrls = db.prepare('SELECT url, protocol, payment_network, is_template, is_demo, x402_payment_valid FROM services').all()
   for (const svc of allUrls) {
     let host
     try { host = new URL(svc.url).hostname } catch { continue }
     distinctHosts.add(host)
+    // Unfiltered provider counts (excluding templates/demos only)
+    if (!svc.is_template && !svc.is_demo) {
+      allProviders.total.add(host)
+      allProviders[svc.protocol]?.add(host)
+      if (svc.protocol === 'x402') {
+        const network = (svc.payment_network || '').toLowerCase()
+        if (network === 'base' || network.includes('base')) allChainProviders.base.add(host)
+        else if (network === 'solana' || network.includes('solana')) allChainProviders.solana.add(host)
+      }
+    }
+    // Filtered provider counts (also exclude x402 with payment_valid=0)
     if (!svc.is_template && !svc.is_demo && !(svc.protocol === 'x402' && svc.x402_payment_valid === 0)) {
       filteredProviders.total.add(host)
       filteredProviders[svc.protocol]?.add(host)
@@ -50,6 +67,9 @@ router.get('/', (req, res) => {
   stats.x402Providers = filteredProviders.x402.size
   stats.baseProviders = chainProviders.base.size
   stats.solanaProviders = chainProviders.solana.size
+  stats.allL402Providers = allProviders.L402.size
+  stats.allBaseProviders = allChainProviders.base.size
+  stats.allSolanaProviders = allChainProviders.solana.size
 
   // Categories for dropdown
   const categories = db.prepare(
