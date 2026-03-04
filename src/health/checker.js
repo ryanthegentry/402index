@@ -4,6 +4,7 @@ import { isIPv4, isIPv6 } from 'net'
 import { dirname } from 'path'
 import db, { DB_PATH } from '../db.js'
 import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from '../services/l402-utils.js'
+import { parsePaymentRequired, validatePaymentRequirements } from '../services/x402-utils.js'
 
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
@@ -106,6 +107,9 @@ const updateService = () => stmt('updateService', `
     consecutive_failures = @consecutive_failures,
     uptime_30d = @uptime_30d,
     reliability_score = @reliability_score,
+    x402_payment_valid = @x402_payment_valid,
+    x402_facilitator_reachable = @x402_facilitator_reachable,
+    x402_asset_known = @x402_asset_known,
     updated_at = datetime('now')
   WHERE id = @id
 `)
@@ -139,18 +143,20 @@ function calculateP50(serviceId) {
  * For POST: sends POST with empty JSON body (L402 middleware fires before body validation).
  * @param {string} url
  * @param {string} [httpMethod='GET']
- * @returns {{ httpStatus: number|null, responseTimeMs: number|null, errorMessage: string|null, wwwAuthenticate: string|null }}
+ * @returns {{ httpStatus: number|null, responseTimeMs: number|null, errorMessage: string|null, wwwAuthenticate: string|null, paymentRequired: string|null }}
  */
 async function performHttpCheck(url, httpMethod = 'GET') {
+  const empty = { httpStatus: null, responseTimeMs: null, errorMessage: null, wwwAuthenticate: null, paymentRequired: null }
+
   // SSRF protection: block non-http(s) schemes
   if (isBlockedScheme(url)) {
-    return { httpStatus: null, responseTimeMs: null, errorMessage: 'blocked: non-http(s) scheme', wwwAuthenticate: null }
+    return { ...empty, errorMessage: 'blocked: non-http(s) scheme' }
   }
 
   // SSRF protection: resolve hostname and check against private IP ranges
   const blockReason = await resolveAndCheck(url)
   if (blockReason) {
-    return { httpStatus: null, responseTimeMs: null, errorMessage: blockReason, wwwAuthenticate: null }
+    return { ...empty, errorMessage: blockReason }
   }
 
   try {
@@ -168,6 +174,7 @@ async function performHttpCheck(url, httpMethod = 'GET') {
         responseTimeMs: Date.now() - startPost,
         errorMessage: null,
         wwwAuthenticate: postRes.headers.get('www-authenticate'),
+        paymentRequired: postRes.headers.get('payment-required'),
       }
     }
 
@@ -181,6 +188,7 @@ async function performHttpCheck(url, httpMethod = 'GET') {
     let httpStatus = headRes.status
     let responseTimeMs = Date.now() - startHead
     let wwwAuthenticate = headRes.headers.get('www-authenticate')
+    let paymentRequired = headRes.headers.get('payment-required')
 
     // If not 402, retry with GET (some endpoints only return 402 on GET)
     if (httpStatus !== 402) {
@@ -193,12 +201,13 @@ async function performHttpCheck(url, httpMethod = 'GET') {
       httpStatus = getRes.status
       responseTimeMs = Date.now() - startGet
       wwwAuthenticate = getRes.headers.get('www-authenticate')
+      paymentRequired = getRes.headers.get('payment-required')
     }
 
-    return { httpStatus, responseTimeMs, errorMessage: null, wwwAuthenticate }
+    return { httpStatus, responseTimeMs, errorMessage: null, wwwAuthenticate, paymentRequired }
   } catch (err) {
     const errorMessage = (err.name === 'TimeoutError' || err.code === 'ABORT_ERR') ? 'timeout' : err.message
-    return { httpStatus: null, responseTimeMs: null, errorMessage, wwwAuthenticate: null }
+    return { ...empty, errorMessage }
   }
 }
 
@@ -284,8 +293,43 @@ export function computeReliabilityScore(service) {
   return Math.round(score * 10) / 10
 }
 
+// Facilitator reachability cache (15-minute TTL)
+const facilitatorCache = new Map()
+const FACILITATOR_CACHE_TTL_MS = 15 * 60 * 1000
+
+/**
+ * Check if a facilitator URL is reachable (cached).
+ * @param {string} url
+ * @returns {Promise<boolean>}
+ */
+async function checkFacilitatorReachable(url) {
+  const cached = facilitatorCache.get(url)
+  if (cached && Date.now() - cached.ts < FACILITATOR_CACHE_TTL_MS) {
+    return cached.reachable
+  }
+
+  let reachable = false
+  try {
+    const blockReason = await resolveAndCheck(url)
+    if (!blockReason) {
+      const res = await fetch(url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        redirect: 'follow',
+      })
+      // Any non-error response means the facilitator is up
+      reachable = res.status < 500
+    }
+  } catch {
+    reachable = false
+  }
+
+  facilitatorCache.set(url, { reachable, ts: Date.now() })
+  return reachable
+}
+
 /** Persist health check result and update service record. */
-function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt }) {
+function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown }) {
   insertHealthCheck().run({
     service_id: serviceId,
     status: checkStatus,
@@ -311,6 +355,9 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
     consecutive_failures: consecutiveFailures,
     uptime_30d: uptime,
     reliability_score: reliability,
+    x402_payment_valid: x402PaymentValid ?? null,
+    x402_facilitator_reachable: x402FacilitatorReachable ?? null,
+    x402_asset_known: x402AssetKnown ?? null,
   })
 }
 
@@ -335,6 +382,43 @@ async function checkService(service) {
     }
   }
 
+  // x402 payment requirements validation
+  let x402PaymentValid = null
+  let x402FacilitatorReachable = null
+  let x402AssetKnown = null
+
+  if (protocol === 'x402' && httpResult.httpStatus === 402) {
+    const parsed = parsePaymentRequired(httpResult.paymentRequired)
+    if (parsed.valid) {
+      const validation = validatePaymentRequirements(parsed.accepts)
+      x402PaymentValid = validation.valid ? 1 : 0
+      x402AssetKnown = validation.assetKnown ? 1 : 0
+
+      // Check facilitator reachability (uses cache)
+      if (validation.facilitatorUrls.length > 0) {
+        const reachResults = await Promise.all(
+          validation.facilitatorUrls.map(u => checkFacilitatorReachable(u))
+        )
+        x402FacilitatorReachable = reachResults.some(r => r) ? 1 : 0
+      } else {
+        x402FacilitatorReachable = null // No facilitator URL found
+      }
+
+      // Downgrade to degraded if payment requirements are invalid
+      if (!validation.valid && classification.healthStatus === 'healthy') {
+        classification.healthStatus = 'degraded'
+        classification.checkStatus = 'degraded'
+      }
+    } else {
+      // PAYMENT-REQUIRED header missing or unparseable
+      x402PaymentValid = 0
+      if (classification.healthStatus === 'healthy') {
+        classification.healthStatus = 'degraded'
+        classification.checkStatus = 'degraded'
+      }
+    }
+  }
+
   persistHealthResult(id, {
     ...classification,
     httpStatus: httpResult.httpStatus,
@@ -342,6 +426,9 @@ async function checkService(service) {
     errorMessage: httpResult.errorMessage,
     historicalP50,
     registeredAt: service.registered_at,
+    x402PaymentValid,
+    x402FacilitatorReachable,
+    x402AssetKnown,
   })
 
   return { id, healthStatus: classification.healthStatus, httpStatus: httpResult.httpStatus }

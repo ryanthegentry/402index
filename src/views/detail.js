@@ -94,6 +94,24 @@ export function detailPage(service) {
         </div>
       </div>
 
+      ${service.protocol === 'x402' ? `
+        <div class="detail-section" style="margin-bottom:24px">
+          <h2>x402 Payment Validation</h2>
+          <div class="detail-row">
+            <span class="detail-label">Payment Requirements</span>
+            <span class="detail-value">${service.x402_payment_valid === 1 ? '<span style="color:var(--green)">Valid</span>' : service.x402_payment_valid === 0 ? '<span style="color:var(--red)">Invalid</span>' : '—'}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Asset Verified</span>
+            <span class="detail-value">${service.x402_asset_known === 1 ? '<span style="color:var(--green)">Known USDC</span>' : service.x402_asset_known === 0 ? '<span style="color:var(--yellow)">Unknown asset</span>' : '—'}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Facilitator</span>
+            <span class="detail-value">${service.x402_facilitator_reachable === 1 ? '<span style="color:var(--green)">Reachable</span>' : service.x402_facilitator_reachable === 0 ? '<span style="color:var(--red)">Unreachable</span>' : '—'}</span>
+          </div>
+        </div>
+      ` : ''}
+
       ${inputSchema ? `
       <div class="detail-section" style="margin-bottom:24px">
         <h2>Input Schema</h2>
