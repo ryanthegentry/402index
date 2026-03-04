@@ -89,13 +89,13 @@ describe('homePage', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5 },
+      stats: { total: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5 },
       categories: [{ category: 'tools', count: 10 }],
     })
 
     assert.ok(html.includes('Test Service'))
-    assert.ok(html.includes('endpoints'))
-    assert.ok(html.includes('>100<'))
+    assert.ok(html.includes('endpoints indexed'))
+    assert.ok(html.includes('payment-verified'))
   })
 
   it('renders empty state when no services', () => {
@@ -105,10 +105,10 @@ describe('homePage', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
+      stats: { total: 0, totalIndexed: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
       categories: [],
     })
-    assert.ok(html.includes('endpoints'))
+    assert.ok(html.includes('endpoints indexed'))
   })
 
   it('renders protocol counter when l402, base, and solana providers are provided', () => {
@@ -118,7 +118,7 @@ describe('homePage', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 300, solanaProviders: 86 },
+      stats: { total: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 300, solanaProviders: 86, allL402Providers: 24, allBaseProviders: 300, allSolanaProviders: 86 },
       categories: [],
     })
     assert.ok(html.includes('<div class="protocol-bar">'), 'should render protocol bar')
@@ -136,7 +136,7 @@ describe('homePage', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 0, baseProviders: 0, solanaProviders: 0 },
+      stats: { total: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 0, baseProviders: 0, solanaProviders: 0, allL402Providers: 0, allBaseProviders: 0, allSolanaProviders: 0 },
       categories: [],
     })
     assert.ok(!html.includes('<div class="protocol-bar">'), 'should not render protocol bar when all counts are 0')
@@ -156,7 +156,7 @@ describe('homePage', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 1, healthy: 1, degraded: 0, down: 0, unknown: 0 },
+      stats: { total: 1, totalIndexed: 1, healthy: 1, degraded: 0, down: 0, unknown: 0 },
       categories: [],
     })
     assert.ok(!html.includes('<script>alert("xss")</script>'))

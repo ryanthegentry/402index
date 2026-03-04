@@ -37,6 +37,65 @@ export function aboutPage() {
           the paywall is active and working.
         </p>
 
+        <h2>Methodology</h2>
+
+        <p>
+          Every number on 402 Index is independently verified. We don't take any source's word
+          for it — we check every endpoint ourselves, every 15 minutes.
+        </p>
+
+        <p>
+          <strong>Endpoints indexed</strong> is the total count of unique paid API endpoints
+          we track across all sources. This includes every service registered in x402 Bazaar,
+          Satring, L402 Apps, and our exclusive listings.
+        </p>
+
+        <p>
+          <strong>Payment-verified</strong> endpoints are the subset that pass our independent
+          payment verification. What this means depends on the protocol:
+        </p>
+
+        <p>
+          For <strong>L402</strong> endpoints: we send an HTTP request and confirm the service
+          returns <code>402 Payment Required</code> with a valid <code>WWW-Authenticate: L402</code>
+          header containing a properly formatted macaroon/token and a BOLT11 Lightning invoice.
+          If the paywall is active and the credentials parse correctly, the endpoint is payment-verified.
+        </p>
+
+        <p>
+          For <strong>x402</strong> endpoints: we send an HTTP request and check for a
+          <code>PAYMENT-REQUIRED</code> response header containing a valid base64-encoded JSON
+          payload. We validate that the <code>accepts[]</code> array includes a recognized payment
+          scheme, a known asset contract address (e.g., USDC on Base), a valid <code>payTo</code>
+          address, and a reachable facilitator URL. If any of these checks fail, the endpoint is
+          indexed but not payment-verified.
+        </p>
+
+        <p>
+          <strong>Health status</strong> reflects whether the endpoint is reachable and responding
+          correctly:
+        </p>
+
+        <p>
+          <span style="color:var(--green)">&#9679;</span> <strong>Healthy</strong> — responded with
+          HTTP 402 (paywall active) within the timeout window on the last check.<br>
+          <span style="color:var(--yellow)">&#9679;</span> <strong>Degraded</strong> — responding, but
+          with unexpected status codes, slow response times, or intermittent failures.<br>
+          <span style="color:var(--red)">&#9679;</span> <strong>Down</strong> — not responding or
+          returning errors on consecutive checks.
+        </p>
+
+        <p>
+          <strong>Why do some sources show a large gap between "indexed" and "payment-verified"?</strong>
+          Auto-registration directories may catalog endpoints when they first process a payment,
+          but don't continuously verify that the payment infrastructure remains active. 402 Index
+          checks every endpoint every 15 minutes. If an endpoint no longer returns valid payment
+          headers, it stays indexed (we still track it) but loses its payment-verified status.
+          This ongoing verification is what makes 402 Index useful for AI agents that need to
+          make autonomous spending decisions — they can trust that a payment-verified endpoint
+          will actually accept payment right now.
+        </p>
+
         <h2>For API providers</h2>
         <p>
           Want to list your paid API on 402 Index? There are a few ways to get started:

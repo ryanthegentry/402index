@@ -36,28 +36,44 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   const l402Pct = totalProviders > 0 ? Math.round((l402 / totalProviders) * 100) : 0
   const basePct = totalProviders > 0 ? Math.round((base / totalProviders) * 100) : 0
 
+  const l402Label = stats.allL402Providers > l402
+    ? `L402 <strong>${l402}</strong><span class="pct-of">/${stats.allL402Providers}</span>`
+    : `L402 <strong>${l402}</strong>`
+  const baseLabel = stats.allBaseProviders > base
+    ? `Base <strong>${base}</strong><span class="pct-of">/${stats.allBaseProviders}</span>`
+    : `Base <strong>${base}</strong>`
+  const solanaLabel = stats.allSolanaProviders > solana
+    ? `Solana <strong>${solana}</strong><span class="pct-of">/${stats.allSolanaProviders}</span>`
+    : `Solana <strong>${solana}</strong>`
+
   const protocolBar = totalProviders > 0 ? `
     <div class="protocol-bar">
       <div class="container">
-        <span class="protocol-l402">L402 <strong>${l402}</strong></span>
+        <span class="protocol-l402">${l402Label}</span>
         <div class="protocol-track-multi">
           <div class="protocol-fill-l402" style="width: ${l402Pct}%"></div>
           <div class="protocol-fill-base" style="width: ${basePct}%"></div>
         </div>
-        ${base > 0 ? `<span class="protocol-base">Base <strong>${base}</strong></span>` : ''}
-        ${solana > 0 ? `<span class="protocol-solana">Solana <strong>${solana}</strong></span>` : ''}
+        ${base > 0 ? `<span class="protocol-base">${baseLabel}</span>` : ''}
+        ${solana > 0 ? `<span class="protocol-solana">${solanaLabel}</span>` : ''}
       </div>
     </div>` : ''
 
   return layout('Directory', `
     <div class="stats-bar">
       <div class="container">
-        <span><span class="stat-value">${stats.total.toLocaleString()}</span> endpoints</span>
-        <span><span class="stat-value">${stats.distinctServices?.toLocaleString() || '—'}</span> services</span>
-        <span><span class="stat-value">${stats.distinctProviders?.toLocaleString() || '—'}</span> providers</span>
-        <span><span class="stat-value" style="color:var(--green)">${stats.healthy}</span> healthy</span>
-        <span><span class="stat-value" style="color:var(--yellow)">${stats.degraded}</span> degraded</span>
-        <span><span class="stat-value" style="color:var(--red)">${stats.down}</span> down</span>
+        <div class="stats-headline">
+          <span><span class="stat-value">${stats.totalIndexed.toLocaleString()}</span> endpoints indexed</span>
+          <span class="stats-sep">&middot;</span>
+          <span><span class="stat-value stat-verified">${stats.total.toLocaleString()}</span> payment-verified</span>
+        </div>
+        <div class="stats-detail">
+          <span><span class="stat-value">${stats.distinctServices?.toLocaleString() || '—'}</span> services</span>
+          <span><span class="stat-value">${stats.distinctProviders?.toLocaleString() || '—'}</span> providers</span>
+          <span><span class="stat-value" style="color:var(--green)">${stats.healthy}</span> healthy</span>
+          <span><span class="stat-value" style="color:var(--yellow)">${stats.degraded}</span> degraded</span>
+          <span><span class="stat-value" style="color:var(--red)">${stats.down}</span> down</span>
+        </div>
       </div>
     </div>
     ${protocolBar}

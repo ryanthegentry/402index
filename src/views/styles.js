@@ -69,10 +69,33 @@ export const styles = `
     }
     .stats-bar .container {
       display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .stats-headline {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .stats-detail {
+      display: flex;
       gap: 24px;
       flex-wrap: wrap;
     }
+    .stats-sep {
+      color: var(--text-muted);
+    }
+    .stat-verified {
+      color: var(--green);
+    }
     .stat-value { color: var(--text-bright); }
+    .pct-of {
+      color: var(--text-muted);
+      font-weight: normal;
+      font-size: 11px;
+    }
 
     /* Protocol bar */
     .protocol-bar {
@@ -570,9 +593,9 @@ export const styles = `
     @media (max-width: 768px) {
       .detail-grid { grid-template-columns: 1fr; }
 
-      /* Stats bar: total on first line, breakdown on second */
-      .stats-bar .container > span:first-child { width: 100%; }
-      .stats-bar .container { gap: 4px 16px; }
+      /* Stats bar responsive */
+      .stats-headline { flex-wrap: wrap; font-size: 12px; }
+      .stats-detail { gap: 4px 16px; font-size: 11px; }
 
       /* Filters: collapsible on mobile */
       .filter-toggle { display: inline-block; }
