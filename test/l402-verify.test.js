@@ -85,6 +85,11 @@ describe('isValidMacaroon', () => {
     assert.equal(isValidMacaroon('dGVzdF9tYWNhcm9vbg=='), true)
   })
 
+  it('accepts JWT token with dots (Ben Carman / mutinynet style)', () => {
+    const jwt = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwYXltZW50X2hhc2giOiJjZGIzMjk3OTg2ZGYyZTk3MjYzMGY0M2FkZDQ1MTkxZjU4ZjE4ZTM3OTcwM2FmZDZkZjNkMWFiMDk3NGJlNDQzIn0.Vmh_HonFE-XTeUPamsO8B3EptcoQxzC-FEojRWOF7EA'
+    assert.equal(isValidMacaroon(jwt), true)
+  })
+
   it('rejects null', () => {
     assert.equal(isValidMacaroon(null), false)
   })

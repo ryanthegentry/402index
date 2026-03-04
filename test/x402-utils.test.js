@@ -410,10 +410,12 @@ describe('detailPage — x402 payment validation', () => {
 // ─── Query builder: payment_valid filter ────────────────────────────────────
 
 describe('buildServiceQuery — payment_valid filter', () => {
-  it('adds x402_payment_valid = 1 when payment_valid is true', async () => {
+  it('adds protocol-aware filter when payment_valid is true', async () => {
     const { buildServiceQuery } = await import('../src/queries/services.js')
     const result = buildServiceQuery({ payment_valid: 'true' })
     assert.ok(result.where.includes('x402_payment_valid = 1'))
+    assert.ok(result.where.includes("protocol = 'L402'"))
+    assert.ok(result.where.includes("health_status = 'healthy'"))
   })
 
   it('does not filter when payment_valid is absent', async () => {
@@ -465,5 +467,74 @@ describe('homePage — payment_valid filter', () => {
       categories: [],
     })
     assert.ok(html.includes('name="payment_valid" value="true" checked'))
+  })
+})
+
+// ─── Protocol bar: chain colors ─────────────────────────────────────────────
+
+describe('homePage — protocol bar chain colors', () => {
+  const baseStats = { total: 100, healthy: 80, degraded: 10, down: 10, unknown: 0 }
+
+  it('renders 3-segment bar with L402, Base, and Solana labels', async () => {
+    const { homePage } = await import('../src/views/home.js')
+    const html = homePage({
+      services: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      filters: {},
+      stats: { ...baseStats, l402Providers: 5, baseProviders: 100, solanaProviders: 20 },
+      categories: [],
+    })
+    assert.ok(html.includes('protocol-fill-l402'))
+    assert.ok(html.includes('protocol-fill-base'))
+    assert.ok(html.includes('protocol-track-multi'))
+    assert.ok(html.includes('protocol-l402'))
+    assert.ok(html.includes('protocol-base'))
+    assert.ok(html.includes('protocol-solana'))
+  })
+
+  it('hides Solana label when zero Solana providers', async () => {
+    const { homePage } = await import('../src/views/home.js')
+    const html = homePage({
+      services: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      filters: {},
+      stats: { ...baseStats, l402Providers: 5, baseProviders: 100, solanaProviders: 0 },
+      categories: [],
+    })
+    assert.ok(html.includes('<span class="protocol-base">'))
+    assert.ok(!html.includes('<span class="protocol-solana">'))
+  })
+
+  it('hides Base label when zero Base providers', async () => {
+    const { homePage } = await import('../src/views/home.js')
+    const html = homePage({
+      services: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      filters: {},
+      stats: { ...baseStats, l402Providers: 5, baseProviders: 0, solanaProviders: 20 },
+      categories: [],
+    })
+    assert.ok(!html.includes('<span class="protocol-base">'))
+    assert.ok(html.includes('<span class="protocol-solana">'))
+  })
+
+  it('hides protocol bar when no providers', async () => {
+    const { homePage } = await import('../src/views/home.js')
+    const html = homePage({
+      services: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      filters: {},
+      stats: { ...baseStats, l402Providers: 0, baseProviders: 0, solanaProviders: 0 },
+      categories: [],
+    })
+    assert.ok(!html.includes('<div class="protocol-bar">'))
   })
 })

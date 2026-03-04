@@ -403,19 +403,9 @@ async function checkService(service) {
       } else {
         x402FacilitatorReachable = null // No facilitator URL found
       }
-
-      // Downgrade to degraded if payment requirements are invalid
-      if (!validation.valid && classification.healthStatus === 'healthy') {
-        classification.healthStatus = 'degraded'
-        classification.checkStatus = 'degraded'
-      }
     } else {
       // PAYMENT-REQUIRED header missing or unparseable
       x402PaymentValid = 0
-      if (classification.healthStatus === 'healthy') {
-        classification.healthStatus = 'degraded'
-        classification.checkStatus = 'degraded'
-      }
     }
   }
 

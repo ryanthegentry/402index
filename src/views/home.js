@@ -30,32 +30,22 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   const nextOffset = offset + limit
 
   const l402 = stats.l402Providers || 0
-  const x402 = stats.x402Providers || 0
-  const baseProv = stats.baseProviders || 0
-  const solanaProv = stats.solanaProviders || 0
-  const protocolTotal = l402 + x402
-  const l402Pct = protocolTotal > 0 ? Math.round((l402 / protocolTotal) * 100) : 0
+  const base = stats.baseProviders || 0
+  const solana = stats.solanaProviders || 0
+  const totalProviders = l402 + base + solana
+  const l402Pct = totalProviders > 0 ? Math.round((l402 / totalProviders) * 100) : 0
+  const basePct = totalProviders > 0 ? Math.round((base / totalProviders) * 100) : 0
 
-  // Build x402 chain labels
-  let x402Label = ''
-  if (baseProv > 0 && solanaProv > 0) {
-    x402Label = `x402 <strong>${x402}</strong> <span style="font-size:0.85em;opacity:0.8">(Base ${baseProv} · Solana ${solanaProv})</span>`
-  } else if (baseProv > 0) {
-    x402Label = `x402 (Base) <strong>${x402}</strong>`
-  } else if (solanaProv > 0) {
-    x402Label = `x402 (Solana) <strong>${x402}</strong>`
-  } else if (x402 > 0) {
-    x402Label = `x402 <strong>${x402}</strong>`
-  }
-
-  const protocolBar = (l402 > 0 && x402 > 0) ? `
+  const protocolBar = totalProviders > 0 ? `
     <div class="protocol-bar">
       <div class="container">
-        <span class="protocol-l402">L402 (Bitcoin) <strong>${l402}</strong></span>
-        <div class="protocol-track">
+        <span class="protocol-l402">L402 <strong>${l402}</strong></span>
+        <div class="protocol-track-multi">
           <div class="protocol-fill-l402" style="width: ${l402Pct}%"></div>
+          <div class="protocol-fill-base" style="width: ${basePct}%"></div>
         </div>
-        <span class="protocol-x402">${x402Label}</span>
+        ${base > 0 ? `<span class="protocol-base">Base <strong>${base}</strong></span>` : ''}
+        ${solana > 0 ? `<span class="protocol-solana">Solana <strong>${solana}</strong></span>` : ''}
       </div>
     </div>` : ''
 

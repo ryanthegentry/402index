@@ -93,7 +93,7 @@ export function buildServiceQuery(opts = {}) {
     conditions.push('featured = 1')
   }
   if (payment_valid === 'true' || payment_valid === '1') {
-    conditions.push('x402_payment_valid = 1')
+    conditions.push("((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy'))")
   }
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''

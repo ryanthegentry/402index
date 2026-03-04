@@ -257,7 +257,7 @@ describe('verifyL402 with POST method', () => {
 // ─── Homepage views: chain breakdown ────────────────────────────────────────
 
 describe('homePage protocol bar — chain breakdown', () => {
-  it('shows L402 (Bitcoin) label', async () => {
+  it('shows L402, Base, and Solana labels', async () => {
     const { homePage } = await import('../src/views/home.js')
     const html = homePage({
       services: [],
@@ -265,15 +265,16 @@ describe('homePage protocol bar — chain breakdown', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, x402Providers: 386, baseProviders: 350, solanaProviders: 20 },
+      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 350, solanaProviders: 20 },
       categories: [],
     })
-    assert.ok(html.includes('L402 (Bitcoin)'), 'should show L402 (Bitcoin) label')
-    assert.ok(html.includes('Base'), 'should mention Base chain')
-    assert.ok(html.includes('Solana'), 'should mention Solana chain')
+    assert.ok(html.includes('L402'), 'should show L402 label')
+    assert.ok(html.includes('<span class="protocol-base">'), 'should show Base label')
+    assert.ok(html.includes('<span class="protocol-solana">'), 'should show Solana label')
+    assert.ok(html.includes('protocol-track-multi'), 'should use multi-track bar')
   })
 
-  it('shows just x402 when no chain data', async () => {
+  it('shows only L402 when no chain data', async () => {
     const { homePage } = await import('../src/views/home.js')
     const html = homePage({
       services: [],
@@ -281,11 +282,13 @@ describe('homePage protocol bar — chain breakdown', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, x402Providers: 386, baseProviders: 0, solanaProviders: 0 },
+      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 0, solanaProviders: 0 },
       categories: [],
     })
-    assert.ok(html.includes('x402'), 'should show x402')
-    assert.ok(html.includes('<strong>386</strong>'), 'should show x402 count')
+    assert.ok(html.includes('L402'), 'should show L402')
+    assert.ok(html.includes('<strong>24</strong>'), 'should show L402 count')
+    assert.ok(!html.includes('<span class="protocol-base">'), 'should not show Base label')
+    assert.ok(!html.includes('<span class="protocol-solana">'), 'should not show Solana label')
   })
 
   it('includes sort dropdown', async () => {

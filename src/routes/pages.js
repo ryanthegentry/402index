@@ -18,7 +18,7 @@ router.get('/', (req, res) => {
     protocol, category, health, source, q, featured, sort, payment_valid, order: sort ? 'desc' : undefined, rawLimit, rawOffset,
   }, PAGE_COLUMNS)
 
-  const statsRows = db.prepare('SELECT health_status, COUNT(*) as c FROM services GROUP BY health_status').all()
+  const statsRows = db.prepare("SELECT health_status, COUNT(*) as c FROM services WHERE NOT (protocol = 'x402' AND x402_payment_valid = 0) GROUP BY health_status").all()
   const stats = { total: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 }
   for (const row of statsRows) {
     stats[row.health_status] = row.c
@@ -29,12 +29,12 @@ router.get('/', (req, res) => {
   const distinctHosts = new Set()
   const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set() }
   const chainProviders = { base: new Set(), solana: new Set() }
-  const allUrls = db.prepare('SELECT url, protocol, payment_network, is_template, is_demo FROM services').all()
+  const allUrls = db.prepare('SELECT url, protocol, payment_network, is_template, is_demo, x402_payment_valid FROM services').all()
   for (const svc of allUrls) {
     let host
     try { host = new URL(svc.url).hostname } catch { continue }
     distinctHosts.add(host)
-    if (!svc.is_template && !svc.is_demo) {
+    if (!svc.is_template && !svc.is_demo && !(svc.protocol === 'x402' && svc.x402_payment_valid === 0)) {
       filteredProviders.total.add(host)
       filteredProviders[svc.protocol]?.add(host)
       if (svc.protocol === 'x402') {
