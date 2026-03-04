@@ -7,12 +7,12 @@ import { normalizeUrl } from '../services/url-normalize.js'
  */
 export function mapNetworkToPaymentNetwork(network) {
   const map = {
-    'base': 'eip155:8453',
-    'base-sepolia': 'eip155:84532',
-    'ethereum': 'eip155:1',
-    'arbitrum': 'eip155:42161',
-    'optimism': 'eip155:10',
-    'polygon': 'eip155:137',
+    'base': 'Base',
+    'base-sepolia': 'Base Sepolia',
+    'ethereum': 'Ethereum',
+    'arbitrum': 'Arbitrum',
+    'optimism': 'Optimism',
+    'polygon': 'Polygon',
   }
   return map[network] || network
 }

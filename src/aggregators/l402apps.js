@@ -13,7 +13,7 @@ function stmt(key, sql) {
 
 const upsertNew = () => stmt('upsertNew', `
   INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id)
-  VALUES (@id, @name, @description, @url, 'L402', @price_sats, @price_usd, 'BTC/Lightning', 'lightning', @category, @provider, 'l402apps', @source_id)
+  VALUES (@id, @name, @description, @url, 'L402', @price_sats, @price_usd, 'BTC', 'Lightning', @category, @provider, 'l402apps', @source_id)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = excluded.name,
     description = excluded.description,

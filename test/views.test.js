@@ -174,6 +174,8 @@ describe('detailPage', () => {
       health_status: 'healthy',
       category: 'tools',
       provider: 'TestCorp',
+      payment_asset: 'BTC',
+      payment_network: 'Lightning',
       source: 'exclusive',
       health_checks: [],
       consecutive_failures: 0,
@@ -183,6 +185,23 @@ describe('detailPage', () => {
     assert.ok(html.includes('https://example.com/api'))
     assert.ok(html.includes('L402'))
     assert.ok(html.includes('TestCorp'))
+    assert.ok(html.includes('BTC'))
+    assert.ok(html.includes('Lightning'))
+  })
+
+  it('renders payment fields as dashes when missing', () => {
+    const html = detailPage({
+      name: 'Bare Service',
+      url: 'https://example.com',
+      protocol: 'x402',
+      health_status: 'unknown',
+      source: 'bazaar',
+      consecutive_failures: 0,
+      health_checks: [],
+    })
+    // Payment Asset and Payment Network rows should show dash
+    assert.ok(html.includes('Payment Asset'))
+    assert.ok(html.includes('Payment Network'))
   })
 
   it('renders health check history', () => {
@@ -239,5 +258,11 @@ describe('adminPage', () => {
     assert.ok(html.includes('data-id'), 'approve/reject buttons should use data-id')
     assert.ok(html.includes('data-name'), 'reject button should use data-name')
     assert.ok(html.includes('pending-list'), 'should have pending-list container for delegation')
+  })
+
+  it('renders payment_asset and payment_network fields in admin card', () => {
+    const html = adminPage()
+    assert.ok(html.includes('payment_asset'), 'admin card should reference payment_asset')
+    assert.ok(html.includes('payment_network'), 'admin card should reference payment_network')
   })
 })
