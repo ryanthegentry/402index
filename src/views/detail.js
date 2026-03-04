@@ -29,7 +29,7 @@ export function detailPage(service) {
           ${service.description ? `<p style="margin-bottom:16px;line-height:1.6">${escapeHtml(service.description)}</p>` : ''}
           <div class="detail-row">
             <span class="detail-label">Protocol</span>
-            <span class="detail-value">${protocolBadge(service.protocol)}</span>
+            <span class="detail-value">${protocolBadge(service.protocol)}${service.http_method && service.http_method !== 'GET' ? ` <span style="color:var(--text-muted);font-size:0.85em">(${escapeHtml(service.http_method)})</span>` : ''}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">Price</span>
@@ -74,6 +74,10 @@ export function detailPage(service) {
           <div class="detail-row">
             <span class="detail-label">Uptime (30d)</span>
             <span class="detail-value">${service.uptime_30d != null ? (service.uptime_30d * 100).toFixed(1) + '%' : '—'}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Reliability Score</span>
+            <span class="detail-value">${service.reliability_score != null ? service.reliability_score + '/100' : '—'}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">Last Checked</span>
