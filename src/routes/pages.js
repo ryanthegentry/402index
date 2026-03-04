@@ -11,11 +11,11 @@ import { layout } from '../views/layout.js'
 const router = Router()
 
 router.get('/', (req, res) => {
-  const { protocol, category, health, source, q, featured, limit: rawLimit, offset: rawOffset } = req.query
-  const filters = { protocol, category, health, source, q, featured: featured === 'true' }
+  const { protocol, category, health, source, q, featured, sort, limit: rawLimit, offset: rawOffset } = req.query
+  const filters = { protocol, category, health, source, q, featured: featured === 'true', sort }
 
   const { services, total, limit, offset } = queryServices(db, {
-    protocol, category, health, source, q, featured, rawLimit, rawOffset,
+    protocol, category, health, source, q, featured, sort, order: sort ? 'desc' : undefined, rawLimit, rawOffset,
   }, PAGE_COLUMNS)
 
   const statsRows = db.prepare('SELECT health_status, COUNT(*) as c FROM services GROUP BY health_status').all()
@@ -28,7 +28,8 @@ router.get('/', (req, res) => {
   // Distinct services (by hostname) and providers (hostname-based, filtered)
   const distinctHosts = new Set()
   const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set() }
-  const allUrls = db.prepare('SELECT url, protocol, is_template, is_demo FROM services').all()
+  const chainProviders = { base: new Set(), solana: new Set() }
+  const allUrls = db.prepare('SELECT url, protocol, payment_network, is_template, is_demo FROM services').all()
   for (const svc of allUrls) {
     let host
     try { host = new URL(svc.url).hostname } catch { continue }
@@ -36,12 +37,19 @@ router.get('/', (req, res) => {
     if (!svc.is_template && !svc.is_demo) {
       filteredProviders.total.add(host)
       filteredProviders[svc.protocol]?.add(host)
+      if (svc.protocol === 'x402') {
+        const network = (svc.payment_network || '').toLowerCase()
+        if (network === 'base' || network.includes('base')) chainProviders.base.add(host)
+        else if (network === 'solana' || network.includes('solana')) chainProviders.solana.add(host)
+      }
     }
   }
   stats.distinctServices = distinctHosts.size
   stats.distinctProviders = filteredProviders.total.size
   stats.l402Providers = filteredProviders.L402.size
   stats.x402Providers = filteredProviders.x402.size
+  stats.baseProviders = chainProviders.base.size
+  stats.solanaProviders = chainProviders.solana.size
 
   // Categories for dropdown
   const categories = db.prepare(

@@ -1,56 +1,10 @@
 import { isBlockedScheme, resolveAndCheck } from '../health/checker.js'
+import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from './l402-utils.js'
+
+// Re-export for backward compatibility
+export { parseWwwAuthenticate, isValidMacaroon, isValidInvoice }
 
 const TIMEOUT_MS = 10_000
-
-/**
- * Parse the WWW-Authenticate header for L402/LSAT credentials.
- * Accepts formats like:
- *   L402 macaroon="<base64>", invoice="<bolt11>"
- *   LSAT macaroon="<base64>", invoice="<bolt11>"
- * Also handles unquoted values and various whitespace.
- *
- * @param {string|null} header - The WWW-Authenticate header value
- * @returns {{ scheme: string|null, macaroon: string|null, invoice: string|null }}
- */
-export function parseWwwAuthenticate(header) {
-  if (!header) return { scheme: null, macaroon: null, invoice: null }
-
-  // Check for L402 or LSAT scheme (case-insensitive)
-  const schemeMatch = header.match(/^(L402|LSAT)\b/i)
-  if (!schemeMatch) return { scheme: null, macaroon: null, invoice: null }
-
-  const scheme = schemeMatch[1].toUpperCase()
-
-  // Extract macaroon — quoted or unquoted
-  const macMatch = header.match(/macaroon="?([^",\s]+)"?/i)
-  const macaroon = macMatch ? macMatch[1] : null
-
-  // Extract invoice — quoted or unquoted
-  const invMatch = header.match(/invoice="?([^",\s]+)"?/i)
-  const invoice = invMatch ? invMatch[1] : null
-
-  return { scheme, macaroon, invoice }
-}
-
-/**
- * Validate that a string looks like a base64-encoded macaroon.
- * @param {string|null} macaroon
- * @returns {boolean}
- */
-export function isValidMacaroon(macaroon) {
-  if (!macaroon || macaroon.length < 10) return false
-  return /^[A-Za-z0-9+/=_-]+$/.test(macaroon)
-}
-
-/**
- * Validate that a string looks like a BOLT11 invoice.
- * @param {string|null} invoice
- * @returns {boolean}
- */
-export function isValidInvoice(invoice) {
-  if (!invoice) return false
-  return /^ln(bc|tb|bcrt)/i.test(invoice)
-}
 
 /**
  * Probe a URL to verify it's L402-compliant.
@@ -68,7 +22,7 @@ export function isValidInvoice(invoice) {
  */
 const MAX_REDIRECTS = 3
 
-export async function verifyL402(url) {
+export async function verifyL402(url, httpMethod = 'GET') {
   const fail = (error, overrides = {}) => ({
     valid: false,
     httpStatus: null,
@@ -94,11 +48,16 @@ export async function verifyL402(url) {
 
     let res
     try {
-      res = await fetch(currentUrl, {
-        method: 'GET',
+      const fetchOptions = {
+        method: httpMethod,
         signal: AbortSignal.timeout(TIMEOUT_MS),
         redirect: 'manual',
-      })
+      }
+      if (httpMethod === 'POST') {
+        fetchOptions.headers = { 'Content-Type': 'application/json' }
+        fetchOptions.body = '{}'
+      }
+      res = await fetch(currentUrl, fetchOptions)
     } catch (err) {
       const msg = (err.name === 'TimeoutError' || err.code === 'ABORT_ERR')
         ? 'Connection timed out after 10 seconds'
@@ -151,7 +110,9 @@ export async function verifyL402(url) {
     }
 
     const hasMacaroon = isValidMacaroon(macaroon)
-    const hasInvoice = isValidInvoice(invoice)
+    const hasInvoice = !!invoice && /^ln(bc|tb|bcrt)/i.test(invoice)
+    const invoiceValid = isValidInvoice(invoice)
+    const invoiceLengthOk = !!invoice && invoice.length >= 100
 
     return {
       valid: true,
@@ -160,6 +121,8 @@ export async function verifyL402(url) {
       scheme,
       hasMacaroon,
       hasInvoice,
+      invoiceValid,
+      invoiceLengthOk,
     }
   }
 

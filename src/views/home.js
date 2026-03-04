@@ -24,23 +24,38 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
     `<option value="${escapeHtml(c.category)}"${filters.category === c.category ? ' selected' : ''}>${escapeHtml(c.category)} (${c.count})</option>`
   ).join('')
 
-  const hasFilters = filters.protocol || filters.category || filters.health || filters.source || filters.q || filters.featured
+  const hasFilters = filters.protocol || filters.category || filters.health || filters.source || filters.q || filters.featured || filters.sort
 
   const prevOffset = Math.max(0, offset - limit)
   const nextOffset = offset + limit
 
   const l402 = stats.l402Providers || 0
   const x402 = stats.x402Providers || 0
-  const l402Pct = (l402 + x402) > 0 ? Math.round((l402 / (l402 + x402)) * 100) : 0
+  const baseProv = stats.baseProviders || 0
+  const solanaProv = stats.solanaProviders || 0
+  const protocolTotal = l402 + x402
+  const l402Pct = protocolTotal > 0 ? Math.round((l402 / protocolTotal) * 100) : 0
+
+  // Build x402 chain labels
+  let x402Label = ''
+  if (baseProv > 0 && solanaProv > 0) {
+    x402Label = `x402 <strong>${x402}</strong> <span style="font-size:0.85em;opacity:0.8">(Base ${baseProv} · Solana ${solanaProv})</span>`
+  } else if (baseProv > 0) {
+    x402Label = `x402 (Base) <strong>${x402}</strong>`
+  } else if (solanaProv > 0) {
+    x402Label = `x402 (Solana) <strong>${x402}</strong>`
+  } else if (x402 > 0) {
+    x402Label = `x402 <strong>${x402}</strong>`
+  }
 
   const protocolBar = (l402 > 0 && x402 > 0) ? `
     <div class="protocol-bar">
       <div class="container">
-        <span class="protocol-l402">L402 <strong>${l402}</strong></span>
+        <span class="protocol-l402">L402 (Bitcoin) <strong>${l402}</strong></span>
         <div class="protocol-track">
           <div class="protocol-fill-l402" style="width: ${l402Pct}%"></div>
         </div>
-        <span class="protocol-x402">x402 <strong>${x402}</strong></span>
+        <span class="protocol-x402">${x402Label}</span>
       </div>
     </div>` : ''
 
@@ -81,6 +96,14 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
             <option value="satring"${filters.source === 'satring' ? ' selected' : ''}>Satring</option>
             <option value="bazaar"${filters.source === 'bazaar' ? ' selected' : ''}>Bazaar</option>
             <option value="l402apps"${filters.source === 'l402apps' ? ' selected' : ''}>L402 Apps</option>
+          </select>
+          <select name="sort" onchange="this.form.submit()">
+            <option value="">Default sort</option>
+            <option value="reliability"${filters.sort === 'reliability' ? ' selected' : ''}>Reliability</option>
+            <option value="uptime"${filters.sort === 'uptime' ? ' selected' : ''}>Uptime</option>
+            <option value="latency"${filters.sort === 'latency' ? ' selected' : ''}>Latency</option>
+            <option value="price"${filters.sort === 'price' ? ' selected' : ''}>Price</option>
+            <option value="name"${filters.sort === 'name' ? ' selected' : ''}>Name</option>
           </select>
           <input type="text" name="q" placeholder="Search name or description..." value="${escapeHtml(filters.q || '')}">
           <button type="button" class="filter-toggle" onclick="this.form.classList.toggle('filters-open')">Filters ▾</button>
@@ -127,6 +150,7 @@ function buildQuery(filters, pagination) {
   if (filters.source) params.set('source', filters.source)
   if (filters.q) params.set('q', filters.q)
   if (filters.featured) params.set('featured', 'true')
+  if (filters.sort) params.set('sort', filters.sort)
   params.set('offset', pagination.offset)
   params.set('limit', pagination.limit)
   return params.toString()

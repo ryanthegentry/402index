@@ -12,11 +12,11 @@ describe('parseWwwAuthenticate', () => {
   })
 
   it('parses LSAT header (legacy scheme)', () => {
-    const header = 'LSAT macaroon="dGVzdA==", invoice="lnbc500n1plegacy"'
+    const header = 'LSAT macaroon="dGVzdA==", invoice="lnbc500n1plegacyaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'
     const result = parseWwwAuthenticate(header)
     assert.equal(result.scheme, 'LSAT')
     assert.equal(result.macaroon, 'dGVzdA==')
-    assert.equal(result.invoice, 'lnbc500n1plegacy')
+    assert.equal(result.invoice, 'lnbc500n1plegacyaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
   })
 
   it('parses header with unquoted values', () => {
@@ -94,21 +94,24 @@ describe('isValidMacaroon', () => {
   })
 })
 
+// Generate a realistic-length invoice for testing (100+ chars, alphanumeric)
+const longInvoice = (prefix) => prefix + 'a'.repeat(200)
+
 describe('isValidInvoice', () => {
-  it('accepts mainnet invoice (lnbc)', () => {
-    assert.equal(isValidInvoice('lnbc1000n1pjtest'), true)
+  it('accepts mainnet invoice (lnbc) with sufficient length', () => {
+    assert.equal(isValidInvoice(longInvoice('lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')), true)
   })
 
-  it('accepts testnet invoice (lntb)', () => {
-    assert.equal(isValidInvoice('lntb500n1pjtest'), true)
+  it('accepts testnet invoice (lntb) with sufficient length', () => {
+    assert.equal(isValidInvoice(longInvoice('lntb500n1pjtest')), true)
   })
 
-  it('accepts regtest invoice (lnbcrt)', () => {
-    assert.equal(isValidInvoice('lnbcrt1000n1pjtest'), true)
+  it('accepts regtest invoice (lnbcrt) with sufficient length', () => {
+    assert.equal(isValidInvoice(longInvoice('lnbcrt1000n1pjtest')), true)
   })
 
-  it('accepts uppercase LNBC', () => {
-    assert.equal(isValidInvoice('LNBC1000n1pjtest'), true)
+  it('accepts uppercase LNBC with sufficient length', () => {
+    assert.equal(isValidInvoice(longInvoice('LNBC1000n1pjtest')), true)
   })
 
   it('rejects null', () => {
@@ -124,7 +127,15 @@ describe('isValidInvoice', () => {
   })
 
   it('rejects invoice with wrong prefix', () => {
-    assert.equal(isValidInvoice('ltc1000n1p'), false)
+    assert.equal(isValidInvoice('ltc1000n1p' + 'a'.repeat(200)), false)
+  })
+
+  it('rejects invoice shorter than 100 chars', () => {
+    assert.equal(isValidInvoice('lnbc1000n1pjshort'), false)
+  })
+
+  it('rejects invoice with non-alphanumeric chars', () => {
+    assert.equal(isValidInvoice('lnbc1000n1p' + '-'.repeat(100)), false)
   })
 })
 
@@ -151,7 +162,7 @@ describe('verifyL402', () => {
 
   it('returns valid for proper L402 response (402 + WWW-Authenticate)', async () => {
     global.fetch = async () => mockResponse(402, {
-      'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtest"',
+      'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
     })
     // verifyL402 calls resolveAndCheck which does DNS lookup — use a real public domain
     const result = await verifyL402('https://example.com/api')
@@ -165,7 +176,7 @@ describe('verifyL402', () => {
 
   it('returns valid for LSAT scheme', async () => {
     global.fetch = async () => mockResponse(402, {
-      'www-authenticate': 'LSAT macaroon="dGVzdA==", invoice="lntb500n1ptest"',
+      'www-authenticate': 'LSAT macaroon="dGVzdA==", invoice="lntb500n1ptestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
     })
     const result = await verifyL402('https://example.com/api')
     assert.equal(result.valid, true)
@@ -233,7 +244,7 @@ describe('verifyL402', () => {
 
   it('returns valid=true with hasMacaroon=false when macaroon is missing', async () => {
     global.fetch = async () => mockResponse(402, {
-      'www-authenticate': 'L402 invoice="lnbc1000n1pjtest"',
+      'www-authenticate': 'L402 invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
     })
     const result = await verifyL402('https://example.com/api')
     assert.equal(result.valid, true)
@@ -259,7 +270,7 @@ describe('verifyL402', () => {
         return mockResponse(307, { 'location': 'https://www.example.com/api' })
       }
       return mockResponse(402, {
-        'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtest"',
+        'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
       })
     }
     const result = await verifyL402('https://example.com/api')
@@ -276,7 +287,7 @@ describe('verifyL402', () => {
         return mockResponse(301, { 'location': 'https://example.com/redirected' })
       }
       return mockResponse(402, {
-        'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtest"',
+        'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
       })
     }
     const result = await verifyL402('https://example.com/api')

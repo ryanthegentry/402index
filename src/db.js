@@ -218,6 +218,22 @@ try {
   console.warn(`[db] Payment backfill note: ${err.message}`)
 }
 
+// Migration: add http_method for POST-gated L402 endpoints
+try {
+  db.exec("ALTER TABLE services ADD COLUMN http_method TEXT DEFAULT 'GET'")
+  console.log('[db] Added column: http_method')
+} catch {
+  // Column already exists
+}
+
+// Migration: add reliability_score (computed, 0-100)
+try {
+  db.exec('ALTER TABLE services ADD COLUMN reliability_score REAL')
+  console.log('[db] Added column: reliability_score')
+} catch {
+  // Column already exists
+}
+
 // Migration: remove l402apps homepage listings (not actual L402 endpoints)
 const homepageUrls = [
   'https://getalby.com/',

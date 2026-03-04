@@ -3,6 +3,7 @@ import { statfs } from 'fs/promises'
 import { isIPv4, isIPv6 } from 'net'
 import { dirname } from 'path'
 import db, { DB_PATH } from '../db.js'
+import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from '../services/l402-utils.js'
 
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
@@ -89,7 +90,7 @@ function stmt(key, sql) {
   return stmts[key]
 }
 
-const getServices = () => stmt('getServices', "SELECT id, url, protocol, latency_p50_ms, consecutive_failures FROM services WHERE status = 'active' OR status IS NULL")
+const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, latency_p50_ms, consecutive_failures, registered_at FROM services WHERE status = 'active' OR status IS NULL")
 
 const insertHealthCheck = () => stmt('insertHealthCheck', `
   INSERT INTO health_checks (service_id, status, response_time_ms, http_status, error_message)
@@ -104,6 +105,7 @@ const updateService = () => stmt('updateService', `
     last_seen_healthy = CASE WHEN @health_status = 'healthy' THEN datetime('now') ELSE last_seen_healthy END,
     consecutive_failures = @consecutive_failures,
     uptime_30d = @uptime_30d,
+    reliability_score = @reliability_score,
     updated_at = datetime('now')
   WHERE id = @id
 `)
@@ -132,10 +134,14 @@ function calculateP50(serviceId) {
 }
 
 /**
- * Perform the HTTP check (HEAD then GET if needed).
- * @returns {{ httpStatus: number|null, responseTimeMs: number|null, errorMessage: string|null }}
+ * Perform the HTTP check.
+ * For GET (default): HEAD → fallback GET.
+ * For POST: sends POST with empty JSON body (L402 middleware fires before body validation).
+ * @param {string} url
+ * @param {string} [httpMethod='GET']
+ * @returns {{ httpStatus: number|null, responseTimeMs: number|null, errorMessage: string|null, wwwAuthenticate: string|null }}
  */
-async function performHttpCheck(url) {
+async function performHttpCheck(url, httpMethod = 'GET') {
   // SSRF protection: block non-http(s) schemes
   if (isBlockedScheme(url)) {
     return { httpStatus: null, responseTimeMs: null, errorMessage: 'blocked: non-http(s) scheme', wwwAuthenticate: null }
@@ -148,7 +154,24 @@ async function performHttpCheck(url) {
   }
 
   try {
-    // Try HEAD first (manual redirect to prevent SSRF via redirects)
+    if (httpMethod === 'POST') {
+      const startPost = Date.now()
+      const postRes = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        redirect: 'manual',
+      })
+      return {
+        httpStatus: postRes.status,
+        responseTimeMs: Date.now() - startPost,
+        errorMessage: null,
+        wwwAuthenticate: postRes.headers.get('www-authenticate'),
+      }
+    }
+
+    // Default: HEAD → fallback GET
     const startHead = Date.now()
     const headRes = await fetch(url, {
       method: 'HEAD',
@@ -220,8 +243,49 @@ export function classifyHealthStatus(httpStatus, errorMessage, prevFailures, his
   return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0 }
 }
 
+/**
+ * Compute a 0-100 reliability score based on trailing health data.
+ * Weights: uptime 50%, latency 25%, streak 15%, age 10%.
+ */
+export function computeReliabilityScore(service) {
+  let score = 0
+
+  // Uptime (50%)
+  if (service.uptime_30d != null) {
+    score += service.uptime_30d * 100 * 0.5
+  }
+
+  // Latency (25%)
+  const p50 = service.latency_p50_ms
+  if (p50 != null) {
+    if (p50 < 200) score += 25
+    else if (p50 < 500) score += 20
+    else if (p50 < 1000) score += 15
+    else if (p50 < 2000) score += 10
+    else score += 5
+  }
+
+  // Streak (15%)
+  const failures = service.consecutive_failures || 0
+  if (failures === 0) score += 15
+  else if (failures === 1) score += 10
+  else if (failures === 2) score += 5
+
+  // Age (10%)
+  if (service.registered_at) {
+    const ageMs = Date.now() - new Date(service.registered_at + 'Z').getTime()
+    const ageDays = ageMs / (1000 * 60 * 60 * 24)
+    if (ageDays > 7) score += 10
+    else if (ageDays > 3) score += 7
+    else if (ageDays > 1) score += 5
+    else score += 2
+  }
+
+  return Math.round(score * 10) / 10
+}
+
 /** Persist health check result and update service record. */
-function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50 }) {
+function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt }) {
   insertHealthCheck().run({
     service_id: serviceId,
     status: checkStatus,
@@ -231,28 +295,41 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
   })
 
   const newP50 = errorMessage ? (historicalP50 || null) : (calculateP50(serviceId) ?? responseTimeMs)
+  const uptime = calculateUptime(serviceId)
+
+  const reliability = computeReliabilityScore({
+    uptime_30d: uptime,
+    latency_p50_ms: newP50,
+    consecutive_failures: consecutiveFailures,
+    registered_at: registeredAt,
+  })
 
   updateService().run({
     id: serviceId,
     health_status: healthStatus,
     latency_p50_ms: newP50,
     consecutive_failures: consecutiveFailures,
-    uptime_30d: calculateUptime(serviceId),
+    uptime_30d: uptime,
+    reliability_score: reliability,
   })
 }
 
 /** Check a single service: HTTP probe, classify result, persist. */
 async function checkService(service) {
-  const { id, url, protocol, latency_p50_ms: historicalP50, consecutive_failures: prevFailures } = service
+  const { id, url, protocol, http_method, latency_p50_ms: historicalP50, consecutive_failures: prevFailures } = service
 
-  const httpResult = await performHttpCheck(url)
+  const httpResult = await performHttpCheck(url, http_method || 'GET')
   const classification = classifyHealthStatus(
     httpResult.httpStatus, httpResult.errorMessage, prevFailures, historicalP50, httpResult.responseTimeMs
   )
 
-  // For L402 services: 402 without WWW-Authenticate header → degraded
+  // Enhanced L402 compliance check: validate scheme, macaroon, and invoice
   if (protocol === 'L402' && httpResult.httpStatus === 402 && classification.healthStatus === 'healthy') {
-    if (!httpResult.wwwAuthenticate || !/L402|LSAT/i.test(httpResult.wwwAuthenticate)) {
+    const parsed = parseWwwAuthenticate(httpResult.wwwAuthenticate)
+    if (!parsed.scheme || !/L402|LSAT/i.test(parsed.scheme)) {
+      classification.healthStatus = 'degraded'
+      classification.checkStatus = 'degraded'
+    } else if (!isValidMacaroon(parsed.macaroon) || !isValidInvoice(parsed.invoice)) {
       classification.healthStatus = 'degraded'
       classification.checkStatus = 'degraded'
     }
@@ -264,6 +341,7 @@ async function checkService(service) {
     responseTimeMs: httpResult.responseTimeMs,
     errorMessage: httpResult.errorMessage,
     historicalP50,
+    registeredAt: service.registered_at,
   })
 
   return { id, healthStatus: classification.healthStatus, httpStatus: httpResult.httpStatus }

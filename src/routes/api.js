@@ -148,8 +148,8 @@ function stmt(key, sql) {
 }
 
 const registerUpsert = () => stmt('registerUpsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, health_status, status)
-  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, 'healthy', 'pending')
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, http_method, health_status, status)
+  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, @http_method, 'healthy', 'pending')
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = excluded.name,
     description = COALESCE(excluded.description, services.description),
@@ -160,6 +160,7 @@ const registerUpsert = () => stmt('registerUpsert', `
     category = COALESCE(excluded.category, services.category),
     provider = COALESCE(excluded.provider, services.provider),
     contact_email = COALESCE(excluded.contact_email, services.contact_email),
+    http_method = COALESCE(excluded.http_method, services.http_method),
     health_status = 'healthy',
     status = CASE WHEN services.status = 'active' THEN 'active' ELSE services.status END,
     updated_at = datetime('now')
@@ -167,7 +168,8 @@ const registerUpsert = () => stmt('registerUpsert', `
 `)
 
 const REQUIRED_FIELDS = ['url', 'name', 'protocol']
-const MAX_LENGTHS = { name: 200, description: 2000, url: 2000, provider: 200, category: 100, payment_asset: 50, payment_network: 50, contact_email: 254 }
+const VALID_HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE'])
+const MAX_LENGTHS = { name: 200, description: 2000, url: 2000, provider: 200, category: 100, payment_asset: 50, payment_network: 50, contact_email: 254, http_method: 10 }
 
 // POST /api/v1/register
 router.post('/register', async (req, res) => {
@@ -216,11 +218,19 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Invalid contact_email format' })
     }
 
+    // Validate http_method (optional, defaults to GET)
+    const httpMethod = body.http_method ? String(body.http_method).toUpperCase() : 'GET'
+    if (!VALID_HTTP_METHODS.has(httpMethod)) {
+      return res.status(400).json({
+        error: `Invalid http_method "${body.http_method}". Must be one of: ${[...VALID_HTTP_METHODS].join(', ')}`,
+      })
+    }
+
     // Normalize URL
     const url = normalizeUrl(body.url)
 
     // Run L402 verification probe
-    const probe = await verifyL402(url)
+    const probe = await verifyL402(url, httpMethod)
     if (!probe.valid) {
       return res.status(422).json({
         error: 'L402 verification failed',
@@ -249,6 +259,7 @@ router.post('/register', async (req, res) => {
       category: body.category || 'uncategorized',
       provider: body.provider || null,
       contact_email: body.contact_email || null,
+      http_method: httpMethod,
     }
 
     const service = registerUpsert().get(params)

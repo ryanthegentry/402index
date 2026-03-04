@@ -31,8 +31,8 @@ export function apiDocsPage() {
               <tr><td>featured</td><td>boolean</td><td>Only featured services: <code>true</code></td></tr>
               <tr><td>q</td><td>string</td><td>Search by name or description</td></tr>
               <tr><td>max_price_usd</td><td>number</td><td>Maximum price in USD</td></tr>
-              <tr><td>payment_asset</td><td>string</td><td>Filter by payment asset (e.g. <code>USDC</code>, <code>BTC/Lightning</code>)</td></tr>
-              <tr><td>sort</td><td>string</td><td>Sort by: <code>name</code>, <code>price</code>, <code>latency</code>, <code>uptime</code></td></tr>
+              <tr><td>payment_asset</td><td>string</td><td>Filter by payment asset (e.g. <code>BTC</code>, <code>USDC</code>)</td></tr>
+              <tr><td>sort</td><td>string</td><td>Sort by: <code>name</code>, <code>price</code>, <code>latency</code>, <code>uptime</code>, <code>reliability</code></td></tr>
               <tr><td>order</td><td>string</td><td>Sort order: <code>asc</code> or <code>desc</code></td></tr>
               <tr><td>limit</td><td>integer</td><td>Results per page (default 50, max 200)</td></tr>
               <tr><td>offset</td><td>integer</td><td>Pagination offset</td></tr>
@@ -82,11 +82,12 @@ export function apiDocsPage() {
               <tr><td>url</td><td>string</td><td><strong>Required.</strong> The endpoint URL to register</td></tr>
               <tr><td>name</td><td>string</td><td><strong>Required.</strong> Display name for the service</td></tr>
               <tr><td>protocol</td><td>string</td><td><strong>Required.</strong> Currently only <code>L402</code> is supported</td></tr>
+              <tr><td>http_method</td><td>string</td><td>HTTP method that triggers the L402 paywall. Default: <code>GET</code>. Allowed: <code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code></td></tr>
               <tr><td>description</td><td>string</td><td>Description of what the service does</td></tr>
               <tr><td>price_sats</td><td>integer</td><td>Price per request in satoshis</td></tr>
               <tr><td>price_usd</td><td>number</td><td>Price per request in USD</td></tr>
-              <tr><td>payment_asset</td><td>string</td><td>Payment asset (e.g. <code>BTC/Lightning</code>)</td></tr>
-              <tr><td>payment_network</td><td>string</td><td>Payment network (e.g. <code>lightning</code>)</td></tr>
+              <tr><td>payment_asset</td><td>string</td><td>Payment asset (e.g. <code>BTC</code>, <code>USDC</code>)</td></tr>
+              <tr><td>payment_network</td><td>string</td><td>Payment network (e.g. <code>Lightning</code>, <code>Base</code>, <code>Solana</code>)</td></tr>
               <tr><td>category</td><td>string</td><td>Category (e.g. <code>bitcoin</code>). Defaults to <code>uncategorized</code></td></tr>
               <tr><td>provider</td><td>string</td><td>Organization or developer name</td></tr>
               <tr><td>contact_email</td><td>string</td><td>Contact email (not displayed publicly)</td></tr>
@@ -126,8 +127,8 @@ export function apiDocsPage() {
               protocol: 'L402',
               price_sats: 5,
               price_usd: 0.002,
-              payment_asset: 'BTC/Lightning',
-              payment_network: 'lightning',
+              payment_asset: 'BTC',
+              payment_network: 'Lightning',
               category: 'real-time-data/weather',
               provider: 'Example Corp',
               source: 'exclusive',
@@ -136,7 +137,9 @@ export function apiDocsPage() {
               uptime_30d: 0.997,
               latency_p50_ms: 245,
               last_checked: '2025-02-28T12:00:00Z',
-              registered_at: '2025-01-15T08:30:00Z'
+              registered_at: '2025-01-15T08:30:00Z',
+              http_method: 'GET',
+              reliability_score: 92.5
             }
           ],
           total: 7595,
