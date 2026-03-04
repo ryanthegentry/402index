@@ -91,7 +91,7 @@ function stmt(key, sql) {
   return stmts[key]
 }
 
-const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, latency_p50_ms, consecutive_failures, registered_at FROM services WHERE status = 'active' OR status IS NULL")
+const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, latency_p50_ms, consecutive_failures, registered_at, x402_payment_valid FROM services WHERE status = 'active' OR status IS NULL")
 
 const insertHealthCheck = () => stmt('insertHealthCheck', `
   INSERT INTO health_checks (service_id, status, response_time_ms, http_status, error_message)
@@ -363,7 +363,7 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
 
 /** Check a single service: HTTP probe, classify result, persist. */
 async function checkService(service) {
-  const { id, url, protocol, http_method, latency_p50_ms: historicalP50, consecutive_failures: prevFailures } = service
+  const { id, url, protocol, http_method, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, x402_payment_valid: currentPaymentValid } = service
 
   const httpResult = await performHttpCheck(url, http_method || 'GET')
   const classification = classifyHealthStatus(
@@ -388,24 +388,48 @@ async function checkService(service) {
   let x402AssetKnown = null
 
   if (protocol === 'x402' && httpResult.httpStatus === 402) {
-    const parsed = parsePaymentRequired(httpResult.paymentRequired)
-    if (parsed.valid) {
-      const validation = validatePaymentRequirements(parsed.accepts)
-      x402PaymentValid = validation.valid ? 1 : 0
-      x402AssetKnown = validation.assetKnown ? 1 : 0
-
-      // Check facilitator reachability (uses cache)
-      if (validation.facilitatorUrls.length > 0) {
-        const reachResults = await Promise.all(
-          validation.facilitatorUrls.map(u => checkFacilitatorReachable(u))
-        )
-        x402FacilitatorReachable = reachResults.some(r => r) ? 1 : 0
-      } else {
-        x402FacilitatorReachable = null // No facilitator URL found
-      }
+    // If we already determined payment validity and HEAD didn't include the header, preserve cached value
+    if (currentPaymentValid != null && !httpResult.paymentRequired) {
+      x402PaymentValid = currentPaymentValid
     } else {
-      // PAYMENT-REQUIRED header missing or unparseable
-      x402PaymentValid = 0
+      let paymentRequiredHeader = httpResult.paymentRequired
+
+      // HEAD returned 402 but no PAYMENT-REQUIRED header — retry with GET.
+      // Many x402 servers only include payment headers on content-bearing responses.
+      if (!paymentRequiredHeader && (http_method || 'GET') !== 'POST') {
+        try {
+          const getRes = await fetch(url, {
+            method: 'GET',
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+            redirect: 'manual',
+          })
+          if (getRes.status === 402) {
+            paymentRequiredHeader = getRes.headers.get('payment-required')
+          }
+        } catch {
+          // GET retry failed — leave paymentRequiredHeader as null
+        }
+      }
+
+      const parsed = parsePaymentRequired(paymentRequiredHeader)
+      if (parsed.valid) {
+        const validation = validatePaymentRequirements(parsed.accepts)
+        x402PaymentValid = validation.valid ? 1 : 0
+        x402AssetKnown = validation.assetKnown ? 1 : 0
+
+        // Check facilitator reachability (uses cache)
+        if (validation.facilitatorUrls.length > 0) {
+          const reachResults = await Promise.all(
+            validation.facilitatorUrls.map(u => checkFacilitatorReachable(u))
+          )
+          x402FacilitatorReachable = reachResults.some(r => r) ? 1 : 0
+        } else {
+          x402FacilitatorReachable = null
+        }
+      } else {
+        // PAYMENT-REQUIRED header missing or unparseable even after GET retry
+        x402PaymentValid = 0
+      }
     }
   }
 

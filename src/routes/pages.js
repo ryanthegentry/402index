@@ -18,7 +18,7 @@ router.get('/', (req, res) => {
     protocol, category, health, source, q, featured, sort, payment_valid, order: sort ? 'desc' : undefined, rawLimit, rawOffset,
   }, PAGE_COLUMNS)
 
-  const statsRows = db.prepare("SELECT health_status, COUNT(*) as c FROM services WHERE NOT (protocol = 'x402' AND x402_payment_valid = 0) GROUP BY health_status").all()
+  const statsRows = db.prepare("SELECT health_status, COUNT(*) as c FROM services WHERE (protocol != 'x402' OR x402_payment_valid IS NULL OR x402_payment_valid != 0) GROUP BY health_status").all()
   const stats = { total: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 }
   for (const row of statsRows) {
     stats[row.health_status] = row.c
