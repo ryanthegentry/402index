@@ -11,11 +11,11 @@ import { layout } from '../views/layout.js'
 const router = Router()
 
 router.get('/', (req, res) => {
-  const { protocol, category, health, source, q, featured, sort, limit: rawLimit, offset: rawOffset } = req.query
-  const filters = { protocol, category, health, source, q, featured: featured === 'true', sort }
+  const { protocol, category, health, source, q, featured, sort, payment_valid, limit: rawLimit, offset: rawOffset } = req.query
+  const filters = { protocol, category, health, source, q, featured: featured === 'true', sort, payment_valid: payment_valid === 'true' }
 
   const { services, total, limit, offset } = queryServices(db, {
-    protocol, category, health, source, q, featured, sort, order: sort ? 'desc' : undefined, rawLimit, rawOffset,
+    protocol, category, health, source, q, featured, sort, payment_valid, order: sort ? 'desc' : undefined, rawLimit, rawOffset,
   }, PAGE_COLUMNS)
 
   const statsRows = db.prepare('SELECT health_status, COUNT(*) as c FROM services GROUP BY health_status').all()

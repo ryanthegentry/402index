@@ -24,7 +24,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
     `<option value="${escapeHtml(c.category)}"${filters.category === c.category ? ' selected' : ''}>${escapeHtml(c.category)} (${c.count})</option>`
   ).join('')
 
-  const hasFilters = filters.protocol || filters.category || filters.health || filters.source || filters.q || filters.featured || filters.sort
+  const hasFilters = filters.protocol || filters.category || filters.health || filters.source || filters.q || filters.featured || filters.sort || filters.payment_valid
 
   const prevOffset = Math.max(0, offset - limit)
   const nextOffset = offset + limit
@@ -108,6 +108,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
           <input type="text" name="q" placeholder="Search name or description..." value="${escapeHtml(filters.q || '')}">
           <button type="button" class="filter-toggle" onclick="this.form.classList.toggle('filters-open')">Filters ▾</button>
           <label><input type="checkbox" name="featured" value="true"${filters.featured ? ' checked' : ''} onchange="this.form.submit()"> Featured only</label>
+          <label><input type="checkbox" name="payment_valid" value="true"${filters.payment_valid ? ' checked' : ''} onchange="this.form.submit()"> Payment verified</label>
           <button type="submit" class="filter-btn">Filter</button>
           ${hasFilters ? '<a href="/" class="filter-clear">Clear</a>' : ''}
         </form>
@@ -151,6 +152,7 @@ function buildQuery(filters, pagination) {
   if (filters.q) params.set('q', filters.q)
   if (filters.featured) params.set('featured', 'true')
   if (filters.sort) params.set('sort', filters.sort)
+  if (filters.payment_valid) params.set('payment_valid', 'true')
   params.set('offset', pagination.offset)
   params.set('limit', pagination.limit)
   return params.toString()

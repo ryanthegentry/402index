@@ -2,8 +2,8 @@ const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_m
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
 const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'self-registered'])
 
-export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score'
-export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, latency_p50_ms, reliability_score'
+export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known'
+export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, latency_p50_ms, reliability_score, x402_payment_valid'
 
 const DEFAULT_ORDER = `ORDER BY
     featured DESC,
@@ -23,6 +23,7 @@ const DEFAULT_ORDER = `ORDER BY
  * @param {string} [opts.featured] - 'true' or '1' to filter featured only
  * @param {string} [opts.max_price_usd] - Maximum price in USD (ignored if not a valid number)
  * @param {string} [opts.payment_asset]
+ * @param {string} [opts.payment_valid] - 'true' or '1' to filter x402 services with valid payment requirements
  * @param {string} [opts.sort] - Sort column: 'name', 'price', 'latency', 'uptime'
  * @param {string} [opts.order] - Sort direction: 'asc' or 'desc'
  * @param {string|number} [opts.rawLimit] - Results per page (1-200, default 50)
@@ -39,6 +40,7 @@ export function buildServiceQuery(opts = {}) {
     featured,
     max_price_usd,
     payment_asset,
+    payment_valid,
     sort,
     order,
     rawLimit,
@@ -89,6 +91,9 @@ export function buildServiceQuery(opts = {}) {
   }
   if (featured === 'true' || featured === '1') {
     conditions.push('featured = 1')
+  }
+  if (payment_valid === 'true' || payment_valid === '1') {
+    conditions.push('x402_payment_valid = 1')
   }
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''

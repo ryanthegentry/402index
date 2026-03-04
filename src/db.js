@@ -234,6 +234,16 @@ try {
   // Column already exists
 }
 
+// Migration: x402 payment validation columns
+for (const col of ['x402_payment_valid', 'x402_facilitator_reachable', 'x402_asset_known']) {
+  try {
+    db.exec(`ALTER TABLE services ADD COLUMN ${col} INTEGER`)
+    console.log(`[db] Added column: ${col}`)
+  } catch {
+    // Column already exists
+  }
+}
+
 // Migration: remove l402apps homepage listings (not actual L402 endpoints)
 const homepageUrls = [
   'https://getalby.com/',
