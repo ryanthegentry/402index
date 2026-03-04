@@ -111,35 +111,35 @@ describe('homePage', () => {
     assert.ok(html.includes('endpoints'))
   })
 
-  it('renders protocol counter when both l402Providers and x402Providers are provided', () => {
+  it('renders protocol counter when l402, base, and solana providers are provided', () => {
     const html = homePage({
       services: [],
       total: 0,
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, x402Providers: 386 },
+      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 300, solanaProviders: 86 },
       categories: [],
     })
     assert.ok(html.includes('<div class="protocol-bar">'), 'should render protocol bar')
     assert.ok(html.includes('L402'), 'should show L402 label')
-    assert.ok(html.includes('x402'), 'should show x402 label')
     assert.ok(html.includes('<strong>24</strong>'), 'should show L402 count')
-    assert.ok(html.includes('<strong>386</strong>'), 'should show x402 count')
     assert.ok(html.includes('protocol-fill-l402'), 'should have fill bar')
+    assert.ok(html.includes('protocol-fill-base'), 'should have Base fill bar')
+    assert.ok(html.includes('protocol-track-multi'), 'should have multi-track bar')
   })
 
-  it('does NOT render protocol counter when one count is zero', () => {
+  it('does NOT render protocol counter when all counts are zero', () => {
     const html = homePage({
       services: [],
       total: 0,
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 0, x402Providers: 386 },
+      stats: { total: 100, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 0, baseProviders: 0, solanaProviders: 0 },
       categories: [],
     })
-    assert.ok(!html.includes('<div class="protocol-bar">'), 'should not render protocol bar when l402 is 0')
+    assert.ok(!html.includes('<div class="protocol-bar">'), 'should not render protocol bar when all counts are 0')
   })
 
   it('escapes HTML in service names', () => {

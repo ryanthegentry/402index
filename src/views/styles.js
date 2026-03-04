@@ -95,6 +95,14 @@ export const styles = `
       color: #0052FF;
       white-space: nowrap;
     }
+    .protocol-base {
+      color: #0052FF;
+      white-space: nowrap;
+    }
+    .protocol-solana {
+      color: #9945FF;
+      white-space: nowrap;
+    }
     .protocol-track {
       flex: 1;
       height: 6px;
@@ -102,11 +110,21 @@ export const styles = `
       border-radius: 3px;
       overflow: hidden;
     }
+    .protocol-track-multi {
+      flex: 1;
+      height: 6px;
+      background: rgba(153, 69, 255, 0.25);
+      border-radius: 3px;
+      overflow: hidden;
+      display: flex;
+    }
     .protocol-fill-l402 {
       height: 100%;
       background: #F7931A;
-      border-radius: 3px;
-      transition: width 0.3s ease;
+    }
+    .protocol-fill-base {
+      height: 100%;
+      background: #0052FF;
     }
 
     /* Filters */

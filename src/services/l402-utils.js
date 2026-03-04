@@ -35,7 +35,7 @@ export function parseWwwAuthenticate(header) {
  */
 export function isValidMacaroon(macaroon) {
   if (!macaroon || macaroon.length < 10) return false
-  return /^[A-Za-z0-9+/=_-]+$/.test(macaroon)
+  return /^[A-Za-z0-9+/=_.-]+$/.test(macaroon)
 }
 
 /**
