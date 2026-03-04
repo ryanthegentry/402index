@@ -66,6 +66,14 @@ describe('parseWwwAuthenticate', () => {
     assert.equal(result.macaroon, 'AgELYmVuY2FybWFu')
     assert.equal(result.invoice, null)
   })
+
+  it('parses token= as macaroon (Ben Carman / mutinynet faucet style)', () => {
+    const header = 'L402 token="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'
+    const result = parseWwwAuthenticate(header)
+    assert.equal(result.scheme, 'L402')
+    assert.equal(result.macaroon, 'AgELYmVuY2FybWFu')
+    assert.ok(result.invoice.startsWith('lnbc'))
+  })
 })
 
 describe('isValidMacaroon', () => {

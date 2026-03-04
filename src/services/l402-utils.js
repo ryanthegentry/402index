@@ -18,7 +18,7 @@ export function parseWwwAuthenticate(header) {
   const scheme = schemeMatch[1].toUpperCase()
 
   // Extract macaroon — quoted or unquoted
-  const macMatch = header.match(/macaroon="?([^",\s]+)"?/i)
+  const macMatch = header.match(/(?:macaroon|token)="?([^",\s]+)"?/i)
   const macaroon = macMatch ? macMatch[1] : null
 
   // Extract invoice — quoted or unquoted
