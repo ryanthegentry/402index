@@ -8,13 +8,13 @@ import {
 } from '../src/aggregators/bazaar-utils.js'
 
 describe('mapNetworkToPaymentNetwork', () => {
-  it('maps known networks to EIP-155 chain IDs', () => {
-    assert.equal(mapNetworkToPaymentNetwork('base'), 'eip155:8453')
-    assert.equal(mapNetworkToPaymentNetwork('base-sepolia'), 'eip155:84532')
-    assert.equal(mapNetworkToPaymentNetwork('ethereum'), 'eip155:1')
-    assert.equal(mapNetworkToPaymentNetwork('arbitrum'), 'eip155:42161')
-    assert.equal(mapNetworkToPaymentNetwork('optimism'), 'eip155:10')
-    assert.equal(mapNetworkToPaymentNetwork('polygon'), 'eip155:137')
+  it('maps known networks to friendly names', () => {
+    assert.equal(mapNetworkToPaymentNetwork('base'), 'Base')
+    assert.equal(mapNetworkToPaymentNetwork('base-sepolia'), 'Base Sepolia')
+    assert.equal(mapNetworkToPaymentNetwork('ethereum'), 'Ethereum')
+    assert.equal(mapNetworkToPaymentNetwork('arbitrum'), 'Arbitrum')
+    assert.equal(mapNetworkToPaymentNetwork('optimism'), 'Optimism')
+    assert.equal(mapNetworkToPaymentNetwork('polygon'), 'Polygon')
   })
 
   it('passes through unknown networks unchanged', () => {
@@ -86,7 +86,7 @@ describe('normalizeItem', () => {
     assert.equal(result.url, 'https://api.example.com/weather')
     assert.equal(result.price_usd, 1.0)
     assert.equal(result.payment_asset, 'USDC')
-    assert.equal(result.payment_network, 'eip155:8453')
+    assert.equal(result.payment_network, 'Base')
     assert.equal(result.category, 'real-time-data/weather')
     assert.equal(result.provider, 'example')
   })

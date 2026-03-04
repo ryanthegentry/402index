@@ -6,4 +6,4 @@ category: "bitcoin"
 provider: "MutinyWallet"
 price_sats: 50
 payment_asset: "BTC"
-payment_network: "lightning"
+payment_network: "Lightning"

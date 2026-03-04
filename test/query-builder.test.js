@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildServiceQuery } from '../src/queries/services.js'
+import { buildServiceQuery, PAGE_COLUMNS } from '../src/queries/services.js'
 
 describe('buildServiceQuery', () => {
   it('returns defaults when called with no options', () => {
@@ -111,5 +111,15 @@ describe('buildServiceQuery', () => {
     assert.equal(result.params.protocol, 'x402')
     assert.equal(result.params.health, 'healthy')
     assert.equal(result.params.source, 'bazaar')
+  })
+
+  it('builds payment_asset filter', () => {
+    const result = buildServiceQuery({ payment_asset: 'BTC' })
+    assert.ok(result.where.includes('payment_asset = @payment_asset'))
+    assert.equal(result.params.payment_asset, 'BTC')
+  })
+
+  it('PAGE_COLUMNS includes payment_network', () => {
+    assert.ok(PAGE_COLUMNS.includes('payment_network'), 'PAGE_COLUMNS should include payment_network')
   })
 })

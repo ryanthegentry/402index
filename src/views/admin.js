@@ -169,6 +169,8 @@ export function adminPage() {
         + '<div><strong>Provider:</strong> ' + escHtml(s.provider || '—') + '</div>'
         + '<div><strong>Category:</strong> ' + escHtml(s.category || '—') + '</div>'
         + '<div><strong>Price:</strong> ' + price + '</div>'
+        + '<div><strong>Asset:</strong> ' + escHtml(s.payment_asset || '—') + '</div>'
+        + '<div><strong>Network:</strong> ' + escHtml(s.payment_network || '—') + '</div>'
         + '<div><strong>Contact:</strong> ' + escHtml(s.contact_email || '—') + '</div>'
         + '<div><strong>Registered:</strong> ' + date + '</div>'
         + '</div>'

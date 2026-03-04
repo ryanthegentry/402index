@@ -181,6 +181,43 @@ try {
   console.warn(`[db] Category migration note: ${err.message}`)
 }
 
+// Migration: backfill payment_asset and payment_network based on source/protocol
+try {
+  const backfills = [
+    // Bazaar/x402 → USDC on Base
+    ["UPDATE services SET payment_asset = 'USDC' WHERE source = 'bazaar' AND payment_asset IS NULL"],
+    ["UPDATE services SET payment_network = 'Base' WHERE source = 'bazaar' AND payment_network IS NULL"],
+    // Satring/L402 → BTC on Lightning
+    ["UPDATE services SET payment_asset = 'BTC' WHERE source = 'satring' AND payment_asset IS NULL"],
+    ["UPDATE services SET payment_network = 'Lightning' WHERE source = 'satring' AND payment_network IS NULL"],
+    // L402Apps → BTC on Lightning
+    ["UPDATE services SET payment_asset = 'BTC' WHERE source LIKE '%l402apps%' AND payment_asset IS NULL"],
+    ["UPDATE services SET payment_network = 'Lightning' WHERE source LIKE '%l402apps%' AND payment_network IS NULL"],
+    // Normalize old 'BTC/Lightning' → 'BTC' and 'lightning' → 'Lightning'
+    ["UPDATE services SET payment_asset = 'BTC' WHERE payment_asset = 'BTC/Lightning'"],
+    ["UPDATE services SET payment_network = 'Lightning' WHERE payment_network = 'lightning'"],
+    // Self-registered Qwen listing
+    ["UPDATE services SET payment_asset = 'BTC', payment_network = 'Lightning', provider = '402Index' WHERE url = 'https://atlas.internal.example/v1/chat/completions' AND source = 'self-registered'"],
+    // Bazaar → normalize CAIP-2 network IDs to friendly names for display
+    ["UPDATE services SET payment_network = 'Base' WHERE payment_network = 'eip155:8453'"],
+    ["UPDATE services SET payment_network = 'Ethereum' WHERE payment_network = 'eip155:1'"],
+    ["UPDATE services SET payment_network = 'Arbitrum' WHERE payment_network = 'eip155:42161'"],
+    ["UPDATE services SET payment_network = 'Optimism' WHERE payment_network = 'eip155:10'"],
+    ["UPDATE services SET payment_network = 'Polygon' WHERE payment_network = 'eip155:137'"],
+    ["UPDATE services SET payment_network = 'Base Sepolia' WHERE payment_network = 'eip155:84532'"],
+  ]
+  let totalChanges = 0
+  for (const [sql] of backfills) {
+    const result = db.prepare(sql).run()
+    totalChanges += result.changes
+  }
+  if (totalChanges > 0) {
+    console.log(`[db] Backfilled payment_asset/payment_network for ${totalChanges} services`)
+  }
+} catch (err) {
+  console.warn(`[db] Payment backfill note: ${err.message}`)
+}
+
 // Migration: remove l402apps homepage listings (not actual L402 endpoints)
 const homepageUrls = [
   'https://getalby.com/',

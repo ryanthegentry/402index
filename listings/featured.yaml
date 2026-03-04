@@ -3,6 +3,8 @@
 featured_urls:
   - url: "https://www.ganamos.earth/"
     comment: "Ganamos"
+  - url: "https://atlas.internal.example/v1/chat/completions"
+    comment: "Qwen 3.5 Inference (Mac Mini M4)"
   - url: "https://faucet.mutinynet.com/api/l402"
     comment: "Mutinynet Faucet (L402)"
   - url: "https://scout.hugen.tokyo/scout/github"
