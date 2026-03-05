@@ -69,7 +69,8 @@ export async function pollSponge() {
         if (errorCount <= 5) console.error(`[sponge] HTTP ${detailRes.status} fetching detail for ${svc.name}`)
         continue
       }
-      const detail = await detailRes.json()
+      const detailJson = await detailRes.json()
+      const detail = detailJson.data || detailJson
 
       const configs = svc.paymentsProtocolConfig || []
       const x402Config = configs.find(c => c.protocol === 'x402')
