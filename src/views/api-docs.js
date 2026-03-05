@@ -84,6 +84,7 @@ export function apiDocsPage() {
               <tr><td>name</td><td>string</td><td><strong>Required.</strong> Display name for the service</td></tr>
               <tr><td>protocol</td><td>string</td><td><strong>Required.</strong> Currently only <code>L402</code> is supported</td></tr>
               <tr><td>http_method</td><td>string</td><td>HTTP method that triggers the L402 paywall. Default: <code>GET</code>. Allowed: <code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code></td></tr>
+              <tr><td>probe_body</td><td>string</td><td>JSON body to send during health checks and verification probes. Required for endpoints that validate the request body before issuing the L402 challenge. Must be valid JSON.</td></tr>
               <tr><td>description</td><td>string</td><td>Description of what the service does</td></tr>
               <tr><td>price_sats</td><td>integer</td><td>Price per request in satoshis</td></tr>
               <tr><td>price_usd</td><td>number</td><td>Price per request in USD</td></tr>

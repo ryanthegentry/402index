@@ -328,4 +328,31 @@ describe('verifyL402', () => {
     assert.equal(result.valid, false)
     assert.ok(result.error.includes('Location'))
   })
+
+  it('passes probeBody to POST request instead of empty JSON', async () => {
+    let capturedBody = null
+    global.fetch = async (url, opts) => {
+      capturedBody = opts.body
+      return mockResponse(402, {
+        'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+      })
+    }
+    const probeBody = '{"model":"Standard","input":{"prompt":"test"}}'
+    const result = await verifyL402('https://example.com/api', 'POST', probeBody)
+    assert.equal(result.valid, true)
+    assert.equal(capturedBody, probeBody)
+  })
+
+  it('uses empty JSON body when no probeBody is provided for POST', async () => {
+    let capturedBody = null
+    global.fetch = async (url, opts) => {
+      capturedBody = opts.body
+      return mockResponse(402, {
+        'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+      })
+    }
+    const result = await verifyL402('https://example.com/api', 'POST')
+    assert.equal(result.valid, true)
+    assert.equal(capturedBody, '{}')
+  })
 })

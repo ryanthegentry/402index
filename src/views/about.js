@@ -32,7 +32,20 @@ export function aboutPage() {
           These are the highest-quality listings, reviewed by the 402 Index team.
         </p>
         <p>
-          Every service is health-checked every 15 minutes. For paid API services,
+          <strong>L402 Apps</strong> — A community directory of L402-enabled apps and APIs, scraped daily.
+        </p>
+        <p>
+          <strong>Sponge</strong> — x402 services cataloged by PaySponge.
+        </p>
+        <p>
+          <strong>Well-Known</strong> — Endpoints discovered via providers' <code>/.well-known/l402-services</code> JSON documents.
+        </p>
+        <p>
+          <strong>Self-registered</strong> — Endpoints registered programmatically via our <a href="/api-docs">registration API</a>,
+          verified automatically and reviewed before going live.
+        </p>
+        <p>
+          Every service is health-checked every hour. For paid API services,
           a <code>402 Payment Required</code> response means the service is healthy —
           the paywall is active and working.
         </p>
@@ -41,7 +54,7 @@ export function aboutPage() {
 
         <p>
           Every number on 402 Index is independently verified. We don't take any source's word
-          for it — we check every endpoint ourselves, every 15 minutes.
+          for it — we check every endpoint ourselves, every hour.
         </p>
 
         <p>
@@ -60,6 +73,9 @@ export function aboutPage() {
           returns <code>402 Payment Required</code> with a valid <code>WWW-Authenticate: L402</code>
           header containing a properly formatted macaroon/token and a BOLT11 Lightning invoice.
           If the paywall is active and the credentials parse correctly, the endpoint is payment-verified.
+          For POST-only endpoints, we send the configured HTTP method. Some providers validate
+          the request body before issuing the L402 challenge — for these, we send a per-endpoint
+          probe body so the health check reaches the paywall layer.
         </p>
 
         <p>
@@ -89,7 +105,7 @@ export function aboutPage() {
           <strong>Why do some sources show a large gap between "indexed" and "payment-verified"?</strong>
           Auto-registration directories may catalog endpoints when they first process a payment,
           but don't continuously verify that the payment infrastructure remains active. 402 Index
-          checks every endpoint every 15 minutes. If an endpoint no longer returns valid payment
+          checks every endpoint every hour. If an endpoint no longer returns valid payment
           headers, it stays indexed (we still track it) but loses its payment-verified status.
           This ongoing verification is what makes 402 Index useful for AI agents that need to
           make autonomous spending decisions — they can trust that a payment-verified endpoint
@@ -123,6 +139,7 @@ export function aboutPage() {
   "url": "https://api.example.com/resource",
   "name": "My L402 API",
   "protocol": "L402",
+  "http_method": "POST",
   "provider": "My Org"
 }'</pre>
         <p>

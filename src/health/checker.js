@@ -278,7 +278,12 @@ export function classifyHealthStatus(httpStatus, errorMessage, prevFailures, his
     return { healthStatus: 'degraded', checkStatus: 'method_not_allowed', consecutiveFailures: prevFailures || 0 }
   }
 
-  // Other status codes (3xx, 4xx except 402/429/405)
+  // 406 = Not Acceptable. Provider rejected the request body before reaching the paywall.
+  if (httpStatus === 406) {
+    return { healthStatus: 'degraded', checkStatus: 'not_acceptable', consecutiveFailures: prevFailures || 0 }
+  }
+
+  // Other status codes (3xx, 4xx except 402/429/405/406)
   return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0 }
 }
 

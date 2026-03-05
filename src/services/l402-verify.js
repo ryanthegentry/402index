@@ -22,7 +22,7 @@ const TIMEOUT_MS = 10_000
  */
 const MAX_REDIRECTS = 3
 
-export async function verifyL402(url, httpMethod = 'GET') {
+export async function verifyL402(url, httpMethod = 'GET', probeBody = '{}') {
   const fail = (error, overrides = {}) => ({
     valid: false,
     httpStatus: null,
@@ -55,7 +55,7 @@ export async function verifyL402(url, httpMethod = 'GET') {
       }
       if (httpMethod === 'POST') {
         fetchOptions.headers = { 'Content-Type': 'application/json' }
-        fetchOptions.body = '{}'
+        fetchOptions.body = probeBody
       }
       res = await fetch(currentUrl, fetchOptions)
     } catch (err) {

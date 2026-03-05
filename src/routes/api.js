@@ -191,8 +191,8 @@ function stmt(key, sql) {
 }
 
 const registerUpsert = () => stmt('registerUpsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, http_method, health_status, status)
-  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, @http_method, 'healthy', 'pending')
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, http_method, probe_body, health_status, status)
+  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, @http_method, @probe_body, 'healthy', 'pending')
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = excluded.name,
     description = COALESCE(excluded.description, services.description),
@@ -204,6 +204,7 @@ const registerUpsert = () => stmt('registerUpsert', `
     provider = COALESCE(excluded.provider, services.provider),
     contact_email = COALESCE(excluded.contact_email, services.contact_email),
     http_method = COALESCE(excluded.http_method, services.http_method),
+    probe_body = COALESCE(excluded.probe_body, services.probe_body),
     health_status = 'healthy',
     status = CASE WHEN services.status = 'active' THEN 'active' ELSE services.status END,
     updated_at = datetime('now')
@@ -212,7 +213,7 @@ const registerUpsert = () => stmt('registerUpsert', `
 
 const REQUIRED_FIELDS = ['url', 'name', 'protocol']
 const VALID_HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE'])
-const MAX_LENGTHS = { name: 200, description: 2000, url: 2000, provider: 200, category: 100, payment_asset: 50, payment_network: 50, contact_email: 254, http_method: 10 }
+const MAX_LENGTHS = { name: 200, description: 2000, url: 2000, provider: 200, category: 100, payment_asset: 50, payment_network: 50, contact_email: 254, http_method: 10, probe_body: 4000 }
 
 // POST /api/v1/register
 router.post('/register', async (req, res) => {
@@ -269,11 +270,22 @@ router.post('/register', async (req, res) => {
       })
     }
 
+    // Validate probe_body (optional, must be valid JSON)
+    let probeBody = '{}'
+    if (body.probe_body != null) {
+      try {
+        JSON.parse(body.probe_body)
+        probeBody = body.probe_body
+      } catch {
+        return res.status(400).json({ error: 'probe_body must be valid JSON' })
+      }
+    }
+
     // Normalize URL
     const url = normalizeUrl(body.url)
 
     // Run L402 verification probe
-    const probe = await verifyL402(url, httpMethod)
+    const probe = await verifyL402(url, httpMethod, probeBody)
     if (!probe.valid) {
       return res.status(422).json({
         error: 'L402 verification failed',
@@ -303,6 +315,7 @@ router.post('/register', async (req, res) => {
       provider: body.provider || null,
       contact_email: body.contact_email || null,
       http_method: httpMethod,
+      probe_body: probeBody !== '{}' ? probeBody : null,
     }
 
     const service = registerUpsert().get(params)
