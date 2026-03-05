@@ -64,6 +64,43 @@ export function parsePaymentRequired(headerValue) {
 }
 
 /**
+ * Parse a V1 x402 response body containing payment requirements.
+ * V1 endpoints put payment data in the response body (not headers).
+ * Body format: {x402Version: 1, accepts: [{scheme, network, maxAmountRequired, ...}]}
+ *
+ * @param {string} bodyText - Raw response body text (should be JSON)
+ * @returns {{ valid: boolean, accepts: Array|null, error: string|null, raw: object|null }}
+ */
+export function parsePaymentRequiredBody(bodyText) {
+  if (!bodyText || typeof bodyText !== 'string') {
+    return { valid: false, accepts: null, error: 'empty or non-string body', raw: null }
+  }
+
+  // Limit to 64KB to prevent memory issues
+  if (bodyText.length > 65536) {
+    return { valid: false, accepts: null, error: 'body exceeds 64KB limit', raw: null }
+  }
+
+  let parsed
+  try {
+    parsed = JSON.parse(bodyText)
+  } catch {
+    return { valid: false, accepts: null, error: 'body is not valid JSON', raw: null }
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return { valid: false, accepts: null, error: 'body is not a JSON object', raw: parsed }
+  }
+
+  const accepts = parsed.accepts
+  if (!Array.isArray(accepts) || accepts.length === 0) {
+    return { valid: false, accepts: null, error: 'missing or empty accepts array in body', raw: parsed }
+  }
+
+  return { valid: true, accepts, error: null, raw: parsed }
+}
+
+/**
  * Check if an EVM address (0x-prefixed, 40 hex chars) is valid format.
  * @param {string} address
  * @returns {boolean}

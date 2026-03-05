@@ -2,6 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   parsePaymentRequired,
+  parsePaymentRequiredBody,
   validatePaymentRequirements,
   isValidAssetAddress,
   isValidEvmAddress,
@@ -73,6 +74,98 @@ describe('parsePaymentRequired', () => {
     const payload = { accepts: [{ payTo: '0x' + 'a'.repeat(40) }], version: '1.0' }
     const result = parsePaymentRequired(encode(payload))
     assert.equal(result.raw.version, '1.0')
+  })
+})
+
+// ─── parsePaymentRequiredBody (V1 body parsing) ─────────────────────────────
+
+describe('parsePaymentRequiredBody', () => {
+  const v1Body = {
+    x402Version: 1,
+    error: 'X-PAYMENT header is required',
+    accepts: [{
+      scheme: 'exact',
+      network: 'base-sepolia',
+      maxAmountRequired: '10000',
+      asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+      payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+      resource: 'https://api.example.com/premium-data',
+      description: 'Access to premium market data',
+      mimeType: 'application/json',
+      maxTimeoutSeconds: 60,
+    }],
+  }
+
+  it('parses valid V1 body with accepts array', () => {
+    const result = parsePaymentRequiredBody(JSON.stringify(v1Body))
+    assert.equal(result.valid, true)
+    assert.equal(result.accepts.length, 1)
+    assert.equal(result.accepts[0].maxAmountRequired, '10000')
+    assert.equal(result.error, null)
+  })
+
+  it('returns error for null input', () => {
+    const result = parsePaymentRequiredBody(null)
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('empty'))
+  })
+
+  it('returns error for empty string', () => {
+    const result = parsePaymentRequiredBody('')
+    assert.equal(result.valid, false)
+  })
+
+  it('returns error for non-JSON string', () => {
+    const result = parsePaymentRequiredBody('<html>Not Found</html>')
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('not valid JSON'))
+  })
+
+  it('returns error for JSON without accepts array', () => {
+    const result = parsePaymentRequiredBody(JSON.stringify({ error: 'payment required' }))
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('accepts'))
+  })
+
+  it('returns error for empty accepts array', () => {
+    const result = parsePaymentRequiredBody(JSON.stringify({ accepts: [] }))
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('empty'))
+  })
+
+  it('returns error for body exceeding 64KB', () => {
+    const result = parsePaymentRequiredBody('x'.repeat(65537))
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('64KB'))
+  })
+
+  it('preserves raw parsed object', () => {
+    const result = parsePaymentRequiredBody(JSON.stringify(v1Body))
+    assert.equal(result.raw.x402Version, 1)
+    assert.equal(result.raw.error, 'X-PAYMENT header is required')
+  })
+
+  it('handles V1 body with multiple accepts entries', () => {
+    const multiBody = {
+      ...v1Body,
+      accepts: [
+        v1Body.accepts[0],
+        { ...v1Body.accepts[0], payTo: '0x' + 'a'.repeat(40), maxAmountRequired: '5000' },
+      ],
+    }
+    const result = parsePaymentRequiredBody(JSON.stringify(multiBody))
+    assert.equal(result.valid, true)
+    assert.equal(result.accepts.length, 2)
+  })
+
+  it('works with validatePaymentRequirements for V1 fields', () => {
+    const result = parsePaymentRequiredBody(JSON.stringify(v1Body))
+    assert.equal(result.valid, true)
+    const validation = validatePaymentRequirements(result.accepts)
+    assert.equal(validation.valid, true)
+    assert.equal(validation.entries[0].hasAmount, true)
+    assert.equal(validation.entries[0].payToValid, true)
+    assert.equal(validation.assetKnown, true) // Base Sepolia USDC
   })
 })
 
