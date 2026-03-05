@@ -137,6 +137,6 @@ describe('about page methodology', () => {
     assert.ok(html.includes('WWW-Authenticate'), 'should mention L402 header')
     assert.ok(html.includes('PAYMENT-REQUIRED'), 'should mention x402 header')
     assert.ok(html.includes('Health status'), 'should explain health status')
-    assert.ok(html.includes('every 15 minutes'), 'should mention check frequency')
+    assert.ok(html.includes('every hour'), 'should mention check frequency')
   })
 })

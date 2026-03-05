@@ -109,6 +109,19 @@ describe('classifyHealthStatus', () => {
     })
   })
 
+  describe('406 not acceptable', () => {
+    it('returns degraded with not_acceptable check status', () => {
+      const result = classifyHealthStatus(406, null, 0, null, 100)
+      assert.equal(result.healthStatus, 'degraded')
+      assert.equal(result.checkStatus, 'not_acceptable')
+    })
+
+    it('preserves previous failure count on 406', () => {
+      const result = classifyHealthStatus(406, null, 2, null, 100)
+      assert.equal(result.consecutiveFailures, 2)
+    })
+  })
+
   describe('other status codes', () => {
     it('returns degraded for 3xx responses', () => {
       const result = classifyHealthStatus(301, null, 0, null, 100)
