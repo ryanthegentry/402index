@@ -82,7 +82,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     service_id TEXT NOT NULL REFERENCES services(id),
     checked_at TEXT NOT NULL DEFAULT (datetime('now')),
-    status TEXT NOT NULL CHECK(status IN ('healthy', 'degraded', 'down', 'timeout', 'error')),
+    status TEXT NOT NULL CHECK(status IN ('healthy', 'degraded', 'down', 'timeout', 'error', 'rate_limited', 'method_not_allowed')),
     response_time_ms INTEGER,
     http_status INTEGER,
     error_message TEXT
@@ -271,6 +271,44 @@ try {
   }
 } catch (err) {
   console.warn(`[db] Homepage cleanup note: ${err.message}`)
+}
+
+// Migration: expand health_checks status CHECK constraint to include rate_limited, method_not_allowed
+try {
+  const cols = db.pragma("table_info('health_checks')")
+  const statusCol = cols.find(c => c.name === 'status')
+  // Check if constraint needs updating by trying an insert with new value
+  const needsMigration = (() => {
+    try {
+      db.exec("INSERT INTO health_checks (service_id, status) VALUES ('__test__', 'rate_limited')")
+      db.exec("DELETE FROM health_checks WHERE service_id = '__test__'")
+      return false // constraint already allows it
+    } catch {
+      return true
+    }
+  })()
+
+  if (needsMigration) {
+    console.log('[db] Migrating health_checks table to expand status CHECK constraint...')
+    db.exec(`
+      CREATE TABLE health_checks_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service_id TEXT NOT NULL REFERENCES services(id),
+        checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+        status TEXT NOT NULL CHECK(status IN ('healthy', 'degraded', 'down', 'timeout', 'error', 'rate_limited', 'method_not_allowed')),
+        response_time_ms INTEGER,
+        http_status INTEGER,
+        error_message TEXT
+      );
+      INSERT INTO health_checks_new SELECT * FROM health_checks;
+      DROP TABLE health_checks;
+      ALTER TABLE health_checks_new RENAME TO health_checks;
+      CREATE INDEX idx_health_checks_service ON health_checks(service_id, checked_at);
+    `)
+    console.log('[db] health_checks CHECK constraint updated')
+  }
+} catch (err) {
+  console.warn(`[db] health_checks migration note: ${err.message}`)
 }
 
 // Reclaim space after bulk deletions
