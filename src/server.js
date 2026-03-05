@@ -33,9 +33,10 @@ const registerLimiter = rateLimit({
 })
 app.use('/api/v1/register', express.json({ limit: '10kb' }), registerLimiter)
 
-// Rate-limited API routes: services, services/:id, categories
+// Rate-limited API routes: services, services/:id, categories, export
 app.use('/api/v1/services', verifyL402, freeLimiter, l402Limiter)
 app.use('/api/v1/categories', verifyL402, freeLimiter, l402Limiter)
+app.use('/api/v1/export.csv', verifyL402, freeLimiter, l402Limiter)
 // /api/v1/health is exempt from rate limiting (uptime monitors)
 
 // Admin routes: JSON body parsing + auth

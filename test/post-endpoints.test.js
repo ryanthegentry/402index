@@ -265,12 +265,12 @@ describe('homePage protocol bar — chain breakdown', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 350, solanaProviders: 20, allL402Providers: 24, allBaseProviders: 350, allSolanaProviders: 20 },
+      stats: { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 350, solanaProviders: 20, allL402Providers: 24, allBaseProviders: 350, allSolanaProviders: 20 },
       categories: [],
     })
     assert.ok(html.includes('L402'), 'should show L402 label')
-    assert.ok(html.includes('<span class="protocol-base">'), 'should show Base label')
-    assert.ok(html.includes('<span class="protocol-solana">'), 'should show Solana label')
+    assert.ok(html.includes('class="protocol-base"'), 'should show Base label')
+    assert.ok(html.includes('class="protocol-solana"'), 'should show Solana label')
     assert.ok(html.includes('protocol-track-multi'), 'should use multi-track bar')
   })
 
@@ -282,13 +282,13 @@ describe('homePage protocol bar — chain breakdown', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 0, solanaProviders: 0, allL402Providers: 24, allBaseProviders: 0, allSolanaProviders: 0 },
+      stats: { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 0, solanaProviders: 0, allL402Providers: 24, allBaseProviders: 0, allSolanaProviders: 0 },
       categories: [],
     })
     assert.ok(html.includes('L402'), 'should show L402')
     assert.ok(html.includes('<strong>24</strong>'), 'should show L402 count')
-    assert.ok(!html.includes('<span class="protocol-base">'), 'should not show Base label')
-    assert.ok(!html.includes('<span class="protocol-solana">'), 'should not show Solana label')
+    assert.ok(!html.includes('class="protocol-base"'), 'should not show Base label')
+    assert.ok(!html.includes('class="protocol-solana"'), 'should not show Solana label')
   })
 
   it('includes sort dropdown', async () => {
@@ -299,7 +299,7 @@ describe('homePage protocol bar — chain breakdown', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 0, totalIndexed: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
+      stats: { verified: 0, totalIndexed: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
       categories: [],
     })
     assert.ok(html.includes('name="sort"'), 'should have sort dropdown')

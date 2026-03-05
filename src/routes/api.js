@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { randomUUID } from 'crypto'
 import db from '../db.js'
-import { queryServices, API_COLUMNS } from '../queries/services.js'
+import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/services.js'
+import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeUrl } from '../services/url-normalize.js'
 import { verifyL402 } from '../services/l402-verify.js'
 import { sendRegistrationNotification } from '../services/notify.js'
@@ -25,6 +26,48 @@ router.get('/services/:id', (req, res) => {
   ).all(req.params.id)
 
   res.json({ ...service, health_checks })
+})
+
+// CSV export (L402-gated)
+const CSV_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, health_status, uptime_30d, latency_p50_ms, last_checked, http_method, reliability_score'
+
+function escapeCsvField(value) {
+  if (value == null) return ''
+  const str = String(value)
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return '"' + str.replace(/"/g, '""') + '"'
+  }
+  return str
+}
+
+router.get('/export.csv', (req, res) => {
+  if (!req.l402Verified) {
+    return res.status(402).json({
+      error: 'L402 payment required',
+      detail: 'Add ?l402=require to get a payment challenge, then include the L402 token in the Authorization header.',
+    })
+  }
+
+  const { limit: _limit, offset: _offset, ...filters } = req.query
+  const { where, params, orderBy } = buildServiceQuery({ ...filters, rawLimit: 10000, rawOffset: 0 })
+  const services = db.prepare(`SELECT ${CSV_COLUMNS} FROM services ${where} ${orderBy}`).all(params)
+
+  const btcUsdRate = getCachedBtcUsdRate()
+  const headers = CSV_COLUMNS.split(', ')
+  const csvRows = [headers.join(',')]
+
+  for (const svc of services) {
+    // Convert sats-only to USD
+    if (svc.price_usd == null && svc.price_sats != null && btcUsdRate) {
+      svc.price_usd = (svc.price_sats / 100_000_000) * btcUsdRate
+    }
+    csvRows.push(headers.map(h => escapeCsvField(svc[h])).join(','))
+  }
+
+  const date = new Date().toISOString().slice(0, 10)
+  res.setHeader('Content-Type', 'text/csv')
+  res.setHeader('Content-Disposition', `attachment; filename="402index-export-${date}.csv"`)
+  res.send(csvRows.join('\n'))
 })
 
 // Extract hostname from a URL (strips scheme and path)
