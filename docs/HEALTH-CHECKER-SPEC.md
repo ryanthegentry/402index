@@ -163,20 +163,41 @@ Redirect: manual
 | 402 | Present | Valid JSON, has accepts[] | Yes | No (facilitator down) | **degraded**, payment_valid=0, facilitator_reachable=0 |
 | 402 | Present | Valid JSON, has accepts[] | No (unknown asset) | — | **degraded**, payment_valid=0, asset_known=0 |
 | 402 | Present | Invalid JSON / no accepts | — | — | **degraded**, payment_valid=0 |
-| 402 | Missing | — | — | — | Retry with GET. If still missing: **degraded**, payment_valid=0 |
+| 402 | Missing | — | — | — | Retry with GET. If still missing header: try V1 body parsing. If body invalid: **degraded**, payment_valid=0 |
+| 402 | Missing | V1 body valid (has accepts[]) | Yes (known USDC) | Yes | **healthy**, payment_valid=1 (V1 body path) |
+| 402 | Missing | V1 body valid (has accepts[]) | No (unknown asset) | — | **degraded**, payment_valid=0, asset_known=0 |
+| 402 | Missing | V1 body invalid or missing | — | — | **degraded**, payment_valid=0 |
 | 200 | — | — | — | — | **degraded**, payment_valid=0 — paywall not enforced |
 | 404 | — | — | — | — | **down**, payment_valid=0 |
 | 5xx | — | — | — | — | **down**, payment_valid=0 |
 | Timeout/Network error | — | — | — | — | **down**, payment_valid=0 |
 
-### HEAD → GET Fallback
+### HEAD → GET Fallback + V1 Body Parsing
 
-Many x402 servers (especially Bazaar-sourced) only include the `PAYMENT-REQUIRED` header on GET requests, not HEAD. The probe should:
+Many x402 servers (especially Bazaar-sourced) only include the `PAYMENT-REQUIRED` header on GET requests, not HEAD. Additionally, V1 endpoints put payment requirements in the **response body** (not headers at all). The probe should:
 
 1. Send HEAD first (fast, low overhead)
 2. If HEAD returns 402 but NO `PAYMENT-REQUIRED` header → retry with GET
-3. Cache the HEAD-vs-GET preference per endpoint to avoid redundant retries on subsequent checks
-4. The `x402_head_no_payment` column tracks this: if set, skip straight to GET on next check
+3. Check GET response for `PAYMENT-REQUIRED` header (V2 path)
+4. If GET also lacks `PAYMENT-REQUIRED` header → parse GET **response body** as V1 JSON:
+   - Read body (limit to 64KB to avoid memory issues)
+   - Try JSON.parse — must be `application/json`
+   - Check for `accepts` array (V1 format: `{x402Version: 1, accepts: [...]}`)
+   - If valid, extract accepts[] and run through `validatePaymentRequirements()`
+   - V1 uses `maxAmountRequired` (already handled by validatePaymentRequirements)
+5. Cache the HEAD-vs-GET preference per endpoint to avoid redundant retries on subsequent checks
+6. The `x402_head_no_payment` column tracks this: if set, skip straight to GET on next check
+
+### V1 vs V2 Protocol Detection (Research Findings)
+
+From the official x402 SDK (`coinbase/x402`), the client detection logic is:
+1. Check for `PAYMENT-REQUIRED` header → if present, decode as V2
+2. If no header, check response body for `x402Version === 1` → parse as V1
+3. V1 body is always `application/json` with structure: `{x402Version: 1, accepts: [...]}`
+4. V1 uses `maxAmountRequired`; V2 uses `amount` (both handled by our validator)
+5. V1 uses friendly network names (`base-sepolia`); V2 uses CAIP-2 (`eip155:84532`)
+6. An endpoint NEVER returns both V2 header and V1 body — they are mutually exclusive
+7. Bazaar discovery API normalizes everything to V1-style `maxAmountRequired` regardless of version
 
 ### Data Columns Updated
 
@@ -254,14 +275,36 @@ In `checker.js` `performHttpCheck()`:
 - If `http_method === 'POST'`: sends POST with `Content-Type: application/json` and body `{}`
 - Otherwise: sends HEAD (with GET fallback)
 
-### Gap
+### Auto-Detection Algorithm (Implemented)
+
+Research confirms: Aperture (reference L402 proxy) gates ALL methods except OPTIONS. Inference APIs (Sats4AI, etc.) are POST-only. No L402 client implements method negotiation — 402index is first.
+
+**Detection triggers** (L402 endpoints only, after HEAD → GET probe):
+1. **405 Method Not Allowed**: Strong signal — endpoint explicitly rejects GET. Retry with POST.
+2. **400 Bad Request**: Moderate signal — often means wrong method or missing body. Retry with POST.
+3. **200 OK**: Weak signal — paywall may only gate POST (free preview on GET). Retry with POST.
+
+**POST retry flow**:
+1. Send POST with `Content-Type: application/json` and body `{}`
+2. L402 middleware fires before body validation — empty body is sufficient to trigger 402
+3. If POST returns 402 + valid WWW-Authenticate (L402/LSAT scheme + valid macaroon + invoice):
+   - Classify as **healthy**
+   - Persist `http_method = 'POST'` on the services table
+4. If POST returns anything else: keep original classification from HEAD/GET probe
+
+**Persistence rules**:
+- Only auto-set `http_method` if current value is NULL or 'GET' (default)
+- Never override `http_method` set by self-registration (`POST /api/v1/register`) or YAML listings
+- Use UPDATE statement: `UPDATE services SET http_method = 'POST' WHERE id = ? AND (http_method IS NULL OR http_method = 'GET')`
+
+### Gap (Resolved)
 
 Most aggregators don't provide http_method data. Many L402 endpoints are POST-only (e.g., inference APIs, payment processors). These get HEAD/GET probes → 405 Method Not Allowed (6% of L402 checks in production) → classified as `degraded`.
 
-The health checker should:
-1. Recognize 405 as a signal to retry with POST
-2. Auto-detect and persist http_method when 405 → POST succeeds with 402
-3. Never override a manually-set http_method
+The health checker now:
+1. Recognizes 405/400/200 as signals to retry with POST
+2. Auto-detects and persists http_method when POST succeeds with 402
+3. Never overrides a manually-set http_method
 
 ## Section 6: Interval and Volume Management
 
