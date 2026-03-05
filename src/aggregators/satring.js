@@ -71,6 +71,12 @@ export async function pollSatring() {
     for (const svc of services) {
       try {
         const normalized = normalizeRawService(svc, getCachedBtcUsdRate())
+
+        // Skip .well-known discovery URLs — these are metadata documents, not L402 endpoints
+        if (normalized.url.includes('/.well-known/')) {
+          continue
+        }
+
         const existing = findExisting().get(normalized.url)
 
         upsert().run(normalized)
