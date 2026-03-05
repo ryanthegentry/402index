@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import db from '../db.js'
 import { queryServices, PAGE_COLUMNS } from '../queries/services.js'
+import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { homePage } from '../views/home.js'
 import { detailPage } from '../views/detail.js'
 import { aboutPage } from '../views/about.js'
@@ -18,16 +19,20 @@ router.get('/', (req, res) => {
     protocol, category, health, source, q, featured, sort, payment_valid, order: sort ? 'desc' : undefined, rawLimit, rawOffset,
   }, PAGE_COLUMNS)
 
-  const statsRows = db.prepare("SELECT health_status, COUNT(*) as c FROM services WHERE (protocol != 'x402' OR x402_payment_valid IS NULL OR x402_payment_valid != 0) GROUP BY health_status").all()
-  const stats = { total: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 }
-  for (const row of statsRows) {
+  // Verified count: matches the payment_valid checkbox filter exactly
+  const verifiedCount = db.prepare(
+    "SELECT COUNT(*) as c FROM services WHERE (status = 'active' OR status IS NULL) AND ((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy'))"
+  ).get().c
+
+  // Health breakdown: ALL endpoints (unfiltered)
+  const healthRows = db.prepare("SELECT health_status, COUNT(*) as c FROM services WHERE (status = 'active' OR status IS NULL) GROUP BY health_status").all()
+  const stats = { verified: verifiedCount, healthy: 0, degraded: 0, down: 0, unknown: 0 }
+  for (const row of healthRows) {
     stats[row.health_status] = row.c
-    stats.total += row.c
   }
 
   // Total indexed (unfiltered) counts
-  stats.totalIndexed = db.prepare('SELECT COUNT(*) as c FROM services').get().c
-  stats.totalHealthy = db.prepare("SELECT COUNT(*) as c FROM services WHERE health_status = 'healthy'").get().c
+  stats.totalIndexed = db.prepare("SELECT COUNT(*) as c FROM services WHERE (status = 'active' OR status IS NULL)").get().c
 
   // Distinct services (by hostname) and providers (hostname-based, filtered + unfiltered)
   const distinctHosts = new Set()
@@ -76,7 +81,8 @@ router.get('/', (req, res) => {
     'SELECT category, COUNT(*) as count FROM services WHERE category IS NOT NULL GROUP BY category ORDER BY count DESC'
   ).all()
 
-  res.send(homePage({ services, total, limit, offset, filters, stats, categories }))
+  const btcUsdRate = getCachedBtcUsdRate()
+  res.send(homePage({ services, total, limit, offset, filters, stats, categories, btcUsdRate }))
 })
 
 // Service detail

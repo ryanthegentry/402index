@@ -12,7 +12,7 @@ describe('two-tier stats bar', () => {
       offset: 0,
       filters: {},
       stats: {
-        total: 1437,
+        verified: 1437,
         totalIndexed: 13690,
         healthy: 99,
         degraded: 1029,
@@ -46,7 +46,7 @@ describe('two-tier stats bar', () => {
       offset: 0,
       filters: {},
       stats: {
-        total: 100,
+        verified: 100,
         totalIndexed: 500,
         healthy: 80,
         degraded: 15,
@@ -75,7 +75,7 @@ describe('protocol bar verification fractions', () => {
       offset: 0,
       filters: {},
       stats: {
-        total: 100,
+        verified: 100,
         totalIndexed: 500,
         healthy: 80,
         degraded: 10,
@@ -108,7 +108,7 @@ describe('protocol bar verification fractions', () => {
       offset: 0,
       filters: {},
       stats: {
-        total: 100,
+        verified: 100,
         totalIndexed: 100,
         healthy: 80,
         degraded: 10,

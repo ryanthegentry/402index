@@ -1,7 +1,7 @@
 import { layout } from './layout.js'
 import { escapeHtml, healthDot, protocolBadge, formatPrice } from './helpers.js'
 
-export function homePage({ services, total, limit, offset, filters, stats, categories }) {
+export function homePage({ services, total, limit, offset, filters, stats, categories, btcUsdRate }) {
   const currentPage = Math.floor(offset / limit) + 1
   const totalPages = Math.ceil(total / limit)
 
@@ -12,7 +12,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
         <span class="svc-url">${escapeHtml(s.url)}</span>
       </td>
       <td>${protocolBadge(s.protocol)}</td>
-      <td class="price">${formatPrice(s)}</td>
+      <td class="price">${formatPrice(s, btcUsdRate)}</td>
       <td>${s.category ? `<span class="category-tag">${escapeHtml(s.category)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
       <td>${healthDot(s.health_status)}</td>
       <td class="latency">${s.latency_p50_ms != null ? s.latency_p50_ms + 'ms' : '—'}</td>
@@ -46,16 +46,24 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
     ? `Solana <strong>${solana}</strong><span class="pct-of">/${stats.allSolanaProviders}</span>`
     : `Solana <strong>${solana}</strong>`
 
+  const l402Tooltip = `${l402} providers with endpoints returning HTTP 402 + valid WWW-Authenticate header (macaroon + Lightning invoice)`
+  const baseTooltip = stats.allBaseProviders > base
+    ? `${base} of ${stats.allBaseProviders} Base providers independently verified — endpoint returns HTTP 402 with valid PAYMENT-REQUIRED header, known USDC asset, and reachable facilitator`
+    : `${base} Base providers with verified x402 payment requirements`
+  const solanaTooltip = stats.allSolanaProviders > solana
+    ? `${solana} of ${stats.allSolanaProviders} Solana providers independently verified — endpoint returns HTTP 402 with valid PAYMENT-REQUIRED header, known USDC asset, and reachable facilitator`
+    : `${solana} Solana providers with verified x402 payment requirements`
+
   const protocolBar = totalProviders > 0 ? `
     <div class="protocol-bar">
       <div class="container">
-        <span class="protocol-l402">${l402Label}</span>
+        <span class="protocol-l402" title="${l402Tooltip}">${l402Label}</span>
         <div class="protocol-track-multi">
           <div class="protocol-fill-l402" style="width: ${l402Pct}%"></div>
           <div class="protocol-fill-base" style="width: ${basePct}%"></div>
         </div>
-        ${base > 0 ? `<span class="protocol-base">${baseLabel}</span>` : ''}
-        ${solana > 0 ? `<span class="protocol-solana">${solanaLabel}</span>` : ''}
+        ${base > 0 ? `<span class="protocol-base" title="${baseTooltip}">${baseLabel}</span>` : ''}
+        ${solana > 0 ? `<span class="protocol-solana" title="${solanaTooltip}">${solanaLabel}</span>` : ''}
       </div>
     </div>` : ''
 
@@ -65,7 +73,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
         <div class="stats-headline">
           <span><span class="stat-value">${stats.totalIndexed.toLocaleString()}</span> endpoints indexed</span>
           <span class="stats-sep">&middot;</span>
-          <span><span class="stat-value stat-verified">${stats.total.toLocaleString()}</span> payment-verified</span>
+          <span><span class="stat-value stat-verified">${stats.verified.toLocaleString()}</span> payment-verified</span>
         </div>
         <div class="stats-detail">
           <span><span class="stat-value">${stats.distinctServices?.toLocaleString() || '—'}</span> services</span>
@@ -102,6 +110,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
             <option value="satring"${filters.source === 'satring' ? ' selected' : ''}>Satring</option>
             <option value="bazaar"${filters.source === 'bazaar' ? ' selected' : ''}>Bazaar</option>
             <option value="l402apps"${filters.source === 'l402apps' ? ' selected' : ''}>L402 Apps</option>
+            <option value="sponge"${filters.source === 'sponge' ? ' selected' : ''}>Sponge</option>
           </select>
           <select name="sort" onchange="this.form.submit()">
             <option value="">Default sort</option>

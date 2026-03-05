@@ -12,8 +12,12 @@ export function protocolBadge(protocol) {
   return `<span class="badge ${cls}">${protocol}</span>`
 }
 
-export function formatPrice(service) {
+export function formatPrice(service, btcUsdRate) {
   if (service.price_usd != null) return `$${service.price_usd.toFixed(service.price_usd < 0.01 ? 4 : 2)}`
+  if (service.price_sats != null && btcUsdRate) {
+    const usd = (service.price_sats / 100_000_000) * btcUsdRate
+    return `$${usd.toFixed(usd < 0.01 ? 4 : 2)}`
+  }
   if (service.price_sats != null) return `${service.price_sats} sats`
   return '—'
 }

@@ -448,7 +448,7 @@ describe('homePage — payment_valid filter', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { total: 0, totalIndexed: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
+      stats: { verified: 0, totalIndexed: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
       categories: [],
     })
     assert.ok(html.includes('name="payment_valid"'))
@@ -463,7 +463,7 @@ describe('homePage — payment_valid filter', () => {
       limit: 50,
       offset: 0,
       filters: { payment_valid: true },
-      stats: { total: 0, totalIndexed: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
+      stats: { verified: 0, totalIndexed: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
       categories: [],
     })
     assert.ok(html.includes('name="payment_valid" value="true" checked'))
@@ -473,7 +473,7 @@ describe('homePage — payment_valid filter', () => {
 // ─── Protocol bar: chain colors ─────────────────────────────────────────────
 
 describe('homePage — protocol bar chain colors', () => {
-  const baseStats = { total: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 10, unknown: 0, allL402Providers: 0, allBaseProviders: 0, allSolanaProviders: 0 }
+  const baseStats = { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 10, unknown: 0, allL402Providers: 0, allBaseProviders: 0, allSolanaProviders: 0 }
 
   it('renders 3-segment bar with L402, Base, and Solana labels', async () => {
     const { homePage } = await import('../src/views/home.js')
@@ -505,8 +505,8 @@ describe('homePage — protocol bar chain colors', () => {
       stats: { ...baseStats, l402Providers: 5, baseProviders: 100, solanaProviders: 0 },
       categories: [],
     })
-    assert.ok(html.includes('<span class="protocol-base">'))
-    assert.ok(!html.includes('<span class="protocol-solana">'))
+    assert.ok(html.includes('class="protocol-base"'))
+    assert.ok(!html.includes('class="protocol-solana"'))
   })
 
   it('hides Base label when zero Base providers', async () => {
@@ -520,8 +520,8 @@ describe('homePage — protocol bar chain colors', () => {
       stats: { ...baseStats, l402Providers: 5, baseProviders: 0, solanaProviders: 20 },
       categories: [],
     })
-    assert.ok(!html.includes('<span class="protocol-base">'))
-    assert.ok(html.includes('<span class="protocol-solana">'))
+    assert.ok(!html.includes('class="protocol-base"'))
+    assert.ok(html.includes('class="protocol-solana"'))
   })
 
   it('hides protocol bar when no providers', async () => {

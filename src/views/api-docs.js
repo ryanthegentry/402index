@@ -27,7 +27,7 @@ export function apiDocsPage() {
               <tr><td>protocol</td><td>string</td><td>Filter by protocol: <code>l402</code> or <code>x402</code></td></tr>
               <tr><td>category</td><td>string</td><td>Filter by category (prefix match — <code>crypto</code> matches <code>crypto/nft</code>)</td></tr>
               <tr><td>health</td><td>string</td><td>Filter by health: <code>healthy</code>, <code>degraded</code>, <code>down</code>, <code>unknown</code></td></tr>
-              <tr><td>source</td><td>string</td><td>Filter by source: <code>bazaar</code>, <code>satring</code>, <code>l402apps</code>, <code>exclusive</code>, <code>self-registered</code></td></tr>
+              <tr><td>source</td><td>string</td><td>Filter by source: <code>bazaar</code>, <code>satring</code>, <code>l402apps</code>, <code>sponge</code>, <code>exclusive</code>, <code>self-registered</code></td></tr>
               <tr><td>featured</td><td>boolean</td><td>Only featured services: <code>true</code></td></tr>
               <tr><td>q</td><td>string</td><td>Search by name or description</td></tr>
               <tr><td>max_price_usd</td><td>number</td><td>Maximum price in USD</td></tr>
@@ -116,6 +116,29 @@ export function apiDocsPage() {
           </table>
         </div>
 
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method">GET</span>
+            <span class="endpoint-path">/api/v1/export.csv</span>
+            <span style="background:rgba(240,165,0,0.15);color:#f0a500;padding:2px 8px;border-radius:4px;font-size:12px;margin-left:8px">L402 Required</span>
+          </div>
+          <p>Export the full directory as CSV. Requires L402 payment — no free tier. Supports the same filters as <code>/api/v1/services</code>.</p>
+          <p><strong>CSV columns:</strong> id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, health_status, uptime_30d, latency_p50_ms, last_checked, http_method, reliability_score</p>
+          <p>Sats-only prices are automatically converted to USD using the current BTC/USD rate.</p>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -H 'Authorization: L402 &lt;macaroon&gt;:&lt;preimage&gt;' \\
+  'https://402index.io/api/v1/export.csv?protocol=l402'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Status</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>200</code></td><td>CSV file download (<code>Content-Type: text/csv</code>)</td></tr>
+              <tr><td><code>402</code></td><td>L402 payment required. Add <code>?l402=require</code> to get a Lightning invoice challenge.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <h2>Response Format</h2>
         <p>The services list endpoint returns JSON with the following structure:</p>
         <div class="response-sample">${escapeHtml(JSON.stringify({
@@ -164,7 +187,7 @@ export function apiDocsPage() {
         </table>
         <p>When you exceed the free tier, the API returns <code>402 Payment Required</code> with a Lightning invoice in the <code>WWW-Authenticate</code> header. Pay the invoice, then include the L402 token in subsequent requests.</p>
         <p>Exempt from rate limiting: <code>/</code>, <code>/about</code>, <code>/api-docs</code>, <code>/service/*</code>, <code>/api/v1/health</code></p>
-        <p><em>402 Index is the first service listed in its own directory — we eat our own dog food.</em></p>
+        <p><em>402 Index is the first service listed in its own directory — the CSV export endpoint is L402-gated, so we eat our own dog food.</em></p>
 
         <div class="info-callout">
           <h3>MCP Server — Available</h3>
