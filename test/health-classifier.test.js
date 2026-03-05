@@ -83,6 +83,32 @@ describe('classifyHealthStatus', () => {
     })
   })
 
+  describe('429 rate limited', () => {
+    it('returns degraded with rate_limited check status', () => {
+      const result = classifyHealthStatus(429, null, 0, null, 100)
+      assert.equal(result.healthStatus, 'degraded')
+      assert.equal(result.checkStatus, 'rate_limited')
+    })
+
+    it('preserves previous failure count on 429', () => {
+      const result = classifyHealthStatus(429, null, 2, null, 100)
+      assert.equal(result.consecutiveFailures, 2)
+    })
+  })
+
+  describe('405 method not allowed', () => {
+    it('returns degraded with method_not_allowed check status', () => {
+      const result = classifyHealthStatus(405, null, 0, null, 100)
+      assert.equal(result.healthStatus, 'degraded')
+      assert.equal(result.checkStatus, 'method_not_allowed')
+    })
+
+    it('preserves previous failure count on 405', () => {
+      const result = classifyHealthStatus(405, null, 1, null, 100)
+      assert.equal(result.consecutiveFailures, 1)
+    })
+  })
+
   describe('other status codes', () => {
     it('returns degraded for 3xx responses', () => {
       const result = classifyHealthStatus(301, null, 0, null, 100)
@@ -90,7 +116,7 @@ describe('classifyHealthStatus', () => {
       assert.equal(result.checkStatus, 'degraded')
     })
 
-    it('returns degraded for 4xx (non-402) responses', () => {
+    it('returns degraded for 4xx (non-402/429/405) responses', () => {
       const result = classifyHealthStatus(403, null, 0, null, 100)
       assert.equal(result.healthStatus, 'degraded')
     })

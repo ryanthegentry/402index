@@ -2,6 +2,7 @@ import { loadListings, loadFeatured } from './listings.js'
 import { pollBazaar } from './aggregators/bazaar.js'
 import { pollSatring } from './aggregators/satring.js'
 import { pollL402Apps } from './aggregators/l402apps.js'
+import { pollSponge } from './aggregators/sponge.js'
 import { runHealthChecks } from './health/checker.js'
 import { classifyServices } from './services/classify.js'
 
@@ -30,6 +31,15 @@ function runL402AppsPoll() {
     .catch(err => console.error('[scheduler] l402apps poll failed:', err.message))
 }
 
+function runSpongePoll() {
+  return pollSponge()
+    .then(() => {
+      loadFeatured()
+      classifyServices()
+    })
+    .catch(err => console.error('[scheduler] sponge poll failed:', err.message))
+}
+
 function runHealthCheckGuarded() {
   if (healthCheckRunning) return
   healthCheckRunning = true
@@ -44,17 +54,21 @@ export function startScheduler() {
   loadFeatured()
   runPolls()
   runL402AppsPoll()
+  runSpongePoll()
 
   const bazaarInterval = parseInt(process.env.BAZAAR_POLL_INTERVAL_MS) || 3600000
   setInterval(runPolls, bazaarInterval)
 
-  // l402apps: daily poll (site updates infrequently)
+  // l402apps + sponge: daily poll (sites update infrequently)
   const l402appsInterval = parseInt(process.env.L402APPS_POLL_INTERVAL_MS) || 86400000
   setInterval(runL402AppsPoll, l402appsInterval)
 
+  const spongeInterval = parseInt(process.env.SPONGE_POLL_INTERVAL_MS) || 86400000
+  setInterval(runSpongePoll, spongeInterval)
+
   // Delay health checks 30s to let polls finish first
   setTimeout(runHealthCheckGuarded, 30000)
-  const healthInterval = parseInt(process.env.HEALTH_CHECK_INTERVAL_MS) || 900000
+  const healthInterval = parseInt(process.env.HEALTH_CHECK_INTERVAL_MS) || 3600000
   setInterval(runHealthCheckGuarded, healthInterval)
 }
 
