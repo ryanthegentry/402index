@@ -94,7 +94,7 @@ function stmt(key, sql) {
   return stmts[key]
 }
 
-const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, latency_p50_ms, consecutive_failures, registered_at, x402_payment_valid FROM services WHERE status = 'active' OR status IS NULL")
+const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, registered_at, x402_payment_valid FROM services WHERE status = 'active' OR status IS NULL")
 
 const insertHealthCheck = () => stmt('insertHealthCheck', `
   INSERT INTO health_checks (service_id, status, response_time_ms, http_status, error_message)
@@ -153,7 +153,7 @@ function calculateP50(serviceId) {
  * @param {string} [httpMethod='GET']
  * @returns {{ httpStatus: number|null, responseTimeMs: number|null, errorMessage: string|null, wwwAuthenticate: string|null, paymentRequired: string|null, responseBody: string|null }}
  */
-async function performHttpCheck(url, httpMethod = 'GET') {
+async function performHttpCheck(url, httpMethod = 'GET', probeBody = '{}') {
   const empty = { httpStatus: null, responseTimeMs: null, errorMessage: null, wwwAuthenticate: null, paymentRequired: null, responseBody: null }
 
   // SSRF protection: block non-http(s) schemes
@@ -173,7 +173,7 @@ async function performHttpCheck(url, httpMethod = 'GET') {
       const postRes = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        body: probeBody,
         signal: AbortSignal.timeout(TIMEOUT_MS),
         redirect: 'manual',
       })
@@ -393,9 +393,9 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
 
 /** Check a single service: HTTP probe, classify result, persist. */
 async function checkService(service) {
-  const { id, url, protocol, http_method, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, x402_payment_valid: currentPaymentValid } = service
+  const { id, url, protocol, http_method, probe_body, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, x402_payment_valid: currentPaymentValid } = service
 
-  const httpResult = await performHttpCheck(url, http_method || 'GET')
+  const httpResult = await performHttpCheck(url, http_method || 'GET', probe_body || '{}')
   const classification = classifyHealthStatus(
     httpResult.httpStatus, httpResult.errorMessage, prevFailures, historicalP50, httpResult.responseTimeMs
   )
