@@ -123,6 +123,20 @@ Redirect: manual (do not follow)
 - `last_status_code`: HTTP status received
 - No x402-specific columns touched (payment_valid, facilitator_reachable, asset_known stay NULL)
 
+### Non-Standard L402 Implementations
+
+Some providers implement L402-inspired flows that deviate from the spec in ways that prevent automated verification:
+
+**Lightning Faucet (lightningfaucet.com)** — Returns L402 challenge in JSON body with HTTP 429 instead of spec-compliant 402 + `WWW-Authenticate` header. Example response to `GET /api/l402/uuid`:
+- HTTP status: **429** (not 402)
+- No `WWW-Authenticate` header
+- Body contains valid `invoice` (lnbc...), `macaroon` (base64), `payment_hash`, and `auth_instructions`
+- Multiple L402 endpoints on this domain (~20+ via Satring)
+
+This is functionally L402 (invoice + macaroon + preimage flow) but not spec-compliant. A standards-conformant L402 client would fail because it looks for 402 status + header, not 429 + body JSON. The health checker correctly classifies these as `rate_limited` (post-Gap-3 fix) or `degraded` (pre-fix). **This is the right behavior** — "payment-verified" should mean a spec-compliant client can pay automatically.
+
+**Potential outreach:** Contact Lightning Faucet to suggest returning 402 + `WWW-Authenticate: L402 macaroon="...", invoice="..."` header. Their current implementation works for custom clients that know to parse the body, but breaks interoperability with standard L402 libraries and agent wallets.
+
 ### Notes
 
 - `redirect: 'manual'` is intentional — we don't follow redirects because they may lead to non-L402 pages

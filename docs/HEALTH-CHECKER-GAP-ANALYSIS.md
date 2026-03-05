@@ -59,6 +59,12 @@ This ensures every checked x402 endpoint has payment_valid = 0 or 1, never NULL.
 
 **Fix (partial):** See Gap 5 (http_method auto-detection). Full fix requires aggregator enrichment or manual curation.
 
+### Related: Non-Standard L402 Implementations (Mar 5 discovery)
+
+Lightning Faucet (lightningfaucet.com) returns L402 challenges in JSON body with HTTP 429 — not the spec-compliant 402 + `WWW-Authenticate` header. Multiple endpoints (~20+ via Satring) are affected. The health checker correctly classifies these as `rate_limited`/`degraded`. This is correct behavior: "payment-verified" means a spec-compliant client can pay automatically, and these endpoints would break standard L402 client libraries.
+
+**Outreach opportunity:** Contact Lightning Faucet to suggest returning 402 + `WWW-Authenticate: L402 macaroon="...", invoice="..."`. Their flow is functionally L402 (invoice + macaroon + preimage) but breaks interop. If fixed, ~20 endpoints could flip from degraded to healthy.
+
 ---
 
 ## Gap 3: L402 Endpoints Returning 400/429/405
