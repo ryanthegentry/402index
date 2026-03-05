@@ -226,6 +226,14 @@ try {
   // Column already exists
 }
 
+// Migration: add probe_body for endpoints that need specific POST body to trigger L402
+try {
+  db.exec('ALTER TABLE services ADD COLUMN probe_body TEXT')
+  console.log('[db] Added column: probe_body')
+} catch {
+  // Column already exists
+}
+
 // Migration: add reliability_score (computed, 0-100)
 try {
   db.exec('ALTER TABLE services ADD COLUMN reliability_score REAL')
