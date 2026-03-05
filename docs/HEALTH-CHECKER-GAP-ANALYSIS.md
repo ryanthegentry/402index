@@ -130,10 +130,36 @@ All aggregated endpoints default to GET. Many L402 inference/payment APIs are PO
 
 **Impact:** POST-only endpoints get HEAD/GET probes → 200/400/405 → classified as degraded. This explains the high degraded rate for L402 (110 of 120 endpoints).
 
-**Fix:** Auto-detect http_method when 405 is received:
-1. On 405 response, retry with POST
-2. If POST returns 402, persist `http_method = 'POST'` for future checks
+**Fix (implemented):** Auto-detect http_method when 405/400/200 is received:
+1. On 405/400/200 response for L402 endpoints, retry with POST (empty JSON body)
+2. If POST returns 402 + valid WWW-Authenticate, mark healthy and persist `http_method = 'POST'`
 3. Never override manually-set http_method from registration
+4. Research confirms: Aperture gates ALL methods; inference APIs (Sats4AI) are POST-only; POST with `{}` body triggers 402 before body validation
+
+---
+
+## Gap 11: x402 V1 Body Parsing (12,530 Endpoints)
+
+**Severity: Critical**
+
+**Spec says:** V1 x402 endpoints return payment requirements in the response body, not headers. The `PAYMENT-REQUIRED` header is V2-only.
+
+**Current behavior:** `checker.js` only parses the `PAYMENT-REQUIRED` header (V2 format). When the header is missing after GET fallback, the endpoint gets `payment_valid=0`. The GET response body is never read for V1 data.
+
+**Production impact:** 12,530 x402 endpoints have payment_valid=0 because they use V1 format. These endpoints DO return valid payment requirements — just in the body, not the header.
+
+**Research findings:**
+- V1 body format: `{x402Version: 1, accepts: [{scheme, network, maxAmountRequired, payTo, asset, ...}]}`
+- Always `application/json`, always in the response body
+- Official x402 SDK (`coinbase/x402`) uses header-first, body-fallback detection
+- An endpoint NEVER returns both V2 header and V1 body — mutually exclusive
+- Bazaar discovery API normalizes all items to V1-style `maxAmountRequired`
+
+**Fix (implemented):** After GET fallback, if `PAYMENT-REQUIRED` header is still missing:
+1. Read GET response body (limit 64KB)
+2. Parse as JSON, check for `accepts` array
+3. Pass to `validatePaymentRequirements()` (already handles `maxAmountRequired`)
+4. New `parsePaymentRequiredBody()` function in `x402-utils.js`
 
 ---
 
@@ -224,12 +250,13 @@ Additionally, there's no per-endpoint caching of "this endpoint requires GET." T
 | 2 | L402 200 responses (44%) | Important | Needs investigation + http_method | 3-4 |
 | 3 | 429/405/400 handling | Important | ~15 lines in classifyHealthStatus | 3 |
 | 4 | Back-to-back checks | Important | One line (interval change) | 3 |
-| 5 | http_method auto-detection | Important | ~30 lines + migration | 4 |
+| 5 | http_method auto-detection | Important | ~30 lines + migration | **3 (active)** |
 | 6 | Retention mismatch | Moderate | Two line changes | 3 |
 | 7 | HEAD→GET caching | Moderate | Migration + ~20 lines | 4 |
 | 8 | Per-protocol logging | Moderate | ~10 lines | 3 |
 | 9 | Error detail logging | Low | ~10 lines | 3 |
 | 10 | Per-host rate limiting | Low | Significant refactor | 4+ |
 
-**Phase 3 (this session):** Gaps 1, 3, 4, 6, 8, 9
-**Phase 4 (future):** Gaps 2, 5, 7, 10
+**Phase 3 (session 10):** Gaps 1, 3, 4, 6, 8, 9
+**Phase 3 (session 11):** Gaps 5, 11 (http_method auto-detection + V1 body parsing)
+**Phase 4 (future):** Gaps 2, 7, 10
