@@ -120,7 +120,7 @@ const getUptime = () => stmt('getUptime', `
     SUM(CASE WHEN status IN ('healthy', 'degraded') THEN 1 ELSE 0 END) as up
   FROM health_checks
   WHERE service_id = ?
-    AND checked_at > datetime('now', '-30 days')
+    AND checked_at > datetime('now', '-3 days')
 `)
 
 const getRecentLatencies = () => stmt('getRecentLatencies', `
@@ -248,7 +248,17 @@ export function classifyHealthStatus(httpStatus, errorMessage, prevFailures, his
     }
   }
 
-  // Other status codes (3xx, 4xx except 402)
+  // 429 = rate limited by provider. Don't punish — preserve previous health state.
+  if (httpStatus === 429) {
+    return { healthStatus: 'degraded', checkStatus: 'rate_limited', consecutiveFailures: prevFailures || 0 }
+  }
+
+  // 405 = Method Not Allowed. Signal for http_method auto-detection (future).
+  if (httpStatus === 405) {
+    return { healthStatus: 'degraded', checkStatus: 'method_not_allowed', consecutiveFailures: prevFailures || 0 }
+  }
+
+  // Other status codes (3xx, 4xx except 402/429/405)
   return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0 }
 }
 
@@ -433,6 +443,12 @@ async function checkService(service) {
     }
   }
 
+  // Gap 1: x402 endpoints that don't return 402 should get payment_valid=0, not NULL.
+  // NULL means "never checked" — 0 means "checked but paywall not working."
+  if (protocol === 'x402' && x402PaymentValid === null && !httpResult.errorMessage) {
+    x402PaymentValid = 0
+  }
+
   persistHealthResult(id, {
     ...classification,
     httpStatus: httpResult.httpStatus,
@@ -513,7 +529,10 @@ export async function runHealthChecks() {
   console.log(`[health] Checking ${services.length} services...`)
 
   const results = { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 }
+  const byProtocol = {}
+  const errors = []
   let checked = 0
+  const startTime = Date.now()
 
   // Process in batches for concurrency control
   for (let i = 0; i < services.length; i += CONCURRENCY) {
@@ -522,21 +541,47 @@ export async function runHealthChecks() {
       batch.map(s => checkService(s))
     )
 
-    for (const result of batchResults) {
+    for (let j = 0; j < batchResults.length; j++) {
       checked++
+      const result = batchResults[j]
+      const service = batch[j]
+      const proto = service.protocol || 'unknown'
+
+      if (!byProtocol[proto]) byProtocol[proto] = { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 }
+
       if (result.status === 'fulfilled') {
         const status = result.value.healthStatus
         results[status] = (results[status] || 0) + 1
+        byProtocol[proto][status] = (byProtocol[proto][status] || 0) + 1
       } else {
         results.error++
+        byProtocol[proto].error++
+        if (errors.length < 10) {
+          errors.push({ url: service.url, protocol: proto, error: result.reason?.message || 'unknown' })
+        }
       }
     }
 
-    if (checked % 100 === 0 || checked === services.length) {
+    if (checked % 500 === 0 || checked === services.length) {
       console.log(`[health] Progress: ${checked}/${services.length}`)
     }
   }
 
-  console.log(`[health] Done. healthy=${results.healthy} degraded=${results.degraded} down=${results.down} unknown=${results.unknown}`)
+  const durationSec = ((Date.now() - startTime) / 1000).toFixed(1)
+  console.log(`[health] Done in ${durationSec}s. healthy=${results.healthy} degraded=${results.degraded} down=${results.down} unknown=${results.unknown}`)
+
+  // Per-protocol breakdown
+  for (const [proto, counts] of Object.entries(byProtocol)) {
+    console.log(`[health] ${proto}: healthy=${counts.healthy} degraded=${counts.degraded} down=${counts.down}`)
+  }
+
+  // First N errors for debugging
+  if (errors.length > 0) {
+    console.log(`[health] Errors (${results.error} total, first ${errors.length}):`)
+    for (const e of errors) {
+      console.log(`[health]   ${e.protocol} ${e.url}: ${e.error}`)
+    }
+  }
+
   return results
 }

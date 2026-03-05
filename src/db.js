@@ -280,14 +280,14 @@ try {
   console.warn(`[db] Incremental vacuum note: ${err.message}`)
 }
 
-// Prune health_checks older than 1 day (startup + every hour)
+// Prune health_checks older than 3 days (aligned with HEALTH_CHECK_RETENTION_DAYS in checker.js)
 function pruneHealthChecks() {
   try {
     const result = db.prepare(
-      "DELETE FROM health_checks WHERE checked_at < datetime('now', '-1 day')"
+      "DELETE FROM health_checks WHERE checked_at < datetime('now', '-3 days')"
     ).run()
     if (result.changes > 0) {
-      console.log(`[db] Pruned ${result.changes} health checks older than 1 day`)
+      console.log(`[db] Pruned ${result.changes} health checks older than 3 days`)
       db.pragma('incremental_vacuum')
     }
   } catch (err) {
