@@ -328,6 +328,36 @@ export function computeReliabilityScore(service) {
   return Math.round(score * 10) / 10
 }
 
+// ─── Per-host rate limiting ──────────────────────────────────────────────────
+
+const PER_HOST_MIN_INTERVAL_MS = 1000
+
+const hostLastProbe = new Map()
+
+export function getHostname(url) {
+  try { return new URL(url).hostname } catch { return url }
+}
+
+export function shuffleArray(arr) {
+  const shuffled = [...arr]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
+async function waitForHost(hostname) {
+  const lastProbe = hostLastProbe.get(hostname)
+  if (lastProbe) {
+    const elapsed = Date.now() - lastProbe
+    if (elapsed < PER_HOST_MIN_INTERVAL_MS) {
+      await new Promise(r => setTimeout(r, PER_HOST_MIN_INTERVAL_MS - elapsed))
+    }
+  }
+  hostLastProbe.set(hostname, Date.now())
+}
+
 // Facilitator reachability cache (15-minute TTL)
 const facilitatorCache = new Map()
 const FACILITATOR_CACHE_TTL_MS = 15 * 60 * 1000
@@ -365,40 +395,51 @@ async function checkFacilitatorReachable(url) {
 
 /** Persist health check result and update service record. */
 function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown }) {
-  insertHealthCheck().run({
-    service_id: serviceId,
-    status: checkStatus,
-    response_time_ms: responseTimeMs,
-    http_status: httpStatus,
-    error_message: errorMessage || (httpStatus >= 500 ? `HTTP ${httpStatus}` : null),
-  })
+  try {
+    insertHealthCheck().run({
+      service_id: serviceId,
+      status: checkStatus,
+      response_time_ms: responseTimeMs,
+      http_status: httpStatus,
+      error_message: errorMessage || (httpStatus >= 500 ? `HTTP ${httpStatus}` : null),
+    })
 
-  const newP50 = errorMessage ? (historicalP50 || null) : (calculateP50(serviceId) ?? responseTimeMs)
-  const uptime = calculateUptime(serviceId)
+    const newP50 = errorMessage ? (historicalP50 || null) : (calculateP50(serviceId) ?? responseTimeMs)
+    const uptime = calculateUptime(serviceId)
 
-  const reliability = computeReliabilityScore({
-    uptime_30d: uptime,
-    latency_p50_ms: newP50,
-    consecutive_failures: consecutiveFailures,
-    registered_at: registeredAt,
-  })
+    const reliability = computeReliabilityScore({
+      uptime_30d: uptime,
+      latency_p50_ms: newP50,
+      consecutive_failures: consecutiveFailures,
+      registered_at: registeredAt,
+    })
 
-  updateService().run({
-    id: serviceId,
-    health_status: healthStatus,
-    latency_p50_ms: newP50,
-    consecutive_failures: consecutiveFailures,
-    uptime_30d: uptime,
-    reliability_score: reliability,
-    x402_payment_valid: x402PaymentValid ?? null,
-    x402_facilitator_reachable: x402FacilitatorReachable ?? null,
-    x402_asset_known: x402AssetKnown ?? null,
-  })
+    updateService().run({
+      id: serviceId,
+      health_status: healthStatus,
+      latency_p50_ms: newP50,
+      consecutive_failures: consecutiveFailures,
+      uptime_30d: uptime,
+      reliability_score: reliability,
+      x402_payment_valid: x402PaymentValid ?? null,
+      x402_facilitator_reachable: x402FacilitatorReachable ?? null,
+      x402_asset_known: x402AssetKnown ?? null,
+    })
+  } catch (err) {
+    if (err.message && err.message.includes('FOREIGN KEY constraint failed')) {
+      console.warn(`[health] Service ${serviceId} was deleted during check — skipping persist`)
+      return
+    }
+    throw err
+  }
 }
 
 /** Check a single service: HTTP probe, classify result, persist. */
 async function checkService(service) {
   const { id, url, protocol, http_method, probe_body, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, x402_payment_valid: currentPaymentValid } = service
+
+  // Per-host rate limiting: wait if we probed this host recently
+  await waitForHost(getHostname(url))
 
   const httpResult = await performHttpCheck(url, http_method || 'GET', probe_body || '{}')
   const classification = classifyHealthStatus(
@@ -613,10 +654,12 @@ export async function runHealthChecks() {
   // Prune old records before running new checks
   pruneOldHealthChecks()
 
-  // Reset per-cycle diagnostic counter
+  // Reset per-cycle state
   x402DiagCount = 0
+  hostLastProbe.clear()
 
-  const services = getServices().all()
+  // Shuffle to distribute same-host endpoints across the full check cycle
+  const services = shuffleArray(getServices().all())
   console.log(`[health] Checking ${services.length} services...`)
 
   const results = { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 }

@@ -59,6 +59,12 @@ export async function pollL402Apps() {
   for (const api of apis) {
     try {
       const normalized = normalizeApi(api, btcRate)
+
+      // Skip .well-known discovery URLs — metadata documents, not L402 endpoints
+      if (normalized.url.includes('/.well-known/')) {
+        continue
+      }
+
       const existing = findExisting().get(normalized.url)
       upsertNew().run(normalized)
       if (existing) updatedCount++
