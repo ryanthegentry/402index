@@ -6,6 +6,7 @@ import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeUrl } from '../services/url-normalize.js'
 import { verifyL402 } from '../services/l402-verify.js'
 import { sendRegistrationNotification } from '../services/notify.js'
+import { discoverProbeConfig } from '../services/wellknown-discovery.js'
 
 const router = Router()
 
@@ -263,7 +264,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Validate http_method (optional, defaults to GET)
-    const httpMethod = body.http_method ? String(body.http_method).toUpperCase() : 'GET'
+    let httpMethod = body.http_method ? String(body.http_method).toUpperCase() : 'GET'
     if (!VALID_HTTP_METHODS.has(httpMethod)) {
       return res.status(400).json({
         error: `Invalid http_method "${body.http_method}". Must be one of: ${[...VALID_HTTP_METHODS].join(', ')}`,
@@ -285,9 +286,20 @@ router.post('/register', async (req, res) => {
     const url = normalizeUrl(body.url)
 
     // Run L402 verification probe
-    const probe = await verifyL402(url, httpMethod, probeBody)
+    let probe = await verifyL402(url, httpMethod, probeBody)
+
+    // If probe failed with 400 or 406, try .well-known auto-discovery
+    let discoveredConfig = null
+    if (!probe.valid && [400, 406].includes(probe.httpStatus)) {
+      discoveredConfig = await discoverProbeConfig(url)
+      if (discoveredConfig) {
+        console.log(`[register] .well-known discovery found config for ${url}: method=${discoveredConfig.method}, body=${discoveredConfig.probeBody.substring(0, 100)}`)
+        probe = await verifyL402(url, discoveredConfig.method, discoveredConfig.probeBody)
+      }
+    }
+
     if (!probe.valid) {
-      return res.status(422).json({
+      const response = {
         error: 'L402 verification failed',
         detail: probe.error,
         probe: {
@@ -297,7 +309,22 @@ router.post('/register', async (req, res) => {
           hasMacaroon: probe.hasMacaroon,
           hasInvoice: probe.hasInvoice,
         },
-      })
+      }
+      if (discoveredConfig) {
+        response.wellknown_attempted = true
+        response.detail += ' (Also attempted .well-known auto-discovery — the constructed probe body did not trigger an L402 challenge. Try providing an explicit probe_body parameter.)'
+      }
+      return res.status(422).json(response)
+    }
+
+    // If discovery succeeded, use the discovered config for the stored record
+    if (discoveredConfig && probe.valid) {
+      if (!body.http_method) {
+        httpMethod = discoveredConfig.method
+      }
+      if (!body.probe_body) {
+        probeBody = discoveredConfig.probeBody
+      }
     }
 
     // Insert with status='pending' for admin review

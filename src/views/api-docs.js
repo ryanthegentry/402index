@@ -115,6 +115,14 @@ export function apiDocsPage() {
               <tr><td><code>429</code></td><td>Rate limit exceeded (10 registrations per hour per IP).</td></tr>
             </tbody>
           </table>
+          <div class="info-callout" style="margin-top:16px">
+            <h3>.well-known Auto-Discovery</h3>
+            <p>If your endpoint returns 400 or 406 during verification and you haven't provided a
+            <code>probe_body</code>, we'll check <code>https://your-host/.well-known/l402-services</code>
+            for probe configuration. If your discovery document lists the endpoint with a
+            <code>request_schema</code>, we'll construct a minimal probe body automatically.
+            <a href="/about#wellknown">Learn more about .well-known discovery.</a></p>
+          </div>
         </div>
 
         <div class="endpoint">

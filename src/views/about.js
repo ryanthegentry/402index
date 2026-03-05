@@ -87,6 +87,16 @@ export function aboutPage() {
           indexed but not payment-verified.
         </p>
 
+        <h3 id="wellknown">.well-known Discovery</h3>
+        <p>
+          Some L402 providers publish a discovery document at
+          <code>/.well-known/l402-services</code> that describes their endpoints, required
+          request schemas, and pricing. When a self-registration probe fails because the endpoint
+          validates request bodies, we check this document automatically and retry with the
+          correct configuration. This is an emerging convention — providers can publish one to
+          make their endpoints instantly discoverable and self-registrable.
+        </p>
+
         <p>
           <strong>Health status</strong> reflects whether the endpoint is reachable and responding
           correctly:
