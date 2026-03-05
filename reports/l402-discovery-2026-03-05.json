@@ -1,0 +1,2414 @@
+{
+  "generated_at": "2026-03-05T17:35:52.993Z",
+  "duration_seconds": 683,
+  "total_scanned": 120,
+  "found": 5,
+  "partial": 51,
+  "not_found": 64,
+  "reports": [
+    {
+      "service_id": "a63c1e77-cab0-4740-8d82-5a6fe451794f",
+      "registered_url": "https://www.l402apps.com/api/apis",
+      "registered_name": "L402 Apps: Get APIs Directory",
+      "source": "l402apps",
+      "provider": "L402 Apps",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "found",
+        "found_url": "https://www.l402apps.com/api/apis",
+        "found_method": "GET",
+        "found_stage": "stage_1_direct",
+        "l402_details": {
+          "scheme": "L402",
+          "has_macaroon": true,
+          "has_invoice": true,
+          "invoice_prefix": "lnbc",
+          "raw_header": "L402 macaroon=\"pjtvfZKQ8XDixRsu+odptca8HuzFnLHl9M6J93s5SgQlMvedtB5eEQv4pt5znyQAtH0Um5r7PbMWMsjo1ng95w==\", invoice=\"lnbc100n1p56n0z0pp55cak7lvjjrchpck9rvh04pmfkhrtc8hvckwtre05e6ylw7eefgzqdp5fs6rqv3qg9c8quequ2qfggz8v46zqs2sf9ejqerfwfjkxar0wfuscqzzsxqrrsssp5q2g4uuhl0v7t4n3tqvttnvw22h3cqq0ymzmmjh25tdcfdm22ca9q9qxpqysgqrasfeq87eneaavcrxp8zs23ne3z2k2jq8pygf88jm7yz75d0zrc4alsaf6rau9gwtd3zvvzzp9y7xms9quzwq69a8vw3wkjtfjn74qqp0xn0yf\""
+        }
+      },
+      "probes": [
+        {
+          "url": "https://www.l402apps.com/api/apis",
+          "method": "GET",
+          "status": 402,
+          "has_www_authenticate": true,
+          "www_authenticate_scheme": "L402",
+          "l402_details": {
+            "scheme": "L402",
+            "has_macaroon": true,
+            "has_invoice": true,
+            "invoice_prefix": "lnbc",
+            "raw_header": "L402 macaroon=\"pjtvfZKQ8XDixRsu+odptca8HuzFnLHl9M6J93s5SgQlMvedtB5eEQv4pt5znyQAtH0Um5r7PbMWMsjo1ng95w==\", invoice=\"lnbc100n1p56n0z0pp55cak7lvjjrchpck9rvh04pmfkhrtc8hvckwtre05e6ylw7eefgzqdp5fs6rqv3qg9c8quequ2qfggz8v46zqs2sf9ejqerfwfjkxar0wfuscqzzsxqrrsssp5q2g4uuhl0v7t4n3tqvttnvw22h3cqq0ymzmmjh25tdcfdm22ca9q9qxpqysgqrasfeq87eneaavcrxp8zs23ne3z2k2jq8pygf88jm7yz75d0zrc4alsaf6rau9gwtd3zvvzzp9y7xms9quzwq69a8vw3wkjtfjn74qqp0xn0yf\""
+          },
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_1_direct"
+        }
+      ],
+      "landing_page_signals": [],
+      "suggested_update": {
+        "action": "none_needed",
+        "confidence": "high",
+        "notes": "registered URL works — may have been transiently down"
+      }
+    },
+    {
+      "service_id": "76be3de6-a1a5-474b-8249-cb50607d3f43",
+      "registered_url": "https://app.opennode.com/",
+      "registered_name": "1. **OpenNode Account**: Sign up at",
+      "source": "satring",
+      "provider": "api.lightningenable.com",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "4ab1a309-9bd3-488b-9f5e-c795a2dd4efb",
+      "registered_url": "https://alittlebitofmoney.com/",
+      "registered_name": "A little bit of money",
+      "source": "satring",
+      "provider": "A-LITTLE-BIT-OF-MONEY",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "1d1f3706-98d5-4d9a-ac2b-e5bcc662da6c",
+      "registered_url": "https://aiprox.dev/",
+      "registered_name": "AIProx",
+      "source": "satring",
+      "provider": "LPX Digital Group",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "86bc2b56-b389-4d3b-9bd0-13807712ec04",
+      "registered_url": "https://certvera.com/api/l402",
+      "registered_name": "CertVera Bitcoin Timestamp",
+      "source": "satring",
+      "provider": "Paul",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "63ab5e6c-4763-4810-a598-5d4eeca56dfa",
+      "registered_url": "https://fewsats.com/",
+      "registered_name": "Fewsats",
+      "source": "l402apps",
+      "provider": "Fewsats",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "71c5ad5f-5fb1-4290-9cad-00f5084e622d",
+      "registered_url": "https://www.ganamos.earth/",
+      "registered_name": "Ganamos",
+      "source": "satring",
+      "provider": "Bmur",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "2344ec51-02c3-45bf-9106-1345174eaf4e",
+      "registered_url": "https://ganamos.earth/api/posts",
+      "registered_name": "Ganamos: Post Job",
+      "source": "l402apps",
+      "provider": "Ganamos",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "6acc6004-d593-4aeb-bfdf-ea774057be72",
+      "registered_url": "https://l402apps.com/api/apis",
+      "registered_name": "L402 Apps Directory",
+      "source": "self-registered",
+      "provider": null,
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "470247f3-311f-4716-b766-1eb7290f7d25",
+      "registered_url": "https://www.l402apps.com/api/boost",
+      "registered_name": "L402 Apps: Boost Listing",
+      "source": "l402apps",
+      "provider": "L402 Apps",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "f67d36fa-9ce7-4f32-b5e6-6f44f20fa56a",
+      "registered_url": "https://www.l402apps.com/api/lottery/enter",
+      "registered_name": "L402 Apps: Lightning Lottery",
+      "source": "l402apps",
+      "provider": "L402 Apps",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "cb03c65c-cc78-409f-a20e-57ea7ccdfef4",
+      "registered_url": "https://www.l402apps.com/api/submissions",
+      "registered_name": "L402 Apps: Submit App",
+      "source": "l402apps",
+      "provider": "L402 Apps",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "found",
+        "found_url": "https://www.l402apps.com/api/submissions",
+        "found_method": "POST",
+        "found_stage": "stage_1_direct",
+        "l402_details": {
+          "scheme": "L402",
+          "has_macaroon": true,
+          "has_invoice": true,
+          "invoice_prefix": "lnbc",
+          "raw_header": "L402 macaroon=\"4m+MSyQ2nQFRb/Oj1Qpaxcd6K3WmdG69z8lXkgem6C1lBOcoNd2ByLucIp7o9JAIEecrQkyf7f180qz/HP4O8Q==\", invoice=\"lnbc1u1p56n0yppp5ufhccjeyx6wsz5t07w3a2zj6chrh52m45e6xa0w0e9teypaxaqksdpvfs6rqv3qg9c8quequ2qfggznw43x66t5ypskugrpwpcqcqzzsxqrrsssp5vd7xmtjt7g9hh4qdu7dj4wpejccfte47x68vpq0fjw3mqw3rev7q9qxpqysgq8q9nsea4slaxqpzq7y6qmvxszcgxe6sq3n3y36ek0dne75pt5ansyteg53w8jw2s4zm7cl990ksgn0p9duy5s9hkymvhvra3ujfqansqxajvky\""
+        }
+      },
+      "probes": [
+        {
+          "url": "https://www.l402apps.com/api/submissions",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": true,
+          "www_authenticate_scheme": "L402",
+          "l402_details": {
+            "scheme": "L402",
+            "has_macaroon": true,
+            "has_invoice": true,
+            "invoice_prefix": "lnbc",
+            "raw_header": "L402 macaroon=\"4m+MSyQ2nQFRb/Oj1Qpaxcd6K3WmdG69z8lXkgem6C1lBOcoNd2ByLucIp7o9JAIEecrQkyf7f180qz/HP4O8Q==\", invoice=\"lnbc1u1p56n0yppp5ufhccjeyx6wsz5t07w3a2zj6chrh52m45e6xa0w0e9teypaxaqksdpvfs6rqv3qg9c8quequ2qfggznw43x66t5ypskugrpwpcqcqzzsxqrrsssp5vd7xmtjt7g9hh4qdu7dj4wpejccfte47x68vpq0fjw3mqw3rev7q9qxpqysgq8q9nsea4slaxqpzq7y6qmvxszcgxe6sq3n3y36ek0dne75pt5ansyteg53w8jw2s4zm7cl990ksgn0p9duy5s9hkymvhvra3ujfqansqxajvky\""
+          },
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_1_direct"
+        }
+      ],
+      "landing_page_signals": [],
+      "suggested_update": {
+        "action": "none_needed",
+        "confidence": "high",
+        "notes": "registered URL works — may have been transiently down"
+      }
+    },
+    {
+      "service_id": "22a64f0d-93b9-4ee7-871b-828c8a27bb64",
+      "registered_url": "https://trader.lpxpoly.com/",
+      "registered_name": "LPXTrader",
+      "source": "satring",
+      "provider": "unixlamadev",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "56a82c3e-6923-49a8-8679-a2f1c0b7050d",
+      "registered_url": "https://lightningfaucet.com/api/l402/price_oracle",
+      "registered_name": "Lightning Faucet BTC Price Oracle",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "found",
+        "found_url": "https://lightningfaucet.com/api/l402/price_oracle",
+        "found_method": "POST",
+        "found_stage": "stage_1_direct",
+        "l402_details": {
+          "scheme": "L402",
+          "has_macaroon": true,
+          "has_invoice": true,
+          "invoice_prefix": "lnbc",
+          "raw_header": "L402 macaroon=\"eyJpZGVudGlmaWVyIjoiOGY4NjY2MTgzZDkxYmEwNTAwYmUwMDA0N2FjMDI0NGQiLCJsb2NhdGlvbiI6ImxpZ2h0bmluZ2ZhdWNldC5jb20iLCJjYXZlYXRzIjpbeyJ0eXBlIjoicGF5bWVudF9oYXNoIiwidmFsdWUiOiI3ZWM4MjUzNDc3MmNkZDc0YWI3Y2U5NjU0ZmU1MzJjNjZkMTBkMDk5ZjM1NmQzYWYxNWMxMzc2ODZiM2U2MTZkIn0seyJ0eXBlIjoiZXhwaXJ5IiwidmFsdWUiOjE3NzI3MzIxMzJ9LHsidHlwZSI6InNlcnZpY2UiLCJ2YWx1ZSI6InByaWNlX29yYWNsZSJ9LHsidHlwZSI6ImNhcGFiaWxpdGllcyIsInZhbHVlIjpbInN0YW5kYXJkIl19XSwic2lnbmF0dXJlIjoiMTEwZjE1MGE5M2NhMDYxNmEyOTIxNzEyODc0OWJkYWQxMzFhMDAyMjQ0MjFjZWU3N2VkOGY0MmRkNjRmNTNjOSJ9\", invoice=\"lnbc2u1p56n0yvpp50myz2drh9nwhf2mua9j5lefjcek3p5ye7dtd8tc4cymks6e7v9ksdzqf35kw6r5de5kueeqgesh2cm9wss9qunfvdjjqnmjv93kcefq9qerqvpqwdshguefcqzysxqzjcsp5axc3mza4a55grp9dd550kv9ttt3qjja8rkyn7j8ssfdhnz7hryms9qxpqysgqkzjmxe82lws3p42z2w880k8z9yhjvjjfc4qjypuwz8m385p548xps2v9w8u5l9xv3v2yjw99lnk8kv4a9k9c8ugr677nm0qcw53kaasq67nhnw\""
+        }
+      },
+      "probes": [
+        {
+          "url": "https://lightningfaucet.com/api/l402/price_oracle",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": true,
+          "www_authenticate_scheme": "L402",
+          "l402_details": {
+            "scheme": "L402",
+            "has_macaroon": true,
+            "has_invoice": true,
+            "invoice_prefix": "lnbc",
+            "raw_header": "L402 macaroon=\"eyJpZGVudGlmaWVyIjoiOGY4NjY2MTgzZDkxYmEwNTAwYmUwMDA0N2FjMDI0NGQiLCJsb2NhdGlvbiI6ImxpZ2h0bmluZ2ZhdWNldC5jb20iLCJjYXZlYXRzIjpbeyJ0eXBlIjoicGF5bWVudF9oYXNoIiwidmFsdWUiOiI3ZWM4MjUzNDc3MmNkZDc0YWI3Y2U5NjU0ZmU1MzJjNjZkMTBkMDk5ZjM1NmQzYWYxNWMxMzc2ODZiM2U2MTZkIn0seyJ0eXBlIjoiZXhwaXJ5IiwidmFsdWUiOjE3NzI3MzIxMzJ9LHsidHlwZSI6InNlcnZpY2UiLCJ2YWx1ZSI6InByaWNlX29yYWNsZSJ9LHsidHlwZSI6ImNhcGFiaWxpdGllcyIsInZhbHVlIjpbInN0YW5kYXJkIl19XSwic2lnbmF0dXJlIjoiMTEwZjE1MGE5M2NhMDYxNmEyOTIxNzEyODc0OWJkYWQxMzFhMDAyMjQ0MjFjZWU3N2VkOGY0MmRkNjRmNTNjOSJ9\", invoice=\"lnbc2u1p56n0yvpp50myz2drh9nwhf2mua9j5lefjcek3p5ye7dtd8tc4cymks6e7v9ksdzqf35kw6r5de5kueeqgesh2cm9wss9qunfvdjjqnmjv93kcefq9qerqvpqwdshguefcqzysxqzjcsp5axc3mza4a55grp9dd550kv9ttt3qjja8rkyn7j8ssfdhnz7hryms9qxpqysgqkzjmxe82lws3p42z2w880k8z9yhjvjjfc4qjypuwz8m385p548xps2v9w8u5l9xv3v2yjw99lnk8kv4a9k9c8ugr677nm0qcw53kaasq67nhnw\""
+          },
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_1_direct"
+        }
+      ],
+      "landing_page_signals": [],
+      "suggested_update": {
+        "action": "update_method",
+        "http_method": "POST",
+        "confidence": "high"
+      }
+    },
+    {
+      "service_id": "d23e850c-a661-4134-9e06-928ce81e0a00",
+      "registered_url": "https://lightningfaucet.com/api/l402/bid_board",
+      "registered_name": "Lightning Faucet Bid Board",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "found",
+        "found_url": "https://lightningfaucet.com/api/l402/bid_board",
+        "found_method": "POST",
+        "found_stage": "stage_1_direct",
+        "l402_details": {
+          "scheme": "L402",
+          "has_macaroon": true,
+          "has_invoice": true,
+          "invoice_prefix": "lnbc",
+          "raw_header": "L402 macaroon=\"eyJpZGVudGlmaWVyIjoiNjliZWI2ZjcxM2IyZDZmYmQzMDRhNmJmNjY1ZjYxMDAiLCJsb2NhdGlvbiI6ImxpZ2h0bmluZ2ZhdWNldC5jb20iLCJjYXZlYXRzIjpbeyJ0eXBlIjoicGF5bWVudF9oYXNoIiwidmFsdWUiOiJkYzFkNjg0YTYzNjFlOGFmMmY1NmMyMDYwNmFhY2MzNTcxZmY2YzYwNDEwYzJhZGE4OGUzMTVmNDYzNDIxZDY4In0seyJ0eXBlIjoiZXhwaXJ5IiwidmFsdWUiOjE3NzI3MzIxMzN9LHsidHlwZSI6InNlcnZpY2UiLCJ2YWx1ZSI6ImJpZF9ib2FyZCJ9LHsidHlwZSI6ImNhcGFiaWxpdGllcyIsInZhbHVlIjpbInZpZXciLCJib2FyZF9pZDpnbG9iYWwiXX1dLCJzaWduYXR1cmUiOiI4ZmJjZjE1NDI1OGNhNWYzM2U4ZDkwNzM3MDIxMTM4MWVhY2IxYTkzN2IzOGM2NjkyYjA3NTk5M2UxOTFkNGM4In0=\", invoice=\"lnbc100n1p56n0ydpp5mswksjnrv8527t6kcgrqd2kvx4cl7mrqgyxz4k5guv2lgc6zr45qdz9f35kw6r5de5kueeqgesh2cm9wssyy6tyyppx7ctjvssz6gzkd9jhwgpgxyczqumpw3ejjcqzysxqzjcsp58fkxxwscu7eezvha8y5ly6pfn9kmlh4q68njsphhmprk4al27xls9qxpqysgq5kgep832lf8jqghjmz769equxl9y6zv7yjtg7hnexczuv0sxluuz88veuwgpru5wrys9ceus96hepcq0yzzlcfucdph548hlsqfdp9gpemlvev\""
+        }
+      },
+      "probes": [
+        {
+          "url": "https://lightningfaucet.com/api/l402/bid_board",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": true,
+          "www_authenticate_scheme": "L402",
+          "l402_details": {
+            "scheme": "L402",
+            "has_macaroon": true,
+            "has_invoice": true,
+            "invoice_prefix": "lnbc",
+            "raw_header": "L402 macaroon=\"eyJpZGVudGlmaWVyIjoiNjliZWI2ZjcxM2IyZDZmYmQzMDRhNmJmNjY1ZjYxMDAiLCJsb2NhdGlvbiI6ImxpZ2h0bmluZ2ZhdWNldC5jb20iLCJjYXZlYXRzIjpbeyJ0eXBlIjoicGF5bWVudF9oYXNoIiwidmFsdWUiOiJkYzFkNjg0YTYzNjFlOGFmMmY1NmMyMDYwNmFhY2MzNTcxZmY2YzYwNDEwYzJhZGE4OGUzMTVmNDYzNDIxZDY4In0seyJ0eXBlIjoiZXhwaXJ5IiwidmFsdWUiOjE3NzI3MzIxMzN9LHsidHlwZSI6InNlcnZpY2UiLCJ2YWx1ZSI6ImJpZF9ib2FyZCJ9LHsidHlwZSI6ImNhcGFiaWxpdGllcyIsInZhbHVlIjpbInZpZXciLCJib2FyZF9pZDpnbG9iYWwiXX1dLCJzaWduYXR1cmUiOiI4ZmJjZjE1NDI1OGNhNWYzM2U4ZDkwNzM3MDIxMTM4MWVhY2IxYTkzN2IzOGM2NjkyYjA3NTk5M2UxOTFkNGM4In0=\", invoice=\"lnbc100n1p56n0ydpp5mswksjnrv8527t6kcgrqd2kvx4cl7mrqgyxz4k5guv2lgc6zr45qdz9f35kw6r5de5kueeqgesh2cm9wssyy6tyyppx7ctjvssz6gzkd9jhwgpgxyczqumpw3ejjcqzysxqzjcsp58fkxxwscu7eezvha8y5ly6pfn9kmlh4q68njsphhmprk4al27xls9qxpqysgq5kgep832lf8jqghjmz769equxl9y6zv7yjtg7hnexczuv0sxluuz88veuwgpru5wrys9ceus96hepcq0yzzlcfucdph548hlsqfdp9gpemlvev\""
+          },
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_1_direct"
+        }
+      ],
+      "landing_page_signals": [],
+      "suggested_update": {
+        "action": "update_method",
+        "http_method": "POST",
+        "confidence": "high"
+      }
+    },
+    {
+      "service_id": "367cdc78-7f10-45dd-a465-3e1f9a277e3f",
+      "registered_url": "https://lightningfaucet.com/api/l402/dad_joke",
+      "registered_name": "Lightning Faucet Dad Jokes",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "found",
+        "found_url": "https://lightningfaucet.com/api/l402/dad_joke",
+        "found_method": "POST",
+        "found_stage": "stage_1_direct",
+        "l402_details": {
+          "scheme": "L402",
+          "has_macaroon": true,
+          "has_invoice": true,
+          "invoice_prefix": "lnbc",
+          "raw_header": "L402 macaroon=\"eyJpZGVudGlmaWVyIjoiMTRhYTQ1YmNhZWI1ZGFiNzVkOGQ1ZThhN2IzMTc2NDYiLCJsb2NhdGlvbiI6ImxpZ2h0bmluZ2ZhdWNldC5jb20iLCJjYXZlYXRzIjpbeyJ0eXBlIjoicGF5bWVudF9oYXNoIiwidmFsdWUiOiIzOGMzY2JjZDE0YjFlYWZhMWVlY2QyMzkxNTZmOTgxMTg2ZDIxODEyZGQzNmE2MjM2NjdiMTJjYjdmNmY4NWZmIn0seyJ0eXBlIjoiZXhwaXJ5IiwidmFsdWUiOjE3NzI3MzIxMzN9LHsidHlwZSI6InNlcnZpY2UiLCJ2YWx1ZSI6ImRhZF9qb2tlIn0seyJ0eXBlIjoiY2FwYWJpbGl0aWVzIiwidmFsdWUiOlsic3RhbmRhcmQiXX1dLCJzaWduYXR1cmUiOiJmMjJmZGMxNzcyYzQwMTA3Nzg2Y2Y3NzE3YzUxZmYwOWJmYjVjYmNmM2Y3NmRkMDc5Zjk0MmJjNDNmOTJlMGE4In0=\", invoice=\"lnbc500n1p56n0ydpp58rpuhng5k84058hv6gu32muczxrdyxqjm5m2vgmx0vfvklm0shlsdzgf35kw6r5de5kueeqgesh2cm9wssygctyyp9x76m9yq58xarpdejxzuny9ssr2vpqwdshguefcqzysxqzjcsp5c9wq5efhqlu4gcsc8flwa7hq6k6av9x9zn8pp6afqwsg76l65ves9qxpqysgqmwwwj8xc4wecqe9tzyfy78gaxdl5fnuq6vfrczyldx7mtr29nltxmpareem9mrqlhugvfpmr0rn6d5vcvdcs2xj6re7kk4z7rmz76ycqw54472\""
+        }
+      },
+      "probes": [
+        {
+          "url": "https://lightningfaucet.com/api/l402/dad_joke",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": true,
+          "www_authenticate_scheme": "L402",
+          "l402_details": {
+            "scheme": "L402",
+            "has_macaroon": true,
+            "has_invoice": true,
+            "invoice_prefix": "lnbc",
+            "raw_header": "L402 macaroon=\"eyJpZGVudGlmaWVyIjoiMTRhYTQ1YmNhZWI1ZGFiNzVkOGQ1ZThhN2IzMTc2NDYiLCJsb2NhdGlvbiI6ImxpZ2h0bmluZ2ZhdWNldC5jb20iLCJjYXZlYXRzIjpbeyJ0eXBlIjoicGF5bWVudF9oYXNoIiwidmFsdWUiOiIzOGMzY2JjZDE0YjFlYWZhMWVlY2QyMzkxNTZmOTgxMTg2ZDIxODEyZGQzNmE2MjM2NjdiMTJjYjdmNmY4NWZmIn0seyJ0eXBlIjoiZXhwaXJ5IiwidmFsdWUiOjE3NzI3MzIxMzN9LHsidHlwZSI6InNlcnZpY2UiLCJ2YWx1ZSI6ImRhZF9qb2tlIn0seyJ0eXBlIjoiY2FwYWJpbGl0aWVzIiwidmFsdWUiOlsic3RhbmRhcmQiXX1dLCJzaWduYXR1cmUiOiJmMjJmZGMxNzcyYzQwMTA3Nzg2Y2Y3NzE3YzUxZmYwOWJmYjVjYmNmM2Y3NmRkMDc5Zjk0MmJjNDNmOTJlMGE4In0=\", invoice=\"lnbc500n1p56n0ydpp58rpuhng5k84058hv6gu32muczxrdyxqjm5m2vgmx0vfvklm0shlsdzgf35kw6r5de5kueeqgesh2cm9wssygctyyp9x76m9yq58xarpdejxzuny9ssr2vpqwdshguefcqzysxqzjcsp5c9wq5efhqlu4gcsc8flwa7hq6k6av9x9zn8pp6afqwsg76l65ves9qxpqysgqmwwwj8xc4wecqe9tzyfy78gaxdl5fnuq6vfrczyldx7mtr29nltxmpareem9mrqlhugvfpmr0rn6d5vcvdcs2xj6re7kk4z7rmz76ycqw54472\""
+          },
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_1_direct"
+        }
+      ],
+      "landing_page_signals": [],
+      "suggested_update": {
+        "action": "update_method",
+        "http_method": "POST",
+        "confidence": "high"
+      }
+    },
+    {
+      "service_id": "146410a2-87eb-4409-b3af-8669c4259a14",
+      "registered_url": "https://lightningfaucet.com/api/l402/entropy",
+      "registered_name": "Lightning Faucet Entropy",
+      "source": "l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "9e16873c-0843-4901-912d-14c124b516ef",
+      "registered_url": "https://lightningfaucet.com/api/l402/onchain_fee",
+      "registered_name": "Lightning Faucet Fee Estimate",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "337e38fc-7b3a-4c77-a91e-154f77a6f4da",
+      "registered_url": "https://lightningfaucet.com/api/l402/fortune",
+      "registered_name": "Lightning Faucet Fortune",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "fa7369a7-42ac-4e0b-a898-38132c89d2dc",
+      "registered_url": "https://lightningfaucet.com/api/l402/headers",
+      "registered_name": "Lightning Faucet Headers Echo",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "fb5db14c-179e-47c1-94cd-b1915b18320c",
+      "registered_url": "https://lightningfaucet.com/api/l402/invoice_decode",
+      "registered_name": "Lightning Faucet Invoice Decoder",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "c6903d9b-5064-41c6-ae5d-169ef9267ce1",
+      "registered_url": "https://lightningfaucet.com/api/l402/joke",
+      "registered_name": "Lightning Faucet Joke",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "c7dba6b7-273d-4dc7-b9a8-4620e97a31da",
+      "registered_url": "https://lightningfaucet.com/api/l402/keywords",
+      "registered_name": "Lightning Faucet Keyword Extraction",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "66cba30f-8113-43a4-b9fc-266f79ad3628",
+      "registered_url": "https://lightningfaucet.com/api/l402/llm_prompt",
+      "registered_name": "Lightning Faucet LLM Prompt",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "bb542ead-aa09-484c-a1ef-bad5bc161bb1",
+      "registered_url": "https://lightningfaucet.com/api/l402/lnurl_metadata",
+      "registered_name": "Lightning Faucet LNURL Metadata",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "8ed31217-3659-475d-ade7-c9b61c6f04ee",
+      "registered_url": "https://lightningfaucet.com/api/l402/memory",
+      "registered_name": "Lightning Faucet Memory Bank",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "5a20c7b1-8dc0-4759-bf83-866a8f7e5b54",
+      "registered_url": "https://lightningfaucet.com/api/l402/mempool_heatmap",
+      "registered_name": "Lightning Faucet Mempool Heatmap",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "2652ed8b-06b8-4d0a-aec2-2f5d39bc9e07",
+      "registered_url": "https://lightningfaucet.com/api/l402/node_info",
+      "registered_name": "Lightning Faucet Node Info",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "c35d317f-889c-48fb-a39e-daeec1c3bd5f",
+      "registered_url": "https://lightningfaucet.com/api/l402/profanity_filter",
+      "registered_name": "Lightning Faucet Profanity Filter",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "d2d9a3a1-6a6e-4a22-888b-4168b859c264",
+      "registered_url": "https://lightningfaucet.com/api/l402/quote",
+      "registered_name": "Lightning Faucet Quote",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "a2c35d58-1bde-4c6c-aaf5-ae37c7d5d08f",
+      "registered_url": "https://lightningfaucet.com/api/l402/random_sats",
+      "registered_name": "Lightning Faucet Random Sats",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "e9ee9c6a-1ad9-4135-9a5f-2d85ddf56ab5",
+      "registered_url": "https://lightningfaucet.com/api/l402/satoshi_quote",
+      "registered_name": "Lightning Faucet Satoshi Quotes",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "cf3abf5d-347e-4a2c-ad91-1d318179e734",
+      "registered_url": "https://lightningfaucet.com/api/l402/sentiment",
+      "registered_name": "Lightning Faucet Sentiment Analysis",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "35680e68-d656-4e58-b6fd-0cf2120229e0",
+      "registered_url": "https://lightningfaucet.com/api/l402/summarize_title",
+      "registered_name": "Lightning Faucet Text Summarizer",
+      "source": "satring,l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "9179ceb4-9eda-4828-8378-fefd2e644424",
+      "registered_url": "https://lightningfaucet.com/api/l402/time",
+      "registered_name": "Lightning Faucet Timestamp",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "aedb2052-159b-4721-9f0a-7327ed587709",
+      "registered_url": "https://lightningfaucet.com/api/l402/uuid",
+      "registered_name": "Lightning Faucet UUID Generator",
+      "source": "satring",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "335f850b-e27f-402a-8067-d99a6c1e158d",
+      "registered_url": "https://lightningfaucet.com/api/l402/keyword",
+      "registered_name": "Lightning Faucet: Keyword Extraction",
+      "source": "l402apps",
+      "provider": "Lightning Faucet",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "e992047d-c818-4670-94f1-b3572db7cf4c",
+      "registered_url": "https://lightningprox.com/",
+      "registered_name": "LightningProx",
+      "source": "satring",
+      "provider": "LPX Digital Group",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "1161ab86-c0d1-4439-a82c-b34e2eddf66e",
+      "registered_url": "https://maximumsats.com/",
+      "registered_name": "Maximum Sats",
+      "source": "l402apps",
+      "provider": "Maximum Sats",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "4f47cb9e-9dcf-4718-9626-92f1b6af8c28",
+      "registered_url": "https://openagents.com/",
+      "registered_name": "Open Agents",
+      "source": "satring",
+      "provider": "Open Agents",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "b3a51e53-d07b-4d53-ae7b-4b22908cec20",
+      "registered_url": "https://dispatches.mystere.me/",
+      "registered_name": "Satoshi Dispatches",
+      "source": "satring",
+      "provider": null,
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "e543bd95-dcd3-4fad-8446-0a2ed5ddcb4a",
+      "registered_url": "https://satring.com/api/v1/services",
+      "registered_name": "Satring Directory API",
+      "source": "satring",
+      "provider": "satring",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Link: /docs",
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"paywall\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "5f9c5f97-55c2-4618-a8ed-26b043d4b24a",
+      "registered_url": "https://satring.com/docs#/API/create_rating_api_v1_services__slug__ratings_post",
+      "registered_name": "Satring Ratings API",
+      "source": "satring",
+      "provider": "satring",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Link: /docs",
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"paywall\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "73b59eca-a130-4e13-9b95-2019e2378ada",
+      "registered_url": "https://satring.com/docs#/API/reputation_api_v1_services__slug__reputation_get",
+      "registered_name": "Satring Reputation API",
+      "source": "satring",
+      "provider": "satring",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Link: /docs",
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"paywall\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "f7e753f8-555e-471c-a5f4-9509bb84c9fd",
+      "registered_url": "https://satring.com/api/v1/search",
+      "registered_name": "Satring Search API",
+      "source": "satring",
+      "provider": "satring",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Link: /docs",
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"paywall\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "8113a5b4-f3eb-4d8b-8677-fb7c5a951bcc",
+      "registered_url": "https://satring.com/docs#/API/update_service_api_v1_services__slug__patch",
+      "registered_name": "Satring Service Edit API",
+      "source": "satring",
+      "provider": "satring",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Link: /docs",
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"paywall\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "aff4d172-2c4a-44fc-abde-ce5f26b832ac",
+      "registered_url": "https://sats4ai.com/.well-known/l402-services",
+      "registered_name": "Sats4AI",
+      "source": "satring",
+      "provider": "Sats4AI",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "0f38bb81-7435-4580-89ee-2362fa3cfc74",
+      "registered_url": "https://skillscan.chitacloud.dev/",
+      "registered_name": "SkillScan - AI Agent Security Scanner",
+      "source": "satring",
+      "provider": "Alex Chen (AutoPilotAI)",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "b29d6d47-c7e6-411a-b6d6-424fa5eb73af",
+      "registered_url": "https://speedread.fit/",
+      "registered_name": "Speedread",
+      "source": "satring,l402apps",
+      "provider": "Bmur",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "07fbe090-a5e5-416f-952c-40eab23b4c7c",
+      "registered_url": "https://arknode.ai/",
+      "registered_name": "The Ark AI",
+      "source": "satring",
+      "provider": "The Ark",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "cecaf91c-b563-46ba-96e1-ad1311aa28f8",
+      "registered_url": "https://wot.klabo.world/",
+      "registered_name": "Visit Maximum Sats &rarr;",
+      "source": "satring",
+      "provider": "Visit Maximum Sats &rarr;",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "dd8682ad-41eb-43be-aee8-dbd402805ba5",
+      "registered_url": "https://wot.klabo.world/trust-circle?pubkey=test",
+      "registered_name": "WoT Scoring API: Analyze a pubkey's mutual-follow trust circle",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "e34b7328-21d7-45be-bd24-6aa3ce4ee314",
+      "registered_url": "https://wot.klabo.world/follow-quality?pubkey=test",
+      "registered_name": "WoT Scoring API: Analyze the quality of a pubkey's follow list",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "9c81441e-d90f-4230-b469-98306a6ff124",
+      "registered_url": "https://wot.klabo.world/audit?pubkey=test",
+      "registered_name": "WoT Scoring API: Audit why a pubkey has its score",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "e067abf3-923c-42a2-960f-d5d82b454b9c",
+      "registered_url": "https://wot.klabo.world/sybil/batch",
+      "registered_name": "WoT Scoring API: Batch Sybil resistance scoring for up to 50 pubkeys",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "4ccb804d-3358-4edb-838c-9cda97958fb6",
+      "registered_url": "https://wot.klabo.world/influence/batch",
+      "registered_name": "WoT Scoring API: Batch static influence analysis for multiple pubkeys",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "e1055726-ae89-48da-b556-a4c648882eb5",
+      "registered_url": "https://wot.klabo.world/spam/batch",
+      "registered_name": "WoT Scoring API: Check up to 100 pubkeys for spam",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "5ee93edb-1165-46ca-955f-27e77b1be00c",
+      "registered_url": "https://wot.klabo.world/compare-providers?pubkey=test",
+      "registered_name": "WoT Scoring API: Compare WoT scores across NIP-85 providers",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "4a3c01cb-6beb-4233-a603-d00737a0e84b",
+      "registered_url": "https://wot.klabo.world/trust-circle/compare?pubkey1=test&pubkey2=test",
+      "registered_name": "WoT Scoring API: Compare two pubkeys' trust circles",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "1cb73e14-d5f2-4031-a348-8e86e75cac9c",
+      "registered_url": "https://wot.klabo.world/reputation?pubkey=test",
+      "registered_name": "WoT Scoring API: Comprehensive reputation profile for a pubkey",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "425b96e6-9a83-4d04-8b16-b55ec0f4d13a",
+      "registered_url": "https://wot.klabo.world/weboftrust?pubkey=test",
+      "registered_name": "WoT Scoring API: D3.js-compatible trust graph visualization",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "d36eaedf-3d07-42fa-84f9-df8bec5e1d69",
+      "registered_url": "https://wot.klabo.world/event?id=test",
+      "registered_name": "WoT Scoring API: Engagement score for a Nostr event",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "1f750162-68bc-4e3c-a911-89404276ba3a",
+      "registered_url": "https://wot.klabo.world/export",
+      "registered_name": "WoT Scoring API: Export all scores",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "60f0d364-af49-4c85-b385-e72adaf75d83",
+      "registered_url": "https://wot.klabo.world/providers",
+      "registered_name": "WoT Scoring API: External NIP-85 providers",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "e88b02ab-7b4c-4f01-a841-929e82115148",
+      "registered_url": "https://wot.klabo.world/similar?pubkey=test",
+      "registered_name": "WoT Scoring API: Find pubkeys with similar follow graphs",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "1e4941c0-c75a-429f-9a8f-10f254d1930f",
+      "registered_url": "https://wot.klabo.world/graph",
+      "registered_name": "WoT Scoring API: Find shortest trust path between two pubkeys",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "2f4a2828-5f78-4303-a129-184f53478d32",
+      "registered_url": "https://wot.klabo.world/recommend?pubkey=test",
+      "registered_name": "WoT Scoring API: Follow recommendations via friends-of-friends",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "9d04a0da-3231-424b-8ce2-20e955274d3b",
+      "registered_url": "https://wot.klabo.world/score?pubkey=test",
+      "registered_name": "WoT Scoring API: Get trust score for a pubkey",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "a3039f78-ebb9-4da0-ab45-271b6d0eb838",
+      "registered_url": "https://wot.klabo.world/health",
+      "registered_name": "WoT Scoring API: Health check",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "42e2832e-f568-49ce-b19f-3ce78b76360a",
+      "registered_url": "https://wot.klabo.world/pricing",
+      "registered_name": "WoT Scoring API: L402 pricing and free tier",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "889a4b42-ae86-42f4-8d1c-adff6a49bc88",
+      "registered_url": "https://wot.klabo.world/trust-path?from=test&to=test",
+      "registered_name": "WoT Scoring API: Multi-hop trust path analysis between two pubkeys",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "cc2abd72-0d0a-4030-ae2b-e9363146d86b",
+      "registered_url": "https://wot.klabo.world/spam?pubkey=test",
+      "registered_name": "WoT Scoring API: Multi-signal spam classification",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "4db842c9-5849-4766-aaf6-6d3920e4cd1d",
+      "registered_url": "https://wot.klabo.world/blocked",
+      "registered_name": "WoT Scoring API: Mute list analysis (NIP-51 kind 10000)",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "cd141fea-bd6f-443f-89e7-4d64db65d57f",
+      "registered_url": "https://wot.klabo.world/authorized",
+      "registered_name": "WoT Scoring API: NIP-85 authorization tracking",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "f8de54a8-b27b-4a7b-b1ad-d72774a6a65e",
+      "registered_url": "https://wot.klabo.world/metadata?pubkey=test",
+      "registered_name": "WoT Scoring API: NIP-85 metadata for a pubkey",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "c26bdbfb-8130-4275-9759-283205f03bd4",
+      "registered_url": "https://wot.klabo.world/openapi.json",
+      "registered_name": "WoT Scoring API: OpenAPI 3.0 specification",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "ac526a9e-1ac9-406d-83ae-b0d62555f353",
+      "registered_url": "https://wot.klabo.world/personalized?viewer=test&target=test",
+      "registered_name": "WoT Scoring API: Personalized trust score relative to a viewer",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "441ab7b9-cb55-4567-90d8-50581e48063c",
+      "registered_url": "https://wot.klabo.world/predict?source=test&target=test",
+      "registered_name": "WoT Scoring API: Predict whether a follow relationship will form between two pubkeys",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "69ffb5b1-9b63-41d2-9713-22b0a8df133d",
+      "registered_url": "https://wot.klabo.world/ws/scores",
+      "registered_name": "WoT Scoring API: Real-time score streaming via WebSocket",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "a9bdad2a-1dcd-4330-ae15-d4191c712406",
+      "registered_url": "https://wot.klabo.world/reputation",
+      "registered_name": "WoT Scoring API: Reputation Profile",
+      "source": "l402apps",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "f39d90e4-8dfd-4229-adc6-556aa333f628",
+      "registered_url": "https://wot.klabo.world/nip05?id=test",
+      "registered_name": "WoT Scoring API: Resolve NIP-05 identifier to trust profile",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "d864cd06-faaa-4581-b6a3-fcb1585830d1",
+      "registered_url": "https://wot.klabo.world/nip05/batch",
+      "registered_name": "WoT Scoring API: Resolve up to 50 NIP-05 identifiers concurrently",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "2b96903d-e38d-4c94-be99-34f9dfef1900",
+      "registered_url": "https://wot.klabo.world/nip05/reverse?pubkey=test",
+      "registered_name": "WoT Scoring API: Reverse NIP-05 lookup from pubkey",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "12c83ba6-c1f8-469f-8228-9c7db5befe13",
+      "registered_url": "https://wot.klabo.world/external",
+      "registered_name": "WoT Scoring API: Score for external identifiers (hashtags, URLs)",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "777ef64e-f3ff-4f2f-af88-7e41c903570f",
+      "registered_url": "https://wot.klabo.world/batch",
+      "registered_name": "WoT Scoring API: Score up to 100 pubkeys in one request",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "dc38fc2e-a9e7-45f1-829d-be6a6d708cdb",
+      "registered_url": "https://wot.klabo.world/stats",
+      "registered_name": "WoT Scoring API: Service statistics",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "95691c5e-e3d0-4fb3-b95b-81c5e57bb615",
+      "registered_url": "https://wot.klabo.world/compare?a=test&b=test",
+      "registered_name": "WoT Scoring API: Side-by-side trust comparison of two pubkeys",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "1593af09-1e2b-40d5-bb3c-2d848f1bfb86",
+      "registered_url": "https://wot.klabo.world/influence?pubkey=test&other=test",
+      "registered_name": "WoT Scoring API: Simulate how a follow/unfollow would ripple through PageRank scores",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "8336bbee-bf06-4572-994c-0727f4399224",
+      "registered_url": "https://wot.klabo.world/sybil",
+      "registered_name": "WoT Scoring API: Sybil Resistance Score",
+      "source": "l402apps",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "efbac573-91e4-4717-943c-b18c0c192990",
+      "registered_url": "https://wot.klabo.world/sybil?pubkey=test",
+      "registered_name": "WoT Scoring API: Sybil resistance score for a pubkey",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "b4e68107-3402-4753-81d3-0ad5e0cd32b1",
+      "registered_url": "https://wot.klabo.world/decay?pubkey=test",
+      "registered_name": "WoT Scoring API: Time-decay adjusted trust score",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "59a4a9b4-2de7-44dc-b573-848c74f15264",
+      "registered_url": "https://wot.klabo.world/top",
+      "registered_name": "WoT Scoring API: Top 50 pubkeys by PageRank",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "27e2f887-27e0-476e-b43e-546bb6c4129c",
+      "registered_url": "https://wot.klabo.world/score",
+      "registered_name": "WoT Scoring API: Trust Score",
+      "source": "l402apps",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "b72204df-18d5-4cef-a8fc-a05341666c9d",
+      "registered_url": "https://wot.klabo.world/anomalies?pubkey=test",
+      "registered_name": "WoT Scoring API: Trust anomaly detection for a pubkey",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "a5b315e7-761d-41f3-a144-c57442124ad4",
+      "registered_url": "https://wot.klabo.world/relay?url=test",
+      "registered_name": "WoT Scoring API: Trust assessment for a Nostr relay",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "9e55f23f-6de0-4d81-8d98-09c1c1628e34",
+      "registered_url": "https://wot.klabo.world/communities",
+      "registered_name": "WoT Scoring API: Trust communities via label propagation",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "87047ba4-1c32-4561-b96e-11896652eabd",
+      "registered_url": "https://wot.klabo.world/timeline?pubkey=test",
+      "registered_name": "WoT Scoring API: Trust evolution timeline for a pubkey",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "9e93ce56-3e32-46dc-b389-1c7c9876a7bf",
+      "registered_url": "https://wot.klabo.world/verify",
+      "registered_name": "WoT Scoring API: Verify a NIP-85 assertion from any provider",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "8feea91a-534f-4c92-ac5c-7482160b9d8a",
+      "registered_url": "https://botlab.dev/api/web-search",
+      "registered_name": "agent web search",
+      "source": "satring",
+      "provider": "rob",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "14436e2e-c19c-4836-8e05-70de562dee35",
+      "registered_url": "https://api.lightningenable.com/api",
+      "registered_name": "api.lightningenable.com/api",
+      "source": "satring",
+      "provider": "api.lightningenable.com",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "GET",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        }
+      ],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\"",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": {
+        "action": "manual_review",
+        "confidence": "medium",
+        "notes": "Got 402 but missing valid L402 headers"
+      }
+    },
+    {
+      "service_id": "6657033f-4e58-480c-8176-8f8e56670476",
+      "registered_url": "https://api.lightningenable.com/health",
+      "registered_name": "api.lightningenable.com/health",
+      "source": "satring",
+      "provider": "api.lightningenable.com",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "GET",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        }
+      ],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\"",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": {
+        "action": "manual_review",
+        "confidence": "medium",
+        "notes": "Got 402 but missing valid L402 headers"
+      }
+    },
+    {
+      "service_id": "d66b8fce-7b43-483a-b8be-bed48cea3e32",
+      "registered_url": "https://api.lightningenable.com/tools/l402-dotnet",
+      "registered_name": "api.lightningenable.com/tools/l402-dotnet",
+      "source": "satring",
+      "provider": "api.lightningenable.com",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "GET",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/generate",
+          "method": "POST",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/generate",
+          "method": "GET",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/inference",
+          "method": "POST",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/inference",
+          "method": "GET",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/search",
+          "method": "POST",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        }
+      ],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": {
+        "action": "manual_review",
+        "confidence": "medium",
+        "notes": "Got 402 but missing valid L402 headers"
+      }
+    },
+    {
+      "service_id": "851e7f91-f011-49ff-8079-34f2b9ab6cfb",
+      "registered_url": "https://api.lightningenable.com/tools/l402-requests",
+      "registered_name": "api.lightningenable.com/tools/l402-requests",
+      "source": "satring",
+      "provider": "api.lightningenable.com",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "GET",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/v1/chat",
+          "method": "POST",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/v1/chat",
+          "method": "GET",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/v1/completions",
+          "method": "POST",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/v1/completions",
+          "method": "GET",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/chat",
+          "method": "POST",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/chat",
+          "method": "GET",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_4_common_paths"
+        }
+      ],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": {
+        "action": "manual_review",
+        "confidence": "medium",
+        "notes": "Got 402 but missing valid L402 headers"
+      }
+    },
+    {
+      "service_id": "3d524d8d-6eb4-4de8-8ee9-c894f2ed03cb",
+      "registered_url": "https://api.lightningenable.com/tools/l402-ts",
+      "registered_name": "api.lightningenable.com/tools/l402-ts",
+      "source": "satring",
+      "provider": "api.lightningenable.com",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [
+        {
+          "url": "https://api.lightningenable.com/tools/l402-ts",
+          "method": "POST",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_1_direct"
+        },
+        {
+          "url": "https://api.lightningenable.com/tools/l402-ts",
+          "method": "GET",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_1_direct"
+        },
+        {
+          "url": "https://api.lightningenable.com/tools/l402-ts",
+          "method": "HEAD",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_1_direct"
+        },
+        {
+          "url": "https://api.lightningenable.com/.well-known/l402-services",
+          "method": "GET",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_2_well_known"
+        },
+        {
+          "url": "https://api.lightningenable.com/.well-known/l402",
+          "method": "GET",
+          "status": null,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": "timeout",
+          "stage": "stage_2_well_known"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "GET",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        }
+      ],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": {
+        "action": "manual_review",
+        "confidence": "medium",
+        "notes": "Got 402 but missing valid L402 headers"
+      }
+    },
+    {
+      "service_id": "b92b1aee-46c5-4517-bb33-87cc6bb50dff",
+      "registered_url": "https://arknode.ai/api",
+      "registered_name": "arknode.ai/api",
+      "source": "satring",
+      "provider": "arknode.ai",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "176da459-b882-418e-9460-9cc6acbb5c39",
+      "registered_url": "https://arknode.ai/l402",
+      "registered_name": "arknode.ai/l402",
+      "source": "satring",
+      "provider": "arknode.ai",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "4a2b267b-2692-48b3-951b-1a0f4c9e6c70",
+      "registered_url": "https://arknode.ai/services",
+      "registered_name": "arknode.ai/services",
+      "source": "satring",
+      "provider": "arknode.ai",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "c2cb587b-49bc-4fd9-85ee-17cb61e961de",
+      "registered_url": "https://arknode.ai/task",
+      "registered_name": "arknode.ai/task",
+      "source": "satring",
+      "provider": "The Ark AI — Lightning-Paid AI Agent",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "d0b930b7-0617-4d51-aaf9-6391d4b5e9bd",
+      "registered_url": "https://arknode.ai/workflows",
+      "registered_name": "arknode.ai/workflows",
+      "source": "satring",
+      "provider": "arknode.ai",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /l402"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "f6dd02a7-b0ec-45d8-8526-371875d2a176",
+      "registered_url": "https://api.lightningenable.com/api/invoices",
+      "registered_name": "const response = await fetch(' {",
+      "source": "satring",
+      "provider": "api.lightningenable.com",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "POST",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        },
+        {
+          "url": "https://api.lightningenable.com/api/l402",
+          "method": "GET",
+          "status": 402,
+          "has_www_authenticate": false,
+          "www_authenticate_scheme": null,
+          "l402_details": null,
+          "body_preview": null,
+          "error": null,
+          "stage": "stage_4_common_paths"
+        }
+      ],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\"",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": {
+        "action": "manual_review",
+        "confidence": "medium",
+        "notes": "Got 402 but missing valid L402 headers"
+      }
+    },
+    {
+      "service_id": "1ff9231c-90a8-4777-b185-1c02e96f01e4",
+      "registered_url": "https://lightningfaucet.com/api",
+      "registered_name": "lightningfaucet.com: /api/",
+      "source": "satring",
+      "provider": "lightningfaucet.com",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\"",
+        "robots.txt Disallow: /api/"
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "f6ff581c-7a06-4715-b87a-e32e20750de6",
+      "registered_url": "https://wot.klabo.world/swagger",
+      "registered_name": "wot.klabo.world/swagger",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "0ba486b2-d1b8-4a7a-b6b5-ded97b33459f",
+      "registered_url": "https://wot.klabo.world/network-health",
+      "registered_name": "WoT Scoring API: Comprehensive network topology health analysis",
+      "source": "satring",
+      "provider": "WoT Scoring API",
+      "current_health": "down",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "4cc8bf32-abbd-4504-ae95-9e7f04e14b05",
+      "registered_url": "https://isitarug.com/",
+      "registered_name": "IsItARug",
+      "source": "satring",
+      "provider": "LPX Digital Group",
+      "current_health": "unknown",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "5353b901-119d-4563-9dbe-7f60c08f60d5",
+      "registered_url": "https://lpxpoly.com/",
+      "registered_name": "LPXPoly",
+      "source": "satring",
+      "provider": "LPX Digital Group",
+      "current_health": "unknown",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "87bcc17b-f2c6-4e14-9750-9def791ca547",
+      "registered_url": "https://satsforai.com/",
+      "registered_name": "SatsForAI",
+      "source": "satring",
+      "provider": "LPX Digital Group",
+      "current_health": "unknown",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"Lightning\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "88095036-4c4a-429e-bc0d-4993dc44d283",
+      "registered_url": "https://solanaprox.com/",
+      "registered_name": "SolanaProx",
+      "source": "satring",
+      "provider": "LPX Digital Group",
+      "current_health": "unknown",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "321651d8-d645-4ff7-87ae-114924e9db10",
+      "registered_url": "https://www.l402apps.com/api/api-submissions",
+      "registered_name": "L402 Apps: Submit API Endpoint",
+      "source": "l402apps",
+      "provider": "L402 Apps",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "partial"
+      },
+      "probes": [],
+      "landing_page_signals": [
+        "Text match: \"L402\"",
+        "Text match: \"Lightning\"",
+        "Text match: \"402\""
+      ],
+      "suggested_update": null
+    },
+    {
+      "service_id": "4c627e1c-80b3-43cd-bf37-00ebdf2207f7",
+      "registered_url": "https://wot.klabo.world/spam",
+      "registered_name": "WoT Scoring API: Spam Classification",
+      "source": "l402apps",
+      "provider": "WoT Scoring API",
+      "current_health": "degraded",
+      "discovery_result": {
+        "status": "not_found"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    },
+    {
+      "service_id": "f11d708f-8b0e-4fb2-a61e-38e9267db980",
+      "registered_url": "https://n37jizjosim75li364amv2e3bnse5o4zt5we7l4syfb7cvp5xukfejyd.onion/",
+      "registered_name": "Billy L402 Registry + Market API",
+      "source": "satring",
+      "provider": null,
+      "current_health": "down",
+      "discovery_result": {
+        "status": "not_found",
+        "error": "onion domain skipped"
+      },
+      "probes": [],
+      "landing_page_signals": [],
+      "suggested_update": null
+    }
+  ]
+}
