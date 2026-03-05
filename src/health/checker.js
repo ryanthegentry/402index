@@ -4,7 +4,7 @@ import { isIPv4, isIPv6 } from 'net'
 import { dirname } from 'path'
 import db, { DB_PATH } from '../db.js'
 import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from '../services/l402-utils.js'
-import { parsePaymentRequired, validatePaymentRequirements } from '../services/x402-utils.js'
+import { parsePaymentRequired, parsePaymentRequiredBody, validatePaymentRequirements } from '../services/x402-utils.js'
 
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
@@ -133,6 +133,11 @@ const getRecentLatencies = () => stmt('getRecentLatencies', `
   LIMIT 20
 `)
 
+const persistHttpMethod = () => stmt('persistHttpMethod', `
+  UPDATE services SET http_method = @http_method, updated_at = datetime('now')
+  WHERE id = @id AND (http_method IS NULL OR http_method = 'GET')
+`)
+
 function calculateP50(serviceId) {
   const rows = getRecentLatencies().all(serviceId)
   if (rows.length === 0) return null
@@ -146,10 +151,10 @@ function calculateP50(serviceId) {
  * For POST: sends POST with empty JSON body (L402 middleware fires before body validation).
  * @param {string} url
  * @param {string} [httpMethod='GET']
- * @returns {{ httpStatus: number|null, responseTimeMs: number|null, errorMessage: string|null, wwwAuthenticate: string|null, paymentRequired: string|null }}
+ * @returns {{ httpStatus: number|null, responseTimeMs: number|null, errorMessage: string|null, wwwAuthenticate: string|null, paymentRequired: string|null, responseBody: string|null }}
  */
 async function performHttpCheck(url, httpMethod = 'GET') {
-  const empty = { httpStatus: null, responseTimeMs: null, errorMessage: null, wwwAuthenticate: null, paymentRequired: null }
+  const empty = { httpStatus: null, responseTimeMs: null, errorMessage: null, wwwAuthenticate: null, paymentRequired: null, responseBody: null }
 
   // SSRF protection: block non-http(s) schemes
   if (isBlockedScheme(url)) {
@@ -178,6 +183,7 @@ async function performHttpCheck(url, httpMethod = 'GET') {
         errorMessage: null,
         wwwAuthenticate: postRes.headers.get('www-authenticate'),
         paymentRequired: postRes.headers.get('payment-required'),
+        responseBody: null,
       }
     }
 
@@ -194,6 +200,7 @@ async function performHttpCheck(url, httpMethod = 'GET') {
     let paymentRequired = headRes.headers.get('payment-required')
 
     // If not 402, retry with GET (some endpoints only return 402 on GET)
+    let responseBody = null
     if (httpStatus !== 402) {
       const startGet = Date.now()
       const getRes = await fetch(url, {
@@ -205,9 +212,19 @@ async function performHttpCheck(url, httpMethod = 'GET') {
       responseTimeMs = Date.now() - startGet
       wwwAuthenticate = getRes.headers.get('www-authenticate')
       paymentRequired = getRes.headers.get('payment-required')
+
+      // Capture response body for V1 x402 parsing (limit 64KB)
+      if (httpStatus === 402 && !paymentRequired) {
+        try {
+          responseBody = await getRes.text()
+          if (responseBody.length > 65536) responseBody = null
+        } catch {
+          responseBody = null
+        }
+      }
     }
 
-    return { httpStatus, responseTimeMs, errorMessage: null, wwwAuthenticate, paymentRequired }
+    return { httpStatus, responseTimeMs, errorMessage: null, wwwAuthenticate, paymentRequired, responseBody }
   } catch (err) {
     const errorMessage = (err.name === 'TimeoutError' || err.code === 'ABORT_ERR') ? 'timeout' : err.message
     return { ...empty, errorMessage }
@@ -395,6 +412,37 @@ async function checkService(service) {
     }
   }
 
+  // L402 http_method auto-detection: retry with POST when GET/HEAD returns 405/400/200
+  // Only for L402 endpoints that haven't been manually set to a specific method
+  if (protocol === 'L402' && (!http_method || http_method === 'GET') && classification.healthStatus !== 'healthy') {
+    const shouldTryPost = (
+      classification.checkStatus === 'method_not_allowed' ||  // 405
+      httpResult.httpStatus === 400 ||                         // 400 (often wrong method)
+      httpResult.httpStatus === 200                            // 200 (paywall may only gate POST)
+    )
+
+    if (shouldTryPost) {
+      try {
+        const postResult = await performHttpCheck(url, 'POST')
+        if (postResult.httpStatus === 402) {
+          const postParsed = parseWwwAuthenticate(postResult.wwwAuthenticate)
+          if (postParsed.scheme && /L402|LSAT/i.test(postParsed.scheme) &&
+              isValidMacaroon(postParsed.macaroon) && isValidInvoice(postParsed.invoice)) {
+            // POST returns valid 402 — this is a POST-only endpoint
+            classification.healthStatus = 'healthy'
+            classification.checkStatus = 'healthy'
+            classification.consecutiveFailures = 0
+
+            // Persist http_method=POST for future checks (only if not manually set)
+            persistHttpMethod().run({ id, http_method: 'POST' })
+          }
+        }
+      } catch {
+        // POST retry failed — keep original classification
+      }
+    }
+  }
+
   // x402 payment requirements validation
   let x402PaymentValid = null
   let x402FacilitatorReachable = null
@@ -409,6 +457,7 @@ async function checkService(service) {
 
       // HEAD returned 402 but no PAYMENT-REQUIRED header — retry with GET.
       // Many x402 servers only include payment headers on content-bearing responses.
+      let v1BodyText = httpResult.responseBody // Body from performHttpCheck GET fallback
       if (!paymentRequiredHeader && (http_method || 'GET') !== 'POST') {
         try {
           const getRes = await fetch(url, {
@@ -418,15 +467,37 @@ async function checkService(service) {
           })
           if (getRes.status === 402) {
             paymentRequiredHeader = getRes.headers.get('payment-required')
+            // If still no header, capture body for V1 parsing
+            if (!paymentRequiredHeader) {
+              try {
+                v1BodyText = await getRes.text()
+                if (v1BodyText.length > 65536) v1BodyText = null
+              } catch {
+                v1BodyText = null
+              }
+            }
           }
         } catch {
           // GET retry failed — leave paymentRequiredHeader as null
         }
       }
 
+      // Try V2 header parsing first
       const parsed = parsePaymentRequired(paymentRequiredHeader)
+      let accepts = null
+
       if (parsed.valid) {
-        const validation = validatePaymentRequirements(parsed.accepts)
+        accepts = parsed.accepts
+      } else if (v1BodyText) {
+        // V2 header missing/invalid — try V1 body parsing
+        const bodyParsed = parsePaymentRequiredBody(v1BodyText)
+        if (bodyParsed.valid) {
+          accepts = bodyParsed.accepts
+        }
+      }
+
+      if (accepts) {
+        const validation = validatePaymentRequirements(accepts)
         x402PaymentValid = validation.valid ? 1 : 0
         x402AssetKnown = validation.assetKnown ? 1 : 0
 
@@ -440,7 +511,7 @@ async function checkService(service) {
           x402FacilitatorReachable = null
         }
       } else {
-        // PAYMENT-REQUIRED header missing or unparseable even after GET retry
+        // PAYMENT-REQUIRED header AND V1 body both missing/unparseable
         x402PaymentValid = 0
 
         // Diagnostic: log first N parse failures per cycle when X402_DIAG=1
@@ -448,7 +519,8 @@ async function checkService(service) {
           x402DiagCount++
           const hdr = paymentRequiredHeader
           const headerDesc = hdr === null ? 'null' : hdr === '' ? 'empty' : `present(${hdr.substring(0, 100)})`
-          console.log(`[health:x402-diag] ${url} header=${headerDesc} error=${parsed.error}`)
+          const bodyDesc = v1BodyText ? `body(${v1BodyText.substring(0, 100)})` : 'no-body'
+          console.log(`[health:x402-diag] ${url} header=${headerDesc} ${bodyDesc} error=${parsed.error}`)
         }
       }
     }
