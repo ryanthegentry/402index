@@ -327,6 +327,35 @@ describe('validatePaymentRequirements', () => {
     const result = validatePaymentRequirements([{ ...validEntry, maxAmountRequired: '0' }])
     assert.equal(result.entries[0].hasAmount, true)
   })
+
+  it('accepts V2 amount field instead of maxAmountRequired', () => {
+    const v2Entry = {
+      payTo: '0x1234567890abcdef1234567890abcdef12345678',
+      asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+      network: 'eip155:8453',
+      amount: '2000',
+    }
+    const result = validatePaymentRequirements([v2Entry])
+    assert.equal(result.entries[0].hasAmount, true)
+    assert.equal(result.valid, true)
+  })
+
+  it('accepts V1 maxAmountRequired (regression check)', () => {
+    const result = validatePaymentRequirements([validEntry])
+    assert.equal(result.entries[0].hasAmount, true)
+    assert.equal(result.valid, true)
+  })
+
+  it('fails when neither amount nor maxAmountRequired is present', () => {
+    const noAmount = {
+      payTo: '0x1234567890abcdef1234567890abcdef12345678',
+      asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+      network: 'eip155:8453',
+    }
+    const result = validatePaymentRequirements([noAmount])
+    assert.equal(result.entries[0].hasAmount, false)
+    assert.equal(result.valid, false)
+  })
 })
 
 // ─── Detail page: x402 payment validation display ──────────────────────────

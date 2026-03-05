@@ -196,8 +196,9 @@ export function validatePaymentRequirements(accepts) {
       result.hasNetwork = true
     }
 
-    // maxAmountRequired (required — the price)
-    if (entry.maxAmountRequired != null && entry.maxAmountRequired !== '') {
+    // amount (V2) or maxAmountRequired (V1) — the price
+    if ((entry.maxAmountRequired != null && entry.maxAmountRequired !== '') ||
+        (entry.amount != null && entry.amount !== '')) {
       result.hasAmount = true
     }
 

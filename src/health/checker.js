@@ -9,6 +9,9 @@ import { parsePaymentRequired, validatePaymentRequirements } from '../services/x
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
 const HEALTH_CHECK_RETENTION_DAYS = 3
+const X402_DIAG = process.env.X402_DIAG === '1'
+let x402DiagCount = 0
+const X402_DIAG_LIMIT = 5
 
 /**
  * Check if a resolved IP address is private/reserved.
@@ -439,6 +442,14 @@ async function checkService(service) {
       } else {
         // PAYMENT-REQUIRED header missing or unparseable even after GET retry
         x402PaymentValid = 0
+
+        // Diagnostic: log first N parse failures per cycle when X402_DIAG=1
+        if (X402_DIAG && x402DiagCount < X402_DIAG_LIMIT) {
+          x402DiagCount++
+          const hdr = paymentRequiredHeader
+          const headerDesc = hdr === null ? 'null' : hdr === '' ? 'empty' : `present(${hdr.substring(0, 100)})`
+          console.log(`[health:x402-diag] ${url} header=${headerDesc} error=${parsed.error}`)
+        }
       }
     }
   }
@@ -524,6 +535,9 @@ export async function runHealthChecks() {
 
   // Prune old records before running new checks
   pruneOldHealthChecks()
+
+  // Reset per-cycle diagnostic counter
+  x402DiagCount = 0
 
   const services = getServices().all()
   console.log(`[health] Checking ${services.length} services...`)
