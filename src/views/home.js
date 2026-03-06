@@ -46,7 +46,9 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
     ? `Solana <strong>${solana}</strong><span class="pct-of">/${stats.allSolanaProviders}</span>`
     : `Solana <strong>${solana}</strong>`
 
-  const l402Tooltip = `${l402} providers with endpoints returning HTTP 402 + valid WWW-Authenticate header (macaroon + Lightning invoice)`
+  const l402Tooltip = stats.allL402Providers > l402
+    ? `${l402} of ${stats.allL402Providers} L402 providers independently verified — endpoint returns HTTP 402 with valid WWW-Authenticate header (L402/LSAT scheme, macaroon, and Lightning invoice)`
+    : `${l402} L402 providers with verified endpoints`
   const baseTooltip = stats.allBaseProviders > base
     ? `${base} of ${stats.allBaseProviders} Base providers independently verified — endpoint returns HTTP 402 with valid PAYMENT-REQUIRED header, known USDC asset, and reachable facilitator`
     : `${base} Base providers with verified x402 payment requirements`

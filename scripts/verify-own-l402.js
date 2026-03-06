@@ -15,7 +15,7 @@ const endpoints = [
   },
   {
     name: '402index Services API (rate-limited)',
-    url: `${BASE}/api/v1/services`,
+    url: `${BASE}/api/v1/services?l402=require`,
     method: 'GET',
     note: 'L402 only triggers after exceeding free tier rate limit — may return 200 on first probe',
   },
