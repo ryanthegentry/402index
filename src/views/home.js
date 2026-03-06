@@ -112,6 +112,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
             <option value="l402apps"${filters.source === 'l402apps' ? ' selected' : ''}>L402 Apps</option>
             <option value="sponge"${filters.source === 'sponge' ? ' selected' : ''}>Sponge</option>
             <option value="well-known"${filters.source === 'well-known' ? ' selected' : ''}>Well-Known</option>
+            <option value="discovery"${filters.source === 'discovery' ? ' selected' : ''}>Discovery</option>
           </select>
           <select name="sort" onchange="this.form.submit()">
             <option value="">Default sort</option>
