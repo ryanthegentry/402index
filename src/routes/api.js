@@ -5,6 +5,7 @@ import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/servic
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeUrl } from '../services/url-normalize.js'
 import { verifyL402 } from '../services/l402-verify.js'
+import { getProvider } from '../services/l402-provider.js'
 import { sendRegistrationNotification } from '../services/notify.js'
 import { discoverProbeConfig } from '../services/wellknown-discovery.js'
 
@@ -41,11 +42,32 @@ function escapeCsvField(value) {
   return str
 }
 
-router.get('/export.csv', (req, res) => {
+router.get('/export.csv', async (req, res) => {
   if (!req.l402Verified) {
+    const priceSats = parseInt(process.env.L402_PRICE_SATS) || 500
+    const durationHours = parseInt(process.env.L402_DURATION_HOURS) || 24
+    try {
+      const provider = getProvider()
+      const challenge = await provider.createChallenge(priceSats, durationHours)
+      if (challenge) {
+        const wwwAuth = `L402 macaroon="${challenge.macaroon}", invoice="${challenge.invoice}"`
+        return res.status(402).set('WWW-Authenticate', wwwAuth).json({
+          error: 'Payment Required',
+          message: 'CSV export requires L402 payment. Pay the Lightning invoice to download.',
+          invoice: challenge.invoice,
+          macaroon: challenge.macaroon,
+          payment_hash: challenge.paymentHash,
+          price_sats: priceSats,
+          duration_hours: durationHours,
+        })
+      }
+    } catch (err) {
+      console.error('[export.csv] L402 challenge creation failed:', err.message)
+    }
+    // Fallback: bare 402 (graceful degradation if provider unavailable)
     return res.status(402).json({
-      error: 'L402 payment required',
-      detail: 'Add ?l402=require to get a payment challenge, then include the L402 token in the Authorization header.',
+      error: 'Payment Required',
+      message: 'CSV export requires L402 payment. Add ?l402=require to any API endpoint, or include an L402 token in the Authorization header.',
     })
   }
 
