@@ -113,6 +113,7 @@ export const styles = `
     .protocol-l402 {
       color: #F7931A;
       white-space: nowrap;
+      cursor: pointer;
     }
     .protocol-x402 {
       color: #0052FF;
@@ -121,10 +122,12 @@ export const styles = `
     .protocol-base {
       color: #0052FF;
       white-space: nowrap;
+      cursor: pointer;
     }
     .protocol-solana {
       color: #9945FF;
       white-space: nowrap;
+      cursor: pointer;
     }
     .protocol-track {
       flex: 1;

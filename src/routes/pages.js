@@ -40,7 +40,7 @@ router.get('/', (req, res) => {
   const chainProviders = { base: new Set(), solana: new Set() }
   const allProviders = { total: new Set(), L402: new Set(), x402: new Set() }
   const allChainProviders = { base: new Set(), solana: new Set() }
-  const allUrls = db.prepare('SELECT url, protocol, payment_network, is_template, is_demo, x402_payment_valid FROM services').all()
+  const allUrls = db.prepare('SELECT url, protocol, payment_network, is_template, is_demo, x402_payment_valid, health_status FROM services').all()
   for (const svc of allUrls) {
     let host
     try { host = new URL(svc.url).hostname } catch { continue }
@@ -55,8 +55,10 @@ router.get('/', (req, res) => {
         else if (network === 'solana' || network.includes('solana')) allChainProviders.solana.add(host)
       }
     }
-    // Filtered provider counts (also exclude x402 with payment_valid=0)
-    if (!svc.is_template && !svc.is_demo && !(svc.protocol === 'x402' && svc.x402_payment_valid === 0)) {
+    // Filtered provider counts: exclude x402 with payment_valid=0, exclude L402 without healthy status
+    if (!svc.is_template && !svc.is_demo
+      && !(svc.protocol === 'x402' && svc.x402_payment_valid === 0)
+      && !(svc.protocol === 'L402' && svc.health_status !== 'healthy')) {
       filteredProviders.total.add(host)
       filteredProviders[svc.protocol]?.add(host)
       if (svc.protocol === 'x402') {
