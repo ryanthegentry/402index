@@ -252,6 +252,17 @@ for (const col of ['x402_payment_valid', 'x402_facilitator_reachable', 'x402_ass
   }
 }
 
+// Migration: bLIP-0026 + L402 v2 metadata + content domain columns (nullable)
+for (const col of ['l402_version', 'agent_spec_url', 'capabilities',
+                   'token_format', 'invoice_type', 'pricing_model', 'content_domain']) {
+  try {
+    db.exec(`ALTER TABLE services ADD COLUMN ${col} TEXT`)
+    console.log(`[db] Added column: ${col}`)
+  } catch {
+    // column already exists — safe to ignore
+  }
+}
+
 // Migration: remove l402apps homepage listings (not actual L402 endpoints)
 const homepageUrls = [
   'https://getalby.com/',
