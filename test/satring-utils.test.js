@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { mapCategory, satsToUsd, normalizeRawService } from '../src/aggregators/satring-utils.js'
+import { BLOCKED_HOSTS } from '../src/aggregators/satring.js'
 
 describe('mapCategory', () => {
   it('maps known Satring slugs to internal categories', () => {
@@ -100,5 +101,28 @@ describe('normalizeRawService', () => {
 
   it('throws when URL is missing', () => {
     assert.throws(() => normalizeRawService({ id: 1, name: 'Test' }, 100_000), /missing URL/)
+  })
+})
+
+describe('BLOCKED_HOSTS', () => {
+  it('blocks LightningProx ecosystem hosts', () => {
+    assert.ok(BLOCKED_HOSTS.has('lightningprox.com'))
+    assert.ok(BLOCKED_HOSTS.has('lpxpoly.com'))
+    assert.ok(BLOCKED_HOSTS.has('satsforai.com'))
+  })
+
+  it('blocks confirmed non-L402 hosts', () => {
+    assert.ok(BLOCKED_HOSTS.has('aiprox.dev'))
+    assert.ok(BLOCKED_HOSTS.has('certvera.com'))
+    assert.ok(BLOCKED_HOSTS.has('isitarug.com'))
+  })
+
+  it('does not block lightningenable.com (status pending)', () => {
+    assert.ok(!BLOCKED_HOSTS.has('lightningenable.com'))
+  })
+
+  it('does not block legitimate hosts', () => {
+    assert.ok(!BLOCKED_HOSTS.has('satring.com'))
+    assert.ok(!BLOCKED_HOSTS.has('example.com'))
   })
 })

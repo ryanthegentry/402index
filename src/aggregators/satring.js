@@ -3,6 +3,18 @@ import { fetchBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeRawService } from './satring-utils.js'
 
 const SATRING_URL = 'https://satring.com/api/v1/services'
+
+// Permanently skip confirmed non-L402 providers (re-imported every poll cycle otherwise)
+export const BLOCKED_HOSTS = new Set([
+  // LightningProx ecosystem — prepaid spend tokens, not per-request L402
+  'lightningprox.com',
+  'lpxpoly.com',
+  'satsforai.com',
+  // Confirmed non-L402 (Mar 6 investigation)
+  'aiprox.dev',
+  'certvera.com',
+  'isitarug.com',
+])
 const PAGE_SIZE = 20 // Satring max per page
 
 // Lazy-initialized prepared statements
@@ -75,6 +87,16 @@ export async function pollSatring() {
         // Skip .well-known discovery URLs — these are metadata documents, not L402 endpoints
         if (normalized.url.includes('/.well-known/')) {
           continue
+        }
+
+        // Skip blocked hosts (confirmed non-L402 providers)
+        try {
+          const host = new URL(normalized.url).hostname
+          if (BLOCKED_HOSTS.has(host)) {
+            continue
+          }
+        } catch {
+          // invalid URL — let upsert handle it
         }
 
         const existing = findExisting().get(normalized.url)

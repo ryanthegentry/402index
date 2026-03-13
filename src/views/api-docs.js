@@ -183,6 +183,23 @@ export function apiDocsPage() {
           offset: 0
         }, null, 2))}</div>
 
+        <h2>Upcoming Fields</h2>
+        <p>The following fields are present in the schema but currently <code>null</code> for all services. They will be populated as providers adopt these standards.</p>
+        <table class="params-table">
+          <thead>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>l402_version</td><td>string</td><td>Protocol version (bLIP-0026)</td></tr>
+            <tr><td>agent_spec_url</td><td>string</td><td>URL to agent-spec.md for this endpoint (bLIP-0026)</td></tr>
+            <tr><td>capabilities</td><td>string</td><td>JSON array of declared agent capabilities (bLIP-0026)</td></tr>
+            <tr><td>token_format</td><td>string</td><td>Token format: <code>macaroon</code>, <code>opaque</code>, or <code>jwt</code></td></tr>
+            <tr><td>invoice_type</td><td>string</td><td>Invoice type: <code>bolt11</code>, <code>bolt12</code>, or <code>taproot_asset</code></td></tr>
+            <tr><td>pricing_model</td><td>string</td><td>Pricing model: <code>per-request</code>, <code>time-bounded</code>, or <code>token-bucket</code></td></tr>
+            <tr><td>content_domain</td><td>string</td><td>Knowledge domain for AI/media endpoints (e.g. <code>bitcoin-media</code>, <code>ai-inference</code>)</td></tr>
+          </tbody>
+        </table>
+
         <h2>Rate Limits &amp; L402 Payments</h2>
         <p>API endpoints are rate-limited to ensure fair usage. Pay via Lightning Network to unlock higher limits.</p>
         <table class="params-table">
