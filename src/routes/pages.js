@@ -114,7 +114,7 @@ router.get('/api-docs', (req, res) => {
 
 // Demo page
 router.get('/demo', (req, res) => {
-  const ACTIVE_FILTER = "WHERE status = 'active' OR status IS NULL"
+  const ACTIVE_FILTER = "WHERE (status = 'active' OR status IS NULL)"
 
   // Gather stats
   const totalIndexed = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER}`).get().c

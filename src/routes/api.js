@@ -104,7 +104,7 @@ function extractHostname(url) {
 
 // GET /api/v1/health
 router.get('/health', (req, res) => {
-  const ACTIVE_FILTER = "WHERE status = 'active' OR status IS NULL"
+  const ACTIVE_FILTER = "WHERE (status = 'active' OR status IS NULL)"
 
   const total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER}`).get().c
 
