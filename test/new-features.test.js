@@ -50,9 +50,10 @@ describe('buildServiceQuery payment_valid filter', () => {
     assert.ok(result.where.includes("x402_payment_valid = 1"))
   })
 
-  it('does not add payment_valid filter for false', () => {
+  it('builds correct SQL for payment_valid=false', () => {
     const result = buildServiceQuery({ payment_valid: 'false' })
-    assert.ok(!result.where.includes('x402_payment_valid'))
+    assert.ok(result.where.includes('x402_payment_valid = 0 OR x402_payment_valid IS NULL'))
+    assert.ok(result.where.includes("health_status != 'healthy'"))
   })
 
   it('accepts sponge as valid source', () => {

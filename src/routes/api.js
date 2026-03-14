@@ -439,7 +439,7 @@ router.get('/demo/probe-live', async (req, res) => {
   })
 
   try {
-    for await (const step of runProbeSteps(url)) {
+    for await (const step of runProbeSteps(url, db)) {
       if (res.writableEnded) break
       res.write(`data: ${JSON.stringify(step)}\n\n`)
     }

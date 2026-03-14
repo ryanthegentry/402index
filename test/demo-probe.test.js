@@ -1,6 +1,7 @@
-import { describe, it, beforeEach, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatProbeSteps, validateProbeUrl } from '../src/services/probe-live.js'
+import { formatProbeSteps, validateProbeUrl, buildProbeConfig } from '../src/services/probe-live.js'
+import Database from 'better-sqlite3'
 
 // ─── URL Validation ────────────────────────────────────────────────────────────
 
@@ -113,5 +114,131 @@ describe('formatProbeSteps', () => {
     const step = formatProbeSteps.error('Connection timed out')
     assert.equal(step.step, 'error')
     assert.ok(step.message.includes('timed out'), 'should include error message')
+  })
+})
+
+// ─── DB-backed probe config ───────────────────────────────────────────────────
+
+function createTestDb() {
+  const db = new Database(':memory:')
+  db.exec(`
+    CREATE TABLE services (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      protocol TEXT NOT NULL,
+      http_method TEXT DEFAULT 'GET',
+      probe_body TEXT,
+      health_status TEXT DEFAULT 'unknown',
+      consecutive_failures INTEGER DEFAULT 0,
+      latency_p50_ms INTEGER,
+      status TEXT DEFAULT 'active',
+      source TEXT NOT NULL DEFAULT 'self-registered',
+      registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `)
+  return db
+}
+
+describe('buildProbeConfig', () => {
+  it('returns DB service config for known URL', () => {
+    const db = createTestDb()
+    db.prepare(`INSERT INTO services (id, name, url, protocol, http_method, probe_body) VALUES ('s1', 'Sats4AI Image', 'https://sats4ai.com/api/l402/image', 'L402', 'POST', '{"input":{"prompt":"test"},"model":"Standard"}')`).run()
+
+    const config = buildProbeConfig(db, 'https://sats4ai.com/api/l402/image')
+    assert.equal(config.protocol, 'L402')
+    assert.equal(config.httpMethod, 'POST')
+    assert.equal(config.probeBody, '{"input":{"prompt":"test"},"model":"Standard"}')
+  })
+
+  it('returns GET defaults for unknown URL', () => {
+    const db = createTestDb()
+    const config = buildProbeConfig(db, 'https://unknown.example.com/api')
+    assert.equal(config.protocol, null)
+    assert.equal(config.httpMethod, 'GET')
+    assert.equal(config.probeBody, '{}')
+  })
+
+  it('uses POST method when DB says POST', () => {
+    const db = createTestDb()
+    db.prepare(`INSERT INTO services (id, name, url, protocol, http_method) VALUES ('s1', 'Post API', 'https://post.example.com/api', 'L402', 'POST')`).run()
+
+    const config = buildProbeConfig(db, 'https://post.example.com/api')
+    assert.equal(config.httpMethod, 'POST')
+  })
+
+  it('defaults to GET when http_method is NULL', () => {
+    const db = createTestDb()
+    db.prepare(`INSERT INTO services (id, name, url, protocol) VALUES ('s1', 'Get API', 'https://get.example.com/api', 'L402')`).run()
+
+    const config = buildProbeConfig(db, 'https://get.example.com/api')
+    assert.equal(config.httpMethod, 'GET')
+  })
+
+  it('returns consecutive_failures for classification context', () => {
+    const db = createTestDb()
+    db.prepare(`INSERT INTO services (id, name, url, protocol, consecutive_failures) VALUES ('s1', 'Failing API', 'https://failing.example.com/api', 'L402', 5)`).run()
+
+    const config = buildProbeConfig(db, 'https://failing.example.com/api')
+    assert.equal(config.consecutiveFailures, 5)
+  })
+
+  it('returns latency_p50_ms for degradation detection', () => {
+    const db = createTestDb()
+    db.prepare(`INSERT INTO services (id, name, url, protocol, latency_p50_ms) VALUES ('s1', 'Slow API', 'https://slow.example.com/api', 'x402', 500)`).run()
+
+    const config = buildProbeConfig(db, 'https://slow.example.com/api')
+    assert.equal(config.historicalP50, 500)
+  })
+
+  it('only matches active services (not pending/rejected)', () => {
+    const db = createTestDb()
+    db.prepare(`INSERT INTO services (id, name, url, protocol, status) VALUES ('s1', 'Pending API', 'https://pending.example.com/api', 'L402', 'pending')`).run()
+
+    const config = buildProbeConfig(db, 'https://pending.example.com/api')
+    assert.equal(config.protocol, null, 'should not match pending service')
+  })
+})
+
+// ─── Step generation: POST endpoints ──────────────────────────────────────────
+
+describe('formatProbeSteps — POST method display', () => {
+  it('formats request step with POST method', () => {
+    const step = formatProbeSteps.request('POST', 'https://sats4ai.com/api/l402/image')
+    assert.equal(step.step, 'request')
+    assert.ok(step.message.includes('POST'), 'should show POST method')
+  })
+
+  it('formats L402 compliance validation step', () => {
+    const step = formatProbeSteps.l402Validation(true, { scheme: 'L402', macaroon: 'valid', invoice: 'valid' })
+    assert.equal(step.step, 'l402_validation')
+    assert.ok(step.valid, 'should be valid')
+  })
+
+  it('formats L402 compliance failure step', () => {
+    const step = formatProbeSteps.l402Validation(false, { scheme: null, macaroon: null, invoice: null })
+    assert.equal(step.step, 'l402_validation')
+    assert.equal(step.valid, false)
+    assert.ok(step.message.includes('fail'), 'should indicate failure')
+  })
+
+  it('formats POST auto-detection step', () => {
+    const step = formatProbeSteps.postRetry('POST', 402)
+    assert.equal(step.step, 'post_retry')
+    assert.ok(step.message.includes('POST'), 'should mention POST retry')
+    assert.ok(step.message.includes('402'), 'should mention 402 result')
+  })
+
+  it('formats x402 payment validation step', () => {
+    const step = formatProbeSteps.x402Validation(true, { assetKnown: true, facilitatorReachable: true })
+    assert.equal(step.step, 'x402_validation')
+    assert.ok(step.valid, 'should be valid')
+  })
+
+  it('formats x402 payment validation failure step', () => {
+    const step = formatProbeSteps.x402Validation(false, { assetKnown: false, facilitatorReachable: false })
+    assert.equal(step.step, 'x402_validation')
+    assert.equal(step.valid, false)
   })
 })
