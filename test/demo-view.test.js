@@ -131,11 +131,34 @@ describe('demoPage — Panel 2: Interactive MCP Search', () => {
     assert.ok(html.includes('search_services') || html.includes('mcp') || html.includes('MCP'), 'should reference MCP')
   })
 
-  it('contains disabled Check Endpoint Health button', () => {
+  it('contains Check Endpoint Health button (enabled)', () => {
     const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
     assert.ok(html.includes('demo-healthcheck-btn'), 'should have healthcheck button')
-    assert.ok(html.includes('disabled'), 'button should be disabled')
-    assert.ok(html.includes('Coming soon'), 'should show coming soon text')
+    assert.ok(html.includes('Check Endpoint Health'), 'should show button text')
+  })
+
+  it('contains probe URL input field', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    assert.ok(html.includes('demo-probe-url'), 'should have probe URL input')
+    assert.ok(html.includes('placeholder'), 'input should have placeholder text')
+  })
+
+  it('contains probe log container', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    assert.ok(html.includes('demo-probe-log'), 'should have probe log container')
+  })
+
+  it('client JS contains copy URL button logic', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    assert.ok(html.includes('demo-copy-url-btn'), 'should have copy URL button class')
+    assert.ok(html.includes('clipboard.writeText'), 'should use clipboard API')
+    assert.ok(html.includes('Copied!'), 'should have copied feedback text')
+  })
+
+  it('client JS contains EventSource for live probe', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    assert.ok(html.includes('EventSource'), 'should use EventSource for SSE')
+    assert.ok(html.includes('probe-live'), 'should reference probe-live endpoint')
   })
 })
 

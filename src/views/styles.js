@@ -785,17 +785,90 @@ export const styles = `
     }
     .demo-result-desc { margin-top: 8px; font-size: 13px; color: var(--text-muted); }
 
+    /* Copy URL button */
+    .demo-result-url-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .demo-copy-url-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: var(--mono);
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+    }
+    .demo-copy-url-btn:hover { background: var(--accent); color: var(--bg); }
+
+    /* Live Probe Section */
+    .demo-probe-section { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px; }
+    .demo-probe-section h3 { font-size: 16px; color: var(--text-bright); margin-bottom: 4px; }
+    .demo-probe-input-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .demo-probe-url {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text-bright);
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: var(--mono);
+    }
+    .demo-probe-url:focus { outline: none; border-color: var(--accent); }
     .demo-healthcheck-btn {
-      background: var(--gray);
-      color: var(--text-muted);
+      background: var(--accent);
+      color: var(--bg);
       border: none;
       padding: 8px 16px;
       border-radius: 4px;
       font-size: 13px;
       font-family: var(--mono);
-      cursor: not-allowed;
-      opacity: 0.6;
-      margin-top: 16px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .demo-healthcheck-btn:hover { opacity: 0.85; }
+    .demo-healthcheck-btn:disabled { opacity: 0.5; cursor: wait; }
+
+    /* Probe Log (terminal style) */
+    .demo-probe-log {
+      margin-top: 12px;
+      background: #0a0c10;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px 16px;
+      font-family: var(--mono);
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+      min-height: 0;
+    }
+    .demo-probe-log:empty { display: none; }
+    .demo-probe-step {
+      padding: 3px 0;
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .demo-probe-icon { color: var(--text-muted); margin-right: 4px; }
+    .demo-probe-step-response { color: var(--yellow); }
+    .demo-probe-step-headers { color: var(--accent); }
+    .demo-probe-step-done { color: var(--green); }
+    .demo-probe-step-error { color: var(--red); }
+    .demo-probe-header-detail {
+      color: var(--text-muted);
+      font-size: 11px;
+      padding-left: 20px;
+      word-break: break-all;
     }
 
     /* Panel 3: Flow */
@@ -942,6 +1015,8 @@ export const styles = `
       .demo-health-label { width: 60px; }
       .demo-health-count { width: 50px; }
       .demo-healthcheck-btn { width: 100%; }
+      .demo-probe-input-row { flex-direction: column; }
+      .demo-probe-url { font-size: 12px; }
     }
 
     /* Desktop enhancements */
