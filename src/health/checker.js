@@ -150,7 +150,7 @@ function calculateP50(serviceId) {
  * @param {string} [httpMethod='GET']
  * @returns {{ httpStatus: number|null, responseTimeMs: number|null, errorMessage: string|null, wwwAuthenticate: string|null, paymentRequired: string|null, responseBody: string|null }}
  */
-async function performHttpCheck(url, httpMethod = 'GET', probeBody = '{}') {
+export async function performHttpCheck(url, httpMethod = 'GET', probeBody = '{}') {
   const empty = { httpStatus: null, responseTimeMs: null, errorMessage: null, wwwAuthenticate: null, paymentRequired: null, responseBody: null }
 
   // SSRF protection: block non-http(s) schemes
