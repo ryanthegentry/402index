@@ -144,7 +144,15 @@ export function demoPage({ stats, probeSample }) {
         <p class="demo-search-hint">Start typing or adjust filters to search...</p>
       </div>
 
-      <button class="demo-healthcheck-btn" disabled title="Coming soon — L402-gated">Check Endpoint Health</button>
+      <div class="demo-probe-section">
+        <h3>Live Endpoint Probe</h3>
+        <p class="demo-panel-desc">Paste any API URL to run a real-time health check — see the protocol handshake live</p>
+        <div class="demo-probe-input-row">
+          <input type="text" class="demo-probe-url" id="demo-probe-url" placeholder="https://api.example.com/endpoint" />
+          <button class="demo-healthcheck-btn" id="demo-probe-btn">Check Endpoint Health</button>
+        </div>
+        <div class="demo-probe-log" id="demo-probe-log"></div>
+      </div>
     </section>
 
     <!-- ─── Panel 3: Payment Flow Visualization ───────────────────────── -->
@@ -294,7 +302,7 @@ Content-Type: application/json
         if (svc.price_usd != null) html += '<span class="demo-result-price">$' + svc.price_usd + '</span>'
         else if (svc.price_sats != null) html += '<span class="demo-result-price">' + svc.price_sats + ' sats</span>'
         html += '</div>'
-        html += '<div class="demo-result-url">' + escapeHtmlClient(svc.url) + '</div>'
+        html += '<div class="demo-result-url-row"><span class="demo-result-url">' + escapeHtmlClient(svc.url) + '</span><button class="demo-copy-url-btn" data-url="' + escapeHtmlClient(svc.url) + '">Copy URL</button></div>'
         html += '</div>'
         html += '<div class="demo-result-detail" style="display:none">'
         html += '<div class="detail-row"><span class="detail-label">Provider</span><span class="detail-value">' + escapeHtmlClient(svc.provider || '—') + '</span></div>'
@@ -312,6 +320,22 @@ Content-Type: application/json
         card.addEventListener('click', function() {
           const detail = this.querySelector('.demo-result-detail')
           detail.style.display = detail.style.display === 'none' ? 'block' : 'none'
+        })
+      })
+
+      // Copy URL buttons
+      resultsContainer.querySelectorAll('.demo-copy-url-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation()
+          var url = this.getAttribute('data-url')
+          var self = this
+          navigator.clipboard.writeText(url).then(function() {
+            self.textContent = 'Copied!'
+            setTimeout(function() { self.textContent = 'Copy URL' }, 1500)
+            // Auto-fill the probe URL input
+            var probeInput = document.getElementById('demo-probe-url')
+            if (probeInput) probeInput.value = url
+          })
         })
       })
     }
@@ -390,6 +414,80 @@ Content-Type: application/json
       document.getElementById('demo-flow-pay-desc').textContent = data.payDesc
       document.getElementById('demo-flow-pay-detail').textContent = data.payDetail
       document.getElementById('demo-flow-retry-header').textContent = data.retryHeader
+    })
+
+    // ─── Live Probe ──────────────────────────────────────────────────────
+
+    var probeInput = document.getElementById('demo-probe-url')
+    var probeBtn = document.getElementById('demo-probe-btn')
+    var probeLog = document.getElementById('demo-probe-log')
+
+    function stepIcon(step) {
+      if (step === 'connect') return '→'
+      if (step === 'request') return '→'
+      if (step === 'response') return '←'
+      if (step === 'headers') return '←'
+      if (step === 'analysis') return '◆'
+      if (step === 'done') return '✓'
+      if (step === 'error') return '✗'
+      return '·'
+    }
+
+    function stepClass(step) {
+      if (step === 'done') return 'demo-probe-step-done'
+      if (step === 'error') return 'demo-probe-step-error'
+      if (step === 'headers') return 'demo-probe-step-headers'
+      if (step === 'response') return 'demo-probe-step-response'
+      return ''
+    }
+
+    probeBtn.addEventListener('click', function() {
+      var url = probeInput.value.trim()
+      if (!url) return
+
+      probeLog.innerHTML = ''
+      probeBtn.disabled = true
+      probeBtn.textContent = 'Probing...'
+
+      var es = new EventSource('/api/v1/demo/probe-live?url=' + encodeURIComponent(url))
+
+      es.onmessage = function(e) {
+        var data = JSON.parse(e.data)
+        var line = document.createElement('div')
+        line.className = 'demo-probe-step ' + stepClass(data.step)
+        line.innerHTML = '<span class="demo-probe-icon">' + stepIcon(data.step) + '</span> ' + escapeHtmlClient(data.message)
+
+        // Show raw headers if present
+        if (data.headers) {
+          for (var key in data.headers) {
+            var headerLine = document.createElement('div')
+            headerLine.className = 'demo-probe-header-detail'
+            headerLine.textContent = '  ' + key + ': ' + data.headers[key]
+            line.appendChild(headerLine)
+          }
+        }
+
+        probeLog.appendChild(line)
+        probeLog.scrollTop = probeLog.scrollHeight
+
+        if (data.step === 'done' || data.step === 'error') {
+          es.close()
+          probeBtn.disabled = false
+          probeBtn.textContent = 'Check Endpoint Health'
+        }
+      }
+
+      es.onerror = function() {
+        es.close()
+        probeBtn.disabled = false
+        probeBtn.textContent = 'Check Endpoint Health'
+        if (probeLog.children.length === 0) {
+          var errLine = document.createElement('div')
+          errLine.className = 'demo-probe-step demo-probe-step-error'
+          errLine.innerHTML = '<span class="demo-probe-icon">✗</span> Connection failed'
+          probeLog.appendChild(errLine)
+        }
+      }
     })
   })()
   </script>`
