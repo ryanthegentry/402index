@@ -34,6 +34,57 @@ router.get('/feed.xml', (req, res) => {
   res.send(feedXml({ services: filtered, selfUrl, filters: { protocol, health, type } }))
 })
 
+// llms.txt — machine-readable project summary for AI agents
+router.get('/llms.txt', (req, res) => {
+  const ACTIVE_FILTER = "(status = 'active' OR status IS NULL)"
+  const totalEndpoints = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER}`).get().c
+  const l402Count = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER} AND protocol = 'L402'`).get().c
+  const x402Count = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER} AND protocol = 'x402'`).get().c
+
+  res.set('Content-Type', 'text/plain; charset=utf-8')
+  res.send(`# 402 Index
+
+> Protocol-agnostic directory of paid APIs (L402 + x402) for AI agents.
+
+Live at: https://402index.io
+Currently indexing: ${totalEndpoints} endpoints (${l402Count} L402, ${x402Count} x402)
+
+## API
+
+Base URL: https://402index.io/api/v1
+
+- GET /api/v1/services — Search and filter endpoints. Params: protocol, category, health, source, q, sort, limit, offset
+- GET /api/v1/services/:id — Full service details with health check history
+- GET /api/v1/categories — Category tree with counts
+- GET /api/v1/health — System health, sync status, provider counts
+- GET /api/v1/opportunities — Ecosystem gap analysis (coverage, protocol, provider gaps)
+- POST /api/v1/register — Register an L402 endpoint (verified via probe)
+- GET /api/v1/export.csv — Full directory CSV export (L402 payment required)
+
+## Distribution
+
+- GET /feed.xml — RSS 2.0 feed with l402:service XML namespace. Params: protocol, health, type
+- POST /api/v1/webhooks — Register for real-time notifications (HMAC-SHA256 signed)
+- GET /api/v1/webhooks/:id — Check webhook status (X-Webhook-Secret header)
+- DELETE /api/v1/webhooks/:id — Remove webhook (X-Webhook-Secret header)
+
+## MCP Server
+
+An MCP server is available for direct AI assistant integration.
+Tools: search_services, get_service_detail, list_categories, get_directory_stats
+Setup: See mcp-server/ directory or npm install @402index/mcp-server
+
+## Protocols
+
+- L402: Lightning-native HTTP 402 paywall. Returns WWW-Authenticate header with macaroon + invoice.
+- x402: Chain-agnostic HTTP 402 paywall (Base, Solana). Returns payment requirements in structured header.
+
+## Source Code
+
+https://github.com/bixi-global/402index
+`)
+})
+
 router.get('/', (req, res) => {
   const { protocol, category, health, source, q, featured, sort, payment_valid, limit: rawLimit, offset: rawOffset } = req.query
   const filters = { protocol, category, health, source, q, featured: featured === 'true', sort, payment_valid: payment_valid === 'true' }

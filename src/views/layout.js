@@ -18,6 +18,7 @@ export function layout(title, content) {
         <a href="/">Directory</a>
         <a href="/about">About</a>
         <a href="/demo">Demo</a>
+        <a href="/opportunities">Opportunities</a>
         <a href="/api-docs">API</a>
       </nav>
     </div>

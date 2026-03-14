@@ -8,12 +8,12 @@ Protocol-agnostic directory of paid APIs (L402 + x402) for AI agents. Distributi
 402index/
 ├── src/
 │   ├── server.js          # Express app entry point
-│   ├── db.js              # SQLite setup + migrations
+│   ├── db.js              # SQLite setup + migrations (incl. webhooks table)
 │   ├── scheduler.js       # Background job scheduling
 │   ├── listings.js        # YAML listing loader + featured flags
 │   ├── routes/
-│   │   ├── api.js         # /api/v1/services, /api/v1/health, /api/v1/categories
-│   │   └── pages.js       # HTML routes: /, /service/:id, /about
+│   │   ├── api.js         # /api/v1/services, /register, /webhooks, /opportunities, /admin
+│   │   └── pages.js       # HTML routes: /, /service/:id, /about, /demo, /feed.xml, /opportunities
 │   ├── queries/
 │   │   └── services.js    # Shared query builder + column definitions
 │   ├── aggregators/
@@ -24,19 +24,42 @@ Protocol-agnostic directory of paid APIs (L402 + x402) for AI agents. Distributi
 │   │   ├── l402apps.js    # l402apps.com polling (HTML scrape, daily)
 │   │   └── l402apps-utils.js
 │   ├── health/
-│   │   └── checker.js     # Health check runner (every 15min)
+│   │   └── checker.js     # Health check runner (every 15min) + event emission
 │   ├── middleware/         # Express middleware (L402, rate limiting)
-│   ├── services/          # Business logic (BTC price, L402 provider, URL normalization)
-│   └── views/             # HTML templates (plain JS template literals, no framework)
+│   ├── services/
+│   │   ├── events.js      # Central event dispatcher: emit() → webhooks + Nostr + email
+│   │   ├── webhooks.js    # Webhook CRUD + HMAC-SHA256 delivery
+│   │   ├── nostr.js       # Nostr NIP-99 (kind 30402) event publishing
+│   │   ├── opportunities.js # Ecosystem gap analysis queries
+│   │   ├── btc-price.js   # BTC/USD price cache
+│   │   ├── l402-provider.js # L402 challenge creation
+│   │   ├── l402-verify.js # L402 endpoint verification
+│   │   ├── notify.js      # Email notifications (SendGrid)
+│   │   ├── probe-live.js  # Live SSE endpoint probing
+│   │   ├── url-normalize.js # URL normalization
+│   │   └── wellknown-discovery.js # .well-known probe config discovery
+│   └── views/
+│       ├── layout.js      # HTML layout wrapper + nav
+│       ├── styles.js      # CSS styles
+│       ├── helpers.js     # escapeHtml(), escapeXml()
+│       ├── home.js        # Directory listing page
+│       ├── service.js     # Service detail page
+│       ├── about.js       # About page
+│       ├── demo.js        # Interactive demo (3 panels)
+│       ├── api-docs.js    # API documentation page
+│       ├── feed.js        # RSS 2.0 feed with l402: XML namespace
+│       └── opportunities.js # Ecosystem opportunities page
 ├── scripts/
 │   ├── poll.js            # Standalone: npm run poll
 │   └── healthcheck.js     # Standalone: npm run healthcheck
 ├── listings/              # YAML files for exclusive/manual listings
-├── test/                  # Tests (node:test)
+├── test/                  # Tests (node:test, 686 passing)
 ├── data/                  # SQLite DB file (gitignored)
+├── docs/                  # Feature specs + research docs
+├── mcp-server/            # MCP server for AI agent integration
 ├── CLAUDE.md
-├── package.json
-└── README.md
+├── CONTRIBUTING.md
+└── package.json
 ```
 
 ## Tech Stack
@@ -83,6 +106,14 @@ Never skip step 1. If you can't write a failing test, the bug isn't well-enough 
 - **Health check: 402 = healthy.** For L402/x402 services, a 402 response means the paywall is working. A 200 might mean misconfiguration. Check for expected response codes per protocol.
 - **Dedup on URL + protocol.** When re-polling Bazaar/Satring, match on endpoint URL + protocol. Update metadata, preserve our health data.
 - **YAML listings are the source of truth for exclusive providers.** Script reads them on startup and syncs to DB.
+
+## Distribution Layer
+
+- **RSS feed:** `GET /feed.xml` — RSS 2.0 with `l402:service` XML namespace. Filters: `?protocol`, `?health`, `?type=new`
+- **Webhooks:** `POST/GET/DELETE /api/v1/webhooks` — HMAC-SHA256 signed delivery, auto-deactivate after 10 failures
+- **Nostr:** NIP-99 kind 30402 events. Requires `NOSTR_PRIVATE_KEY` + `NOSTR_RELAY_URLS` env vars.
+- **Event dispatcher:** `emit(event, service, db)` in `src/services/events.js` — fires webhooks + Nostr + email in parallel
+- **Opportunities:** `GET /api/v1/opportunities` (JSON) + `GET /opportunities` (HTML) — ecosystem gap analysis
 
 ## TODOs
 

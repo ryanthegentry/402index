@@ -148,6 +148,81 @@ export function apiDocsPage() {
           </table>
         </div>
 
+        <h2>Distribution</h2>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method">GET</span>
+            <span class="endpoint-path">/feed.xml</span>
+          </div>
+          <p>RSS 2.0 feed of indexed services with a custom <code>l402:service</code> XML namespace. Each item includes <code>&lt;l402:endpoint&gt;</code>, <code>&lt;l402:protocol&gt;</code>, and <code>&lt;l402:price&gt;</code> tags.</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>protocol</td><td>string</td><td>Filter: <code>L402</code> or <code>x402</code></td></tr>
+              <tr><td>health</td><td>string</td><td>Filter: <code>healthy</code>, <code>degraded</code>, <code>down</code></td></tr>
+              <tr><td>type</td><td>string</td><td><code>new</code> for services added in the last 7 days</td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>GET /feed.xml?protocol=L402&amp;health=healthy</div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method">GET</span>
+            <span class="endpoint-path">/api/v1/opportunities</span>
+          </div>
+          <p>Ecosystem gap analysis — identifies categories with poor coverage, missing protocols, single-provider dependencies, and failing services. Useful for developers looking for underserved niches.</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>protocol</td><td>string</td><td>Filter opportunities by protocol: <code>L402</code> or <code>x402</code></td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>GET /api/v1/opportunities</div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
+            <span class="endpoint-path">/api/v1/webhooks</span>
+          </div>
+          <p>Register a webhook to receive real-time notifications when services are added, change health, or go down. Deliveries are signed with HMAC-SHA256 (<code>X-402Index-Signature</code> header). Rate limited to 5 registrations per hour per IP.</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>url</td><td>string</td><td><strong>Required.</strong> HTTPS callback URL</td></tr>
+              <tr><td>secret</td><td>string</td><td><strong>Required.</strong> Shared secret for HMAC signing (min 16 chars)</td></tr>
+              <tr><td>events</td><td>string</td><td>Comma-separated events: <code>service.new</code>, <code>service.health_changed</code>, <code>service.down</code>. Default: <code>service.new</code></td></tr>
+              <tr><td>protocol_filter</td><td>string</td><td>Only deliver for: <code>L402</code> or <code>x402</code></td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X POST https://402index.io/api/v1/webhooks \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "url": "https://example.com/webhook",
+  "secret": "your-secret-min-16-chars",
+  "events": "service.new,service.down"
+}'</div>
+          <p style="margin-top:12px"><strong>Management:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>GET</code></td><td><code>/api/v1/webhooks/:id</code></td><td>Check webhook status. Requires <code>X-Webhook-Secret</code> header.</td></tr>
+              <tr><td><code>DELETE</code></td><td><code>/api/v1/webhooks/:id</code></td><td>Remove webhook. Requires <code>X-Webhook-Secret</code> header.</td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:8px">Webhooks are auto-deactivated after 10 consecutive delivery failures.</p>
+        </div>
+
         <h2>Response Format</h2>
         <p>The services list endpoint returns JSON with the following structure:</p>
         <div class="response-sample">${escapeHtml(JSON.stringify({
@@ -212,7 +287,7 @@ export function apiDocsPage() {
           </tbody>
         </table>
         <p>When you exceed the free tier, the API returns <code>402 Payment Required</code> with a Lightning invoice in the <code>WWW-Authenticate</code> header. Pay the invoice, then include the L402 token in subsequent requests.</p>
-        <p>Exempt from rate limiting: <code>/</code>, <code>/about</code>, <code>/api-docs</code>, <code>/service/*</code>, <code>/api/v1/health</code></p>
+        <p>Exempt from rate limiting: <code>/</code>, <code>/about</code>, <code>/api-docs</code>, <code>/service/*</code>, <code>/api/v1/health</code>, <code>/feed.xml</code>, <code>/opportunities</code></p>
         <p><em>402 Index is the first service listed in its own directory — the CSV export endpoint is L402-gated, so we eat our own dog food.</em></p>
 
         <div class="info-callout">
