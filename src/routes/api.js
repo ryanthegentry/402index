@@ -6,7 +6,9 @@ import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeUrl } from '../services/url-normalize.js'
 import { verifyL402 } from '../services/l402-verify.js'
 import { getProvider } from '../services/l402-provider.js'
-import { sendRegistrationNotification } from '../services/notify.js'
+import { registerWebhook, deleteWebhook, getWebhook } from '../services/webhooks.js'
+import { emit } from '../services/events.js'
+import { findOpportunities } from '../services/opportunities.js'
 import { discoverProbeConfig } from '../services/wellknown-discovery.js'
 
 const router = Router()
@@ -369,11 +371,9 @@ router.post('/register', async (req, res) => {
 
     const service = registerUpsert().get(params)
 
-    // Fire-and-forget email notification (only on genuinely new registrations)
+    // Fire-and-forget event distribution (webhooks, Nostr, email — only on genuinely new registrations)
     if (service.registered_at === service.updated_at) {
-      sendRegistrationNotification(service).catch(err => {
-        console.error('[register] Notification failed:', err.message)
-      })
+      emit('service.new', service, db)
     }
 
     const message = service.status === 'active'
@@ -502,6 +502,52 @@ router.post('/admin/vacuum', (req, res) => {
     })
   } catch (err) {
     res.status(500).json({ error: `VACUUM failed: ${err.message}` })
+  }
+})
+
+// ─── Opportunities ─────────────────────────────────────────────────────────────
+
+router.get('/opportunities', (req, res) => {
+  const opportunities = findOpportunities(db, { protocol: req.query.protocol })
+  res.json({ opportunities, total: opportunities.length })
+})
+
+// ─── Webhooks ──────────────────────────────────────────────────────────────────
+
+router.post('/webhooks', async (req, res) => {
+  try {
+    const { url, secret, events, protocol_filter } = req.body || {}
+    const result = registerWebhook(db, { url, secret, events, protocol_filter })
+    res.status(201).json(result)
+  } catch (err) {
+    const status = err.message.includes('required') || err.message.includes('HTTPS') || err.message.includes('Invalid') ? 400 : 500
+    res.status(status).json({ error: err.message })
+  }
+})
+
+router.get('/webhooks/:id', (req, res) => {
+  try {
+    const secret = req.headers['x-webhook-secret']
+    if (!secret) return res.status(401).json({ error: 'X-Webhook-Secret header required' })
+    const result = getWebhook(db, req.params.id, secret)
+    res.json(result)
+  } catch (err) {
+    if (err.message.includes('not found')) return res.status(404).json({ error: err.message })
+    if (err.message.includes('Unauthorized')) return res.status(401).json({ error: err.message })
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.delete('/webhooks/:id', (req, res) => {
+  try {
+    const secret = req.headers['x-webhook-secret']
+    if (!secret) return res.status(401).json({ error: 'X-Webhook-Secret header required' })
+    deleteWebhook(db, req.params.id, secret)
+    res.json({ deleted: true })
+  } catch (err) {
+    if (err.message.includes('not found')) return res.status(404).json({ error: err.message })
+    if (err.message.includes('Unauthorized')) return res.status(401).json({ error: err.message })
+    res.status(500).json({ error: err.message })
   }
 })
 

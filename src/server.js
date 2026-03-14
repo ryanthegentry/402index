@@ -39,6 +39,16 @@ app.use('/api/v1/categories', verifyL402, freeLimiter, l402Limiter)
 app.use('/api/v1/export.csv', verifyL402, freeLimiter, l402Limiter)
 // /api/v1/health is exempt from rate limiting (uptime monitors)
 
+// Webhook routes: JSON body parsing + rate limit (5/hour)
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many webhook registrations. Limit: 5 per hour per IP.' },
+})
+app.use('/api/v1/webhooks', express.json({ limit: '10kb' }), webhookLimiter)
+
 // Admin routes: JSON body parsing + auth
 app.use('/api/v1/admin', express.json({ limit: '10kb' }), adminAuth)
 

@@ -16,7 +16,8 @@
     "express": "^4.21.0",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "nostr-tools": "^2.23.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
