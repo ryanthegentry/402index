@@ -1,21 +1,23 @@
 # 402 Index — Competitive Intelligence
 
-**Last updated:** February 26, 2026
+**Last updated:** March 14, 2026
 
 ---
 
 ## x402 Ecosystem Overview
 
-The x402 ecosystem is much larger than initial estimates. As of Feb 2026:
+The x402 ecosystem is large but the headline numbers are misleading. As of March 2026:
 
-- **10,000+ paid API endpoints** live in the ecosystem (per Simplescraper)
-- **100M+ payments** processed since May 2025 launch
+- **161M+ cumulative transactions** since May 2025 launch (up from 100M at Feb 26)
+- **Real API commerce volume: ~$1.6M/30 days** (~$28K/day) per a16z analysis (Mar 11). Bloomberg's $24M figure and x402.org's $600M figure are inflated by DeFi bots, test transactions, and gamified activity. ~50% of observed transactions are artificial.
+- **Stabilized at ~250K transactions/day** (down from 3M/day peak). Baseline forecast: ~87M cumulative by end of 2026.
 - **22+ facilitators** operating independently
-- **163,600 transactions in a single week** (per x402scan)
-- **Average transaction size: ~$0.28** (~$41M / 146M transactions)
 - **x402 Foundation** co-founded by Coinbase + Cloudflare governs the spec
 - **Stripe launched x402 support** in February 2026
 - **Algorand joined** the ecosystem Feb 23, 2026
+- **Google added x402** to Agent Payments Protocol
+- **Base migrating off OP Stack** to proprietary chain (announced Feb 18). Three hard forks planned. Platform risk for x402 providers on Base.
+- **Ramp launched Agent Cards** (Mar 11, 738K views) — corporate card rails for agent spending. Validates "agents need to spend money" entering mainstream corporate consciousness. Solves spending only, not receiving.
 - Protocol covers Base, Ethereum, Solana, BNB Smart Chain, and growing
 
 ### x402 Protocol Details (V2, Dec 2025)
@@ -28,100 +30,122 @@ The x402 ecosystem is much larger than initial estimates. As of Feb 2026:
 
 ### CDP Facilitator Risk
 
-The Coinbase Developer Platform facilitator is a **single point of failure** for most x402 services. If CDP goes down, most x402 endpoints stop working. The spec supports local verification as fallback, but few production deployments implement it. This is a centralization risk worth monitoring and potentially worth surfacing in our health checks.
+The Coinbase Developer Platform facilitator is a **single point of failure** for most x402 services. If CDP goes down, most x402 endpoints stop working. The spec supports local verification as fallback, but few production deployments implement it. This is a centralization risk we surface in our health checks. Our verification data confirms this: only ~5.7% of x402 Bazaar endpoints return valid payment headers (761 of ~13,300).
+
+### L402 Spec Evolution (bLIP-0026)
+
+As of March 2026, the L402 spec is going token-agnostic: `token` replaces `macaroon`, `version="0"` field added, new `agent-spec.md` designed for AI integration. 402index is adding nullable schema columns (token_format, l402_version, invoice_type, pricing_model) to track these fields as the ecosystem adopts them. Lightning Labs' litpages L402 directory expected to announce at Mar 18 community call — we plan to aggregate it.
 
 ---
 
 ## Direct Competitors
 
+### Merit Systems — PRIMARY THREAT
+
+**Added March 10, 2026.** Full teardown in `journals/2026-03-10-merit-systems-teardown.md`.
+
+- **Founded by:** Sam Ragsdale (CEO, ex-a16z, ex-Google SWE) + Ryan Sproule (CTO, ex-Blockchain Capital)
+- **Funding:** $10M seed (Jan 2025), co-led by a16z crypto + Blockchain Capital. $55.5M post-money.
+- **Headcount:** ~5-15 (seed-stage, multiple active repos)
+- **Twitter:** @merit_systems — 11.6K followers
+- **Mission:** "Infrastructure for open agentic commerce"
+
+**Three-product stack:**
+
+1. **AgentCash** (agentcash.dev) — MCP server wallet for AI agents. Single USDC balance pays for any x402 API. 12,450+ installations, 269K+ API calls (subsidized with $100K in VC-funded credits). Claude Desktop, Cursor, Gemini plugins. Custodial hot wallet (private key on disk, no seed phrase). Competes with Golem agent wallet, not 402Index.
+
+2. **x402scan** (x402scan.com) — Ecosystem explorer + directory + embedded wallet. Self-registration (submit URL, auto-validated). MCP server (x402scan-mcp). 299 GH stars, 190 forks. No health monitoring, no quality scoring. Competes directly with 402Index on discovery.
+
+3. **Echo** (echo.merit.systems) — AI model router with billing. 100+ models, 2.5% fee. Creates flywheel: developers use Echo → discover x402 APIs via x402scan → pay via AgentCash.
+
+**Where Merit is ahead:** Funding ($10M vs bootstrapped), ecosystem positioning (a16z/Coinbase orbit), developer distribution (12K+ AgentCash installs), integrated product stack shipping together, speed of execution (28 repos).
+
+**Where Merit is behind:** Zero L402 coverage (entirely x402/USDC), no health monitoring or quality curation, custodial-only wallet, single-chain dependency (Base), no exclusive supply creation, $100K credit subsidy creates artificial metrics.
+
+**Where they're making mistakes:** $100K subsidy is vanity metrics that collapse when credits end. Three products at seed stage = spread thin. Composer no-code agent builder is premature. Telemetry package has 2 GH stars. No L402 hedge.
+
+**Our response:** Don't compete head-to-head. Own the cross-protocol position they're conceding (L402 + x402). Own quality/trust signals they're not building (health checks, verification). Ship Golem integration they cannot replicate. Move fast on MCP distribution.
+
 ### x402 Bazaar (Coinbase)
 
-- **URL:** Bazaar API at `x402.org/facilitator/discovery/resources`
 - **Docs:** docs.cdp.coinbase.com/x402/bazaar
 - **Launched:** Sep 10, 2025
-- **Size:** 70+ services at launch, growing. Heavily crypto/DeFi skewed.
+- **Size:** ~13,300 endpoints indexed in our DB. Heavily crypto/DeFi skewed.
 - **Registration:** Auto-registration via CDP facilitator with `discoverable: true` + bazaar extension
-- **Quality:** Low curation. Many listings have minimal descriptions, no schemas.
+- **Quality:** Low curation. Many listings have minimal descriptions, no schemas. Only ~5.7% return valid payment headers.
 - **Self-assessment:** Coinbase docs call it "more like Yahoo search than Google — functional but evolving"
 - **Protocol:** x402 only. No L402 support. No plans for L402 announced.
 - **MCP:** Docs show Bazaar → MCP server as supported pattern. Client SDK includes `withBazaar()` helper.
-- **V2 integration:** Discovery extension lets services expose structured metadata that facilitators crawl automatically
 
-**Our edge over Bazaar:** L402 coverage, health monitoring, quality curation, exclusive supply, editorial depth. Bazaar is auto-generated; we're hand-curated + automated.
+**Our edge:** L402 coverage, active health monitoring, quality curation via verification tiers, exclusive supply.
 
-**Their edge over us:** Scale (10,000+ vs our initial ~50-100), brand (Coinbase), auto-registration friction is near-zero.
+**Their edge:** Scale, brand (Coinbase), near-zero registration friction.
 
 ### Satring (L402)
 
-- **Claims:** 20+ Lightning-paywalled L402 services
-- **Access:** Tor-accessible, itself L402-paywalled (meta)
-- **Services include:** KV storage, Lightning stats, text summarization, keyword extraction, sentiment analysis, GPT-4o-mini access
-- **Operator:** One-person project. Philosophically aligned with Bitcoin/Lightning ethos.
-- **Reliability:** May be intermittent. Build polling resilience.
+- **Operator:** Landon (one-person project, day job, hobbyist). Call completed Feb 28.
+- **Size:** 100+ L402 endpoints
+- **Access:** Tor-accessible, itself L402-paywalled
+- **Services:** KV storage, Lightning stats, text summarization, keyword extraction, sentiment analysis, GPT-4o-mini access
+- **Reliability:** Intermittent. We poll with resilience (skip if down, preserve existing data).
 - **Protocol:** L402 only.
+- **Relationship:** Supportive. Full node/channel barrier to running Satring services validates Golem's keyless receive thesis.
 
-**Our edge:** We aggregate Satring's listings plus Bazaar plus our own exclusive supply. Satring is L402-only.
+**Our edge:** We aggregate Satring's listings plus 5 other sources plus exclusive supply.
 
-### x402 Service Discovery / Ouroboros
+### Other Indexers
 
-- **Posted to HN:** Feb 25, 2026
-- **Claims:** "Yellow Pages for the agent economy"
-- **Built by:** Claims to be built by autonomous agent
-- **Deployed:** Render
-- **Status:** Very early, independent indexer of x402 services
+**x402 Service Discovery / Ouroboros** — Posted to HN Feb 25. Claims "Yellow Pages for the agent economy." Very early, independent x402 indexer on Render.
 
-### SentEdge AI
+**SentEdge AI** (sentedge.ai/bazaar.html) — Third-party Bazaar explorer with trending/top endpoints and analytics layer. Better UI than raw Bazaar.
 
-- **URL:** sentedge.ai/bazaar.html
-- **Type:** Third-party Bazaar explorer with human-readable UI
-- **Features:** Trending endpoints, top endpoints, top wallets, service browser
-- **Differentiation from Bazaar:** Better UI, analytics layer
+**x402bazaar.xyz** — Simple third-party Bazaar viewer.
 
-### x402bazaar.xyz
-
-- **Type:** Another third-party Bazaar viewer
-- **Status:** Simple explorer
-
-### x402scan
-
-- **URL:** x402scan.com
-- **Type:** Ecosystem analytics platform / indexer
-- **Tracks:** Transaction volume, endpoint discovery, facilitator usage, network distribution
-- **Not a directory:** More of a block explorer for x402 payments
-
-### QuickNode x402 Testing Tool
-
-- **Type:** Interactive testing environment for x402 protocol
-- **Features:** Connect to any x402 endpoint, test paywalls, search Bazaar, explore 402 flows
-- **Not a competitor per se** but shows the tooling ecosystem is growing
+**QuickNode x402 Testing Tool** — Interactive testing environment for x402 protocol. Not a competitor but shows tooling ecosystem growing.
 
 ---
 
-## MCP Marketplace Landscape
+## Our Verified Supply (Production, Mar 14)
 
-Multiple MCP marketplaces now exist. Our MCP server (Phase 2) enters a crowded space:
+| Metric | Value |
+|--------|-------|
+| Total endpoints indexed | ~13,700 |
+| Payment-verified endpoints | 767+ |
+| x402 payment_valid=1 | 761 |
+| L402 healthy | 41 (+50 pending MaximumSats node recovery) |
+| Sources | Bazaar, Satring, L402Apps, Sponge, self-registered, well-known, discovery |
+| Distinct providers (filtered) | 295+ |
+| L402 providers | 24 |
+| Tests passing | 534 |
 
-- **LobeHub** (lobehub.com/mcp) — Large directory of MCP servers
-- **mcpmarket.com** — "Top MCP Servers" discovery
-- **mcpservers.org** — Open directory
-- **Cline marketplace** — Built into Cline IDE
-- **Cursor marketplace** — Built into Cursor IDE
-- **Databricks MCP Catalog** — Enterprise, Unity Catalog integrated
-- **AWS Marketplace MCP** — Amazon Bedrock integration
-- **Google Cloud MCP servers** — Maps, BigQuery, Compute Engine, Kubernetes
+**First third-party L402 registration:** Ben Carman's mutinynet Lightning faucet — registered, verified, live, and [publicly tweeted](https://x.com/benthecarman/status/2031108604720300042). Strongest external validation to date.
 
-**Our MCP differentiation:** The only MCP server that returns services you can pay for programmatically without human signup. Every result is a direct L402/x402 endpoint. Other MCP servers connect to services that require API keys and human registration.
+**Active provider relationships:** Jordi/Fewsats (done), Satring/Landon (done, supportive), Ben Carman (live), Brian Murray/Ganamos (featured), Marty Bent/TFTC (active outreach), LightningEnable (DM pending — claims 5K MCP downloads + "shipping L402 from day one," contradicts our finding of API-key-only endpoints), Michael Levin/litpages (outreach planned).
+
+---
+
+## MCP Landscape
+
+Our MCP server is built, deployed, and integrated with Golem CLI (`golem directory search/list`). The differentiation holds: the only MCP server that returns services you can pay for programmatically without human signup. Every result is a direct L402/x402 endpoint.
+
+Key MCP marketplaces: LobeHub, mcpmarket.com, mcpservers.org, Cline, Cursor, Databricks MCP Catalog, AWS Marketplace MCP, Google Cloud MCP servers.
+
+Merit's x402scan-mcp (4 stars) is the closest competitor — combines discovery + payment. But x402-only.
+
+**Distribution is the battleground.** MCP pre-configuration in agent frameworks (OpenClaw, Claude Code, etc.) matters more than the MCP server itself.
 
 ---
 
 ## Non-Obvious Competitive Dynamics
 
-1. **Coinbase is playing open-standard, not lock-in.** They co-founded x402 Foundation with Cloudflare, open-sourced everything, explicitly support multiple facilitators. Don't assume they want Bazaar to be the only directory — they want the protocol to win, which means more directories is good for them. However, they have a long track record of under-executing on dev tools.
+1. **Coinbase is playing open-standard, not lock-in.** They co-founded x402 Foundation with Cloudflare, open-sourced everything. They want the protocol to win, which means more directories is good for them. However: long track record of under-executing on dev tools.
 
-2. **The "aggregators of aggregators" pattern is already happening.** SentEdge, x402bazaar.xyz, Ouroboros are all aggregating Bazaar. Pure aggregation is not defensible. Our exclusive supply and L402 coverage are the differentiators.
+2. **Pure aggregation is not defensible.** SentEdge, x402bazaar.xyz, Ouroboros, and now x402scan all aggregate Bazaar. Our exclusive supply creation (helping providers add L402 gating) and cross-protocol coverage are the differentiators.
 
-3. **MCP is becoming infrastructure, not a differentiator.** Every major cloud provider now offers MCP. The distribution mechanism for our MCP server matters more than the MCP server itself. Distribution = being the default in Golem wallet.
+3. **The x402 headline numbers are noise.** Real commerce volume is ~$1.6M/30 days. Half of transaction activity is artificial. The market is real but 100x smaller than the hype suggests. This favors quality curation over raw scale.
 
-4. **The x402 ecosystem has a quality problem.** Many listings are memecoins, toy services, or minimal-description endpoints. A curated, quality-signaled directory has genuine value for agents making autonomous spending decisions.
+4. **L402 is tiny but may grow disproportionately.** Lightning is censorship-resistant, doesn't have the single-facilitator failure mode of x402/CDP, and Base's migration off OP Stack adds platform risk. The L402 spec going token-agnostic (bLIP-0026) signals maturation. Long-term thesis, not short-term fact.
 
-5. **L402 is tiny but may grow disproportionately.** Lightning is censorship-resistant and doesn't have the single-facilitator-failure-mode of x402/CDP. As agent volume increases and reliability matters more, L402's decentralization advantage becomes real. This is a long-term thesis, not a short-term fact.
+5. **Agent spending is going mainstream.** Ramp Agent Cards (738K views in days) proves corporate buyers want agent payment infrastructure. But Ramp solves spending, not receiving. L402/x402 solve receiving. These are complementary, not competing.
+
+6. **Merit's subsidy play has a shelf life.** $100K in free credits creates impressive installation numbers. When credits expire, retention reveals real demand. Monitor AgentCash installs monthly — 12K→25K = real growth, 12K→13K = paper tiger.

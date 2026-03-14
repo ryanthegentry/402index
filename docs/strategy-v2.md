@@ -1,5 +1,7 @@
 # The 402 Index: Strategy v2
 
+> **Historical document — February 26, 2026.** This captures the founding strategic reasoning (loss leader positioning, convexity argument, risk analysis, why exclusive supply matters). For current project state, see `status.md` and `roadmap.md` in `~/agent-state/projects/402index/`. For current competitive landscape, see `docs/competitive-intel.md`.
+
 **February 26, 2026** — Red-teamed and revised.
 
 ---
