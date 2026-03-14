@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { escapeHtml, healthDot, protocolBadge, formatPrice, formatSchema } from '../src/views/helpers.js'
+import { escapeHtml, escapeXml, healthDot, protocolBadge, formatPrice, formatSchema } from '../src/views/helpers.js'
 
 describe('escapeHtml', () => {
   it('escapes HTML special characters', () => {
@@ -19,6 +19,30 @@ describe('escapeHtml', () => {
 
   it('passes through safe strings unchanged', () => {
     assert.equal(escapeHtml('hello world'), 'hello world')
+  })
+})
+
+describe('escapeXml', () => {
+  it('escapes all five XML entities', () => {
+    assert.equal(escapeXml('<tag attr="val" other=\'val2\'>A & B</tag>'),
+      '&lt;tag attr=&quot;val&quot; other=&apos;val2&apos;&gt;A &amp; B&lt;/tag&gt;')
+  })
+
+  it('escapes single quotes (unlike escapeHtml)', () => {
+    assert.equal(escapeXml("it's"), 'it&apos;s')
+  })
+
+  it('returns empty string for null/undefined', () => {
+    assert.equal(escapeXml(null), '')
+    assert.equal(escapeXml(undefined), '')
+  })
+
+  it('passes through safe strings unchanged', () => {
+    assert.equal(escapeXml('hello world'), 'hello world')
+  })
+
+  it('coerces numbers to string', () => {
+    assert.equal(escapeXml(42), '42')
   })
 })
 

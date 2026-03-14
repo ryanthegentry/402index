@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import db from '../db.js'
-import { queryServices, PAGE_COLUMNS } from '../queries/services.js'
+import { queryServices, PAGE_COLUMNS, API_COLUMNS } from '../queries/services.js'
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { homePage } from '../views/home.js'
 import { detailPage } from '../views/detail.js'
@@ -8,9 +8,31 @@ import { aboutPage } from '../views/about.js'
 import { apiDocsPage } from '../views/api-docs.js'
 import { adminPage } from '../views/admin.js'
 import { demoPage } from '../views/demo.js'
+import { feedXml } from '../views/feed.js'
+import { opportunitiesPage } from '../views/opportunities.js'
+import { findOpportunities } from '../services/opportunities.js'
 import { layout } from '../views/layout.js'
 
 const router = Router()
+
+// RSS feed — public, no auth, no rate limit
+router.get('/feed.xml', (req, res) => {
+  const { protocol, health, type } = req.query
+  const opts = { protocol, health, sort: 'registered_at', order: 'desc', rawLimit: '100', rawOffset: '0' }
+  const { services } = queryServices(db, opts, API_COLUMNS)
+
+  let filtered = services
+  if (type === 'new') {
+    const cutoff = new Date(Date.now() - 7 * 86400000).toISOString()
+    filtered = services.filter(s => s.registered_at >= cutoff)
+  }
+
+  const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : ''
+  const selfUrl = `https://402index.io/feed.xml${qs}`
+
+  res.set('Content-Type', 'application/rss+xml; charset=utf-8')
+  res.send(feedXml({ services: filtered, selfUrl, filters: { protocol, health, type } }))
+})
 
 router.get('/', (req, res) => {
   const { protocol, category, health, source, q, featured, sort, payment_valid, limit: rawLimit, offset: rawOffset } = req.query
@@ -168,6 +190,12 @@ router.get('/demo', (req, res) => {
 // Admin dashboard (auth is client-side via API calls)
 router.get('/admin', (req, res) => {
   res.send(adminPage())
+})
+
+// Opportunities page
+router.get('/opportunities', (req, res) => {
+  const opportunities = findOpportunities(db, { protocol: req.query.protocol })
+  res.send(opportunitiesPage({ opportunities, protocol: req.query.protocol }))
 })
 
 // ─── Probe Sample Builder ─────────────────────────────────────────────────────

@@ -393,6 +393,9 @@ async function checkFacilitatorReachable(url) {
 /** Persist health check result and update service record. */
 function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown }) {
   try {
+    // Read current status before update (for event emission)
+    const oldStatus = db.prepare('SELECT health_status FROM services WHERE id = ?').get(serviceId)?.health_status
+
     insertHealthCheck().run({
       service_id: serviceId,
       status: checkStatus,
@@ -422,6 +425,18 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
       x402_facilitator_reachable: x402FacilitatorReachable ?? null,
       x402_asset_known: x402AssetKnown ?? null,
     })
+
+    // Emit events on health status change (fire-and-forget)
+    if (oldStatus && oldStatus !== healthStatus) {
+      import('../services/events.js').then(({ emit }) => {
+        const serviceData = db.prepare('SELECT id, name, url, protocol, category, health_status FROM services WHERE id = ?').get(serviceId)
+        if (!serviceData) return
+        emit('service.health_changed', { ...serviceData, old_status: oldStatus }, db)
+        if (healthStatus === 'down' && oldStatus !== 'down') {
+          emit('service.down', serviceData, db)
+        }
+      }).catch(err => console.error('[health] Event emission error:', err.message))
+    }
   } catch (err) {
     if (err.message && err.message.includes('FOREIGN KEY constraint failed')) {
       console.warn(`[health] Service ${serviceId} was deleted during check — skipping persist`)

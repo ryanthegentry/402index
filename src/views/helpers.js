@@ -3,6 +3,11 @@ export function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+export function escapeXml(str) {
+  if (str == null) return ''
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+}
+
 export function healthDot(status) {
   return `<span class="health-dot health-${status}"></span>${status}`
 }

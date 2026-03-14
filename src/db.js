@@ -95,6 +95,18 @@ db.exec(`
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS webhooks (
+    id TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL,
+    events TEXT NOT NULL DEFAULT 'service.new',
+    protocol_filter TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_triggered_at TEXT,
+    failure_count INTEGER DEFAULT 0
+  );
 `)
 
 // Migration: remove CHECK constraint on source to support compound values (e.g. 'satring,l402apps')
