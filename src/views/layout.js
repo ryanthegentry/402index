@@ -6,6 +6,7 @@ export function layout(title, content) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f1117">
   <title>${title} — 402 Index</title>
   <style>${styles}</style>
 </head>
@@ -16,6 +17,7 @@ export function layout(title, content) {
       <nav>
         <a href="/">Directory</a>
         <a href="/about">About</a>
+        <a href="/demo">Demo</a>
         <a href="/api-docs">API</a>
       </nav>
     </div>

@@ -396,6 +396,24 @@ router.post('/register', async (req, res) => {
   }
 })
 
+// ─── Demo Endpoints ──────────────────────────────────────────────────────────
+
+import { buildProbeSample } from './pages.js'
+
+router.get('/demo/probe-sample', (req, res) => {
+  const protocol = req.query.protocol || 'L402'
+  const sample = buildProbeSample(db, protocol)
+  res.json(sample)
+})
+
+router.get('/healthcheck', (req, res) => {
+  res.status(501).json({
+    error: 'Not Implemented',
+    message: 'L402-gated health check endpoint coming soon. This endpoint will allow you to run a live probe against any URL and get real-time verification results.',
+    status: 501,
+  })
+})
+
 // ─── Admin Endpoints ──────────────────────────────────────────────────────────
 
 const getPending = () => stmt('getPending', "SELECT * FROM services WHERE status = 'pending' ORDER BY registered_at DESC")
