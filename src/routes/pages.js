@@ -7,6 +7,7 @@ import { detailPage } from '../views/detail.js'
 import { aboutPage } from '../views/about.js'
 import { apiDocsPage } from '../views/api-docs.js'
 import { adminPage } from '../views/admin.js'
+import { demoPage } from '../views/demo.js'
 import { layout } from '../views/layout.js'
 
 const router = Router()
@@ -111,9 +112,176 @@ router.get('/api-docs', (req, res) => {
   res.send(apiDocsPage())
 })
 
+// Demo page
+router.get('/demo', (req, res) => {
+  const ACTIVE_FILTER = "WHERE status = 'active' OR status IS NULL"
+
+  // Gather stats
+  const totalIndexed = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER}`).get().c
+
+  const verifiedCount = db.prepare(
+    `SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND ((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy'))`
+  ).get().c
+
+  const healthRows = db.prepare(`SELECT health_status, COUNT(*) as c FROM services ${ACTIVE_FILTER} GROUP BY health_status`).all()
+  const healthMap = { healthy: 0, degraded: 0, down: 0, unknown: 0 }
+  for (const row of healthRows) {
+    healthMap[row.health_status] = row.c
+  }
+
+  // Distinct providers (excluding templates/demos)
+  const allUrls = db.prepare(`SELECT url, protocol, is_template, is_demo, x402_payment_valid, health_status FROM services ${ACTIVE_FILTER}`).all()
+  const providerSets = { total: new Set(), L402: new Set(), x402: new Set() }
+  for (const svc of allUrls) {
+    if (svc.is_template || svc.is_demo) continue
+    let host
+    try { host = new URL(svc.url).hostname } catch { continue }
+    providerSets.total.add(host)
+    providerSets[svc.protocol]?.add(host)
+  }
+
+  // Protocol breakdowns
+  const l402Total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'L402'`).get().c
+  const l402Healthy = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'L402' AND health_status = 'healthy'`).get().c
+  const x402Total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'x402'`).get().c
+  const x402Verified = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'x402' AND x402_payment_valid = 1`).get().c
+  const x402Healthy = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'x402' AND health_status = 'healthy'`).get().c
+
+  const lastHealthCheck = db.prepare('SELECT MAX(checked_at) as t FROM health_checks').get()?.t || null
+
+  const stats = {
+    totalIndexed,
+    verified: verifiedCount,
+    distinctProviders: providerSets.total.size,
+    ...healthMap,
+    lastHealthCheck,
+    l402: { endpoints: l402Total, verified: l402Healthy, healthy: l402Healthy, providers: providerSets.L402.size },
+    x402: { endpoints: x402Total, verified: x402Verified, healthy: x402Healthy, providers: providerSets.x402.size },
+  }
+
+  // Probe sample for flow visualization
+  const probeSample = buildProbeSample(db, 'L402')
+
+  res.send(demoPage({ stats, probeSample }))
+})
+
 // Admin dashboard (auth is client-side via API calls)
 router.get('/admin', (req, res) => {
   res.send(adminPage())
 })
+
+// ─── Probe Sample Builder ─────────────────────────────────────────────────────
+
+export function buildProbeSample(database, protocol = 'L402') {
+  const proto = protocol === 'x402' ? 'x402' : 'L402'
+
+  // Find a healthy service with recent health check data
+  const service = database.prepare(`
+    SELECT id, name, url, protocol, price_sats, price_usd, category, provider, payment_asset, payment_network
+    FROM services
+    WHERE (status = 'active' OR status IS NULL)
+      AND protocol = ?
+      AND health_status = 'healthy'
+      AND reliability_score IS NOT NULL
+    ORDER BY reliability_score DESC
+    LIMIT 1
+  `).get(proto)
+
+  if (!service) {
+    return buildStaticProbeSample(proto)
+  }
+
+  const healthCheck = database.prepare(`
+    SELECT checked_at, status, response_time_ms, http_status
+    FROM health_checks
+    WHERE service_id = ?
+    ORDER BY checked_at DESC
+    LIMIT 1
+  `).get(service.id)
+
+  const flow = proto === 'L402' ? {
+    request: `GET ${service.url}`,
+    responseStatus: 402,
+    protocolHeaders: {
+      L402: `WWW-Authenticate: L402 macaroon="AGIAJEem...", invoice="lnbc${service.price_sats || 100}n1..."`,
+    },
+    retryHeader: 'Authorization: L402 <macaroon>:<preimage>',
+    successStatus: 200,
+  } : {
+    request: `GET ${service.url}`,
+    responseStatus: 402,
+    protocolHeaders: {
+      x402: `PAYMENT-REQUIRED: { "accepts": [{ "asset": "${service.payment_asset || 'USDC'}", "amount": "${service.price_usd ? Math.round(service.price_usd * 1000000) : '10000'}", "facilitator": "https://x402.org/facilitator" }] }`,
+    },
+    retryHeader: 'X-PAYMENT: <base64-encoded-signed-payment>',
+    successStatus: 200,
+  }
+
+  return {
+    service: {
+      name: service.name,
+      url: service.url,
+      protocol: service.protocol,
+      price_sats: service.price_sats,
+      price_usd: service.price_usd,
+      category: service.category,
+      provider: service.provider,
+    },
+    healthCheck: healthCheck || {
+      checked_at: null,
+      status: 'unknown',
+      response_time_ms: null,
+      http_status: null,
+    },
+    flow,
+  }
+}
+
+function buildStaticProbeSample(protocol) {
+  if (protocol === 'x402') {
+    return {
+      service: {
+        name: 'Example x402 API',
+        url: 'https://api.example.com/data',
+        protocol: 'x402',
+        price_sats: null,
+        price_usd: 0.01,
+        category: 'data',
+        provider: 'Example',
+      },
+      healthCheck: { checked_at: null, status: 'unknown', response_time_ms: null, http_status: null },
+      flow: {
+        request: 'GET https://api.example.com/data',
+        responseStatus: 402,
+        protocolHeaders: {
+          x402: 'PAYMENT-REQUIRED: { "accepts": [{ "asset": "USDC", "amount": "10000", "facilitator": "https://x402.org/facilitator" }] }',
+        },
+        retryHeader: 'X-PAYMENT: <base64-encoded-signed-payment>',
+        successStatus: 200,
+      },
+    }
+  }
+  return {
+    service: {
+      name: 'Example L402 API',
+      url: 'https://api.example.com/weather',
+      protocol: 'L402',
+      price_sats: 10,
+      price_usd: null,
+      category: 'data/weather',
+      provider: 'Example',
+    },
+    healthCheck: { checked_at: null, status: 'unknown', response_time_ms: null, http_status: null },
+    flow: {
+      request: 'GET https://api.example.com/weather',
+      responseStatus: 402,
+      protocolHeaders: {
+        L402: 'WWW-Authenticate: L402 macaroon="AGIAJEem...", invoice="lnbc100n1..."',
+      },
+      retryHeader: 'Authorization: L402 <macaroon>:<preimage>',
+      successStatus: 200,
+    },
+  }
+}
 
 export default router

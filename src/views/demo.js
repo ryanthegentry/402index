@@ -1,0 +1,398 @@
+import { layout } from './layout.js'
+import { escapeHtml } from './helpers.js'
+
+function formatNumber(n) {
+  return Number(n).toLocaleString('en-US')
+}
+
+export function demoPage({ stats, probeSample }) {
+  const s = stats
+  const probe = probeSample
+
+  const content = `
+  <div class="container demo-page">
+    <div class="demo-header">
+      <h1>402 Index Live Demo</h1>
+      <p class="demo-subtitle">The paid API ecosystem — indexed, verified, and searchable by AI agents</p>
+    </div>
+
+    <!-- ─── Panel 1: Ecosystem Dashboard ──────────────────────────────── -->
+    <section class="demo-panel demo-ecosystem">
+      <h2>Ecosystem Overview</h2>
+
+      <div class="demo-stat-cards">
+        <div class="demo-stat-card">
+          <div class="demo-stat-number">${formatNumber(s.totalIndexed)}</div>
+          <div class="demo-stat-label">Endpoints Indexed</div>
+        </div>
+        <div class="demo-stat-card demo-stat-verified">
+          <div class="demo-stat-number">${formatNumber(s.verified)}</div>
+          <div class="demo-stat-label">Payment-Verified</div>
+        </div>
+        <div class="demo-stat-card">
+          <div class="demo-stat-number">${formatNumber(s.distinctProviders)}</div>
+          <div class="demo-stat-label">Distinct Providers</div>
+        </div>
+      </div>
+
+      <div class="demo-protocol-compare">
+        <div class="demo-protocol-card demo-protocol-l402">
+          <div class="demo-protocol-title"><span class="badge badge-l402">L402</span> Lightning Network</div>
+          <div class="demo-protocol-stats">
+            <div class="demo-protocol-row"><span>Verified</span><strong>${s.l402.verified} / ${s.l402.endpoints}</strong></div>
+            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.l402.healthy}</strong></div>
+            <div class="demo-protocol-row"><span>Providers</span><strong>${s.l402.providers}</strong></div>
+          </div>
+          <div class="demo-protocol-note">Decentralized, censorship-resistant, no facilitator dependency</div>
+        </div>
+        <div class="demo-protocol-card demo-protocol-x402">
+          <div class="demo-protocol-title"><span class="badge badge-x402">x402</span> Blockchain</div>
+          <div class="demo-protocol-stats">
+            <div class="demo-protocol-row"><span>Verified</span><strong>${s.x402.verified} / ${s.x402.endpoints}</strong></div>
+            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.x402.healthy}</strong></div>
+            <div class="demo-protocol-row"><span>Providers</span><strong>${s.x402.providers}</strong></div>
+          </div>
+          <div class="demo-protocol-note">Coinbase CDP facilitator, Base/Solana chains</div>
+        </div>
+      </div>
+
+      <div class="demo-health-bars">
+        <h3>Health Breakdown</h3>
+        <div class="demo-health-row">
+          <span class="health-dot health-healthy"></span>
+          <span class="demo-health-label">healthy</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-healthy" style="width: ${s.totalIndexed ? (s.healthy / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.healthy)}</span>
+        </div>
+        <div class="demo-health-row">
+          <span class="health-dot health-degraded"></span>
+          <span class="demo-health-label">degraded</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-degraded" style="width: ${s.totalIndexed ? (s.degraded / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.degraded)}</span>
+        </div>
+        <div class="demo-health-row">
+          <span class="health-dot health-down"></span>
+          <span class="demo-health-label">down</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-down" style="width: ${s.totalIndexed ? (s.down / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.down)}</span>
+        </div>
+        <div class="demo-health-row">
+          <span class="health-dot health-unknown"></span>
+          <span class="demo-health-label">unknown</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-unknown" style="width: ${s.totalIndexed ? (s.unknown / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.unknown)}</span>
+        </div>
+        <div class="demo-last-checked">Last checked: ${escapeHtml(s.lastHealthCheck || 'Never')}</div>
+      </div>
+    </section>
+
+    <!-- ─── Panel 2: Interactive MCP Search ───────────────────────────── -->
+    <section class="demo-panel demo-search">
+      <h2>Agent Discovery</h2>
+      <p class="demo-panel-desc">Search the directory like an AI agent would through the MCP server</p>
+
+      <div class="demo-search-form">
+        <input type="text" class="demo-search-input" id="demo-q" placeholder="Search APIs (e.g., weather, crypto, tools)..." />
+        <div class="demo-filter-chips">
+          <div class="demo-filter-group">
+            <label>Protocol</label>
+            <select id="demo-protocol">
+              <option value="">Both</option>
+              <option value="L402">L402</option>
+              <option value="x402">x402</option>
+            </select>
+          </div>
+          <div class="demo-filter-group">
+            <label>Health</label>
+            <select id="demo-health">
+              <option value="">Any</option>
+              <option value="healthy">Healthy</option>
+              <option value="degraded">Degraded</option>
+              <option value="down">Down</option>
+            </select>
+          </div>
+          <div class="demo-filter-group">
+            <label>Category</label>
+            <select id="demo-category">
+              <option value="">All</option>
+            </select>
+          </div>
+          <div class="demo-filter-group">
+            <label>Sort</label>
+            <select id="demo-sort">
+              <option value="reliability">Reliability</option>
+              <option value="latency">Latency</option>
+              <option value="price">Price</option>
+              <option value="name">Name</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="demo-mcp-query" id="demo-mcp-display">
+        <div class="demo-mcp-header">
+          <span>MCP Tool Call</span>
+          <button class="copy-btn" id="demo-copy-mcp">Copy</button>
+        </div>
+        <pre class="demo-code-block" id="demo-mcp-json">{
+  "tool": "search_services",
+  "arguments": {}
+}</pre>
+      </div>
+
+      <div class="demo-search-results" id="demo-search-results">
+        <p class="demo-search-hint">Start typing or adjust filters to search...</p>
+      </div>
+
+      <button class="demo-healthcheck-btn" disabled title="Coming soon — L402-gated">Check Endpoint Health</button>
+    </section>
+
+    <!-- ─── Panel 3: Payment Flow Visualization ───────────────────────── -->
+    <section class="demo-panel demo-flow">
+      <h2>Payment Flow</h2>
+      <p class="demo-panel-desc">How an agent pays for an L402/x402 API call — step by step</p>
+
+      <div class="demo-flow-toggle" id="demo-flow-toggle">
+        <button class="demo-toggle-btn demo-toggle-active" data-protocol="L402">L402 (Lightning)</button>
+        <button class="demo-toggle-btn" data-protocol="x402">x402 (Blockchain)</button>
+      </div>
+
+      <div class="demo-flow-steps" id="demo-flow-steps">
+        <div class="demo-flow-step">
+          <div class="demo-flow-step-number">1</div>
+          <div class="demo-flow-step-content">
+            <h4>Agent Sends Request</h4>
+            <p>Agent discovers endpoint via 402index and sends request</p>
+            <pre class="demo-code-block">${escapeHtml(probe.flow.request)}</pre>
+          </div>
+        </div>
+
+        <div class="demo-flow-step">
+          <div class="demo-flow-step-number">2</div>
+          <div class="demo-flow-step-content">
+            <h4>Server Returns 402</h4>
+            <p>Server requires payment — returns 402 with payment instructions</p>
+            <pre class="demo-code-block" id="demo-flow-402-header">${escapeHtml(probe.flow.protocolHeaders.L402 || probe.flow.protocolHeaders.x402 || '')}</pre>
+          </div>
+        </div>
+
+        <div class="demo-flow-step">
+          <div class="demo-flow-step-number">3</div>
+          <div class="demo-flow-step-content">
+            <h4 id="demo-flow-pay-title">Agent Pays Invoice</h4>
+            <p id="demo-flow-pay-desc">Agent pays Lightning invoice automatically via lnget or wallet</p>
+            <pre class="demo-code-block" id="demo-flow-pay-detail">Lightning BOLT11 invoice
+Amount: ${probe.service.price_sats || '?'} sats
+Expiry: 60 seconds</pre>
+          </div>
+        </div>
+
+        <div class="demo-flow-step">
+          <div class="demo-flow-step-number">4</div>
+          <div class="demo-flow-step-content">
+            <h4>Agent Retries with Token</h4>
+            <p>Agent retries request with proof of payment</p>
+            <pre class="demo-code-block" id="demo-flow-retry-header">${escapeHtml(probe.flow.retryHeader)}</pre>
+          </div>
+        </div>
+
+        <div class="demo-flow-step">
+          <div class="demo-flow-step-number">5</div>
+          <div class="demo-flow-step-content">
+            <h4>Server Returns 200</h4>
+            <p>Server validates payment and returns the requested data</p>
+            <pre class="demo-code-block">HTTP/1.1 200 OK
+Content-Type: application/json
+
+{ "data": "..." }</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+  (function() {
+    // ─── Panel 2: Interactive Search ────────────────────────────────────
+
+    const searchInput = document.getElementById('demo-q')
+    const protocolSelect = document.getElementById('demo-protocol')
+    const healthSelect = document.getElementById('demo-health')
+    const categorySelect = document.getElementById('demo-category')
+    const sortSelect = document.getElementById('demo-sort')
+    const resultsContainer = document.getElementById('demo-search-results')
+    const mcpJson = document.getElementById('demo-mcp-json')
+    const copyBtn = document.getElementById('demo-copy-mcp')
+
+    let debounceTimer = null
+
+    // Load categories
+    fetch('/api/v1/categories')
+      .then(r => r.json())
+      .then(data => {
+        for (const [cat] of Object.entries(data.categories || {}).sort((a, b) => b[1].count - a[1].count)) {
+          const opt = document.createElement('option')
+          opt.value = cat
+          opt.textContent = cat
+          categorySelect.appendChild(opt)
+        }
+      })
+      .catch(() => {})
+
+    function buildQuery() {
+      const params = {}
+      const q = searchInput.value.trim()
+      if (q) params.q = q
+      if (protocolSelect.value) params.protocol = protocolSelect.value
+      if (healthSelect.value) params.health = healthSelect.value
+      if (categorySelect.value) params.category = categorySelect.value
+      if (sortSelect.value) params.sort = sortSelect.value
+      params.limit = 10
+      return params
+    }
+
+    function updateMcpDisplay(params) {
+      const args = {}
+      if (params.q) args.query = params.q
+      if (params.protocol) args.protocol = params.protocol
+      if (params.health) args.health = params.health
+      if (params.category) args.category = params.category
+      if (params.sort) args.sort = params.sort
+      mcpJson.textContent = JSON.stringify({ tool: 'search_services', arguments: args }, null, 2)
+    }
+
+    function escapeHtmlClient(str) {
+      if (!str) return ''
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    }
+
+    function healthDotHtml(status) {
+      return '<span class="health-dot health-' + (status || 'unknown') + '"></span>' + (status || 'unknown')
+    }
+
+    function protocolBadgeHtml(protocol) {
+      const cls = protocol === 'x402' ? 'badge-x402' : protocol === 'L402' ? 'badge-l402' : 'badge-both'
+      return '<span class="badge ' + cls + '">' + protocol + '</span>'
+    }
+
+    function renderResults(data) {
+      if (!data.services || data.services.length === 0) {
+        resultsContainer.innerHTML = '<p class="demo-search-hint">No services found matching your criteria.</p>'
+        return
+      }
+
+      let html = '<div class="demo-results-header">' + data.total + ' services found</div>'
+      for (const svc of data.services) {
+        html += '<div class="demo-result-card" data-id="' + escapeHtmlClient(svc.id) + '">'
+        html += '<div class="demo-result-summary">'
+        html += '<div class="demo-result-name">' + escapeHtmlClient(svc.name) + '</div>'
+        html += '<div class="demo-result-meta">'
+        html += protocolBadgeHtml(svc.protocol) + ' '
+        html += healthDotHtml(svc.health_status) + ' '
+        if (svc.reliability_score != null) html += '<span class="demo-result-reliability">Reliability: ' + svc.reliability_score + '</span> '
+        if (svc.latency_p50_ms != null) html += '<span class="demo-result-latency">' + svc.latency_p50_ms + 'ms</span> '
+        if (svc.price_usd != null) html += '<span class="demo-result-price">$' + svc.price_usd + '</span>'
+        else if (svc.price_sats != null) html += '<span class="demo-result-price">' + svc.price_sats + ' sats</span>'
+        html += '</div>'
+        html += '<div class="demo-result-url">' + escapeHtmlClient(svc.url) + '</div>'
+        html += '</div>'
+        html += '<div class="demo-result-detail" style="display:none">'
+        html += '<div class="detail-row"><span class="detail-label">Provider</span><span class="detail-value">' + escapeHtmlClient(svc.provider || '—') + '</span></div>'
+        html += '<div class="detail-row"><span class="detail-label">Category</span><span class="detail-value">' + escapeHtmlClient(svc.category || '—') + '</span></div>'
+        html += '<div class="detail-row"><span class="detail-label">Payment Asset</span><span class="detail-value">' + escapeHtmlClient(svc.payment_asset || '—') + '</span></div>'
+        html += '<div class="detail-row"><span class="detail-label">Payment Network</span><span class="detail-value">' + escapeHtmlClient(svc.payment_network || '—') + '</span></div>'
+        if (svc.description) html += '<div class="demo-result-desc">' + escapeHtmlClient(svc.description) + '</div>'
+        html += '</div>'
+        html += '</div>'
+      }
+      resultsContainer.innerHTML = html
+
+      // Click to expand/collapse
+      resultsContainer.querySelectorAll('.demo-result-card').forEach(function(card) {
+        card.addEventListener('click', function() {
+          const detail = this.querySelector('.demo-result-detail')
+          detail.style.display = detail.style.display === 'none' ? 'block' : 'none'
+        })
+      })
+    }
+
+    function doSearch() {
+      const params = buildQuery()
+      updateMcpDisplay(params)
+      const qs = new URLSearchParams(params).toString()
+      fetch('/api/v1/services?' + qs)
+        .then(function(r) { return r.json() })
+        .then(function(data) { renderResults(data) })
+        .catch(function() {
+          resultsContainer.innerHTML = '<p class="demo-search-hint">Error loading results.</p>'
+        })
+    }
+
+    function debouncedSearch() {
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(doSearch, 300)
+    }
+
+    searchInput.addEventListener('input', debouncedSearch)
+    protocolSelect.addEventListener('change', doSearch)
+    healthSelect.addEventListener('change', doSearch)
+    categorySelect.addEventListener('change', doSearch)
+    sortSelect.addEventListener('change', doSearch)
+
+    // Copy MCP query
+    copyBtn.addEventListener('click', function(e) {
+      e.stopPropagation()
+      navigator.clipboard.writeText(mcpJson.textContent).then(function() {
+        copyBtn.textContent = 'Copied!'
+        setTimeout(function() { copyBtn.textContent = 'Copy' }, 1500)
+      })
+    })
+
+    // Initial search
+    doSearch()
+
+    // ─── Panel 3: Flow Protocol Toggle ──────────────────────────────────
+
+    var flowData = ${JSON.stringify({
+      L402: {
+        header: probe.flow.protocolHeaders.L402 || 'WWW-Authenticate: L402 macaroon="<token>", invoice="lnbc..."',
+        payTitle: 'Agent Pays Invoice',
+        payDesc: 'Agent pays Lightning invoice automatically via lnget or wallet',
+        payDetail: 'Lightning BOLT11 invoice\\nAmount: ' + (probe.service.price_sats || '?') + ' sats\\nExpiry: 60 seconds',
+        retryHeader: probe.flow.retryHeader || 'Authorization: L402 <macaroon>:<preimage>',
+      },
+      x402: {
+        header: probe.flow.protocolHeaders.x402 || 'PAYMENT-REQUIRED: { "accepts": [{ "asset": "USDC", "amount": "10000", "facilitator": "https://x402.org/facilitator" }] }',
+        payTitle: 'Agent Signs Payment',
+        payDesc: 'Agent signs USDC transfer via x402 facilitator',
+        payDetail: 'x402 Payment Requirement\\nAsset: USDC\\nChain: Base\\nFacilitator: x402.org',
+        retryHeader: 'X-PAYMENT: <base64-encoded-signed-payment>',
+      },
+    })}
+
+    var flowToggle = document.getElementById('demo-flow-toggle')
+    flowToggle.addEventListener('click', function(e) {
+      var btn = e.target.closest('.demo-toggle-btn')
+      if (!btn) return
+      var protocol = btn.getAttribute('data-protocol')
+      var data = flowData[protocol]
+      if (!data) return
+
+      // Update active toggle
+      flowToggle.querySelectorAll('.demo-toggle-btn').forEach(function(b) {
+        b.classList.remove('demo-toggle-active')
+      })
+      btn.classList.add('demo-toggle-active')
+
+      // Update flow steps
+      document.getElementById('demo-flow-402-header').textContent = data.header
+      document.getElementById('demo-flow-pay-title').textContent = data.payTitle
+      document.getElementById('demo-flow-pay-desc').textContent = data.payDesc
+      document.getElementById('demo-flow-pay-detail').textContent = data.payDetail
+      document.getElementById('demo-flow-retry-header').textContent = data.retryHeader
+    })
+  })()
+  </script>`
+
+  return layout('Live Demo', content)
+}
