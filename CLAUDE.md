@@ -93,8 +93,8 @@ Never skip step 1. If you can't write a failing test, the bug isn't well-enough 
 
 ## Important Context
 
-- Read `docs/technical-spec.md` for full schema and API design
-- Read `docs/competitive-intel.md` for ecosystem context
-- Read `docs/strategy-v2.md` for product strategy and priorities
-- Read `docs/provider-outreach.md` for target provider list and templates
+- Read `docs/competitive-intel.md` for competitive landscape (Merit Systems, x402 ecosystem, our verified supply)
+- Read `docs/strategy-v2.md` for founding strategic reasoning (historical — see `~/agent-state/projects/402index/status.md` and `roadmap.md` for current state)
+- For current project state, outreach status, and next priorities: `~/agent-state/projects/402index/status.md`
+- For phased roadmap: `~/agent-state/projects/402index/roadmap.md`
 - This is a loss leader for the Golem project. Speed > perfection. Ship ugly.
