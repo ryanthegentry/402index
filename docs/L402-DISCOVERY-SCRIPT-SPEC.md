@@ -294,7 +294,7 @@ This script is designed to be written and executed by Claude Code in a single se
 4. CC applies high-confidence updates directly to the DB via `railway run`
 5. CC files the report and updates agent-state
 
-The script outputs are human-readable so Ryan can review before applying low-confidence changes.
+The script outputs are human-readable for review before applying low-confidence changes.
 
 ## Success Criteria
 
