@@ -349,6 +349,49 @@ try {
   console.warn(`[db] Incremental vacuum note: ${err.message}`)
 }
 
+// ─── Query Log ──────────────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS query_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    query_text TEXT,
+    filters TEXT,
+    result_count INTEGER,
+    response_time_ms INTEGER,
+    user_agent TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_query_log_timestamp ON query_log(timestamp);
+`)
+
+const logQueryStmt = db.prepare(
+  'INSERT INTO query_log (query_text, filters, result_count, response_time_ms, user_agent) VALUES (@queryText, @filters, @resultCount, @responseTimeMs, @userAgent)'
+)
+
+export function logQuery({ queryText = null, filters = null, resultCount = null, responseTimeMs = null, userAgent = null } = {}) {
+  try {
+    logQueryStmt.run({ queryText, filters, resultCount, responseTimeMs, userAgent })
+  } catch (err) {
+    console.warn(`[db] logQuery failed: ${err.message}`)
+  }
+}
+
+export function pruneQueryLog(retentionDays = 90) {
+  try {
+    const result = db.prepare(
+      "DELETE FROM query_log WHERE timestamp < datetime('now', '-' || ? || ' days')"
+    ).run(retentionDays)
+    if (result.changes > 0) {
+      console.log(`[db] Pruned ${result.changes} query log entries older than ${retentionDays} days`)
+      db.pragma('incremental_vacuum')
+    }
+  } catch (err) {
+    console.warn(`[db] Query log prune failed: ${err.message}`)
+  }
+}
+
+// ─── Pruning ────────────────────────────────────────────────────────────────
+
 // Prune health_checks older than 3 days (aligned with HEALTH_CHECK_RETENTION_DAYS in checker.js)
 function pruneHealthChecks() {
   try {
@@ -364,8 +407,13 @@ function pruneHealthChecks() {
   }
 }
 
-pruneHealthChecks()
-setInterval(pruneHealthChecks, 60 * 60 * 1000).unref()
+function pruneAll() {
+  pruneHealthChecks()
+  pruneQueryLog()
+}
+
+pruneAll()
+setInterval(pruneAll, 60 * 60 * 1000).unref()
 
 // Disk usage diagnostics
 try {

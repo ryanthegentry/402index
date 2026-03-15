@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { randomUUID } from 'crypto'
-import db from '../db.js'
+import db, { logQuery } from '../db.js'
 import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/services.js'
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeUrl } from '../services/url-normalize.js'
@@ -14,8 +14,19 @@ import { discoverProbeConfig } from '../services/wellknown-discovery.js'
 const router = Router()
 
 router.get('/services', (req, res) => {
+  const startTime = Date.now()
   const { limit: rawLimit, offset: rawOffset, ...filters } = req.query
-  res.json(queryServices(db, { ...filters, rawLimit, rawOffset }, API_COLUMNS))
+  const result = queryServices(db, { ...filters, rawLimit, rawOffset }, API_COLUMNS)
+  res.json(result)
+
+  const { q, ...filterParams } = filters
+  logQuery({
+    queryText: q || null,
+    filters: JSON.stringify(filterParams),
+    resultCount: result.total,
+    responseTimeMs: Date.now() - startTime,
+    userAgent: req.get('User-Agent') || null,
+  })
 })
 
 // GET /api/v1/services/:id
