@@ -202,12 +202,19 @@ router.get('/demo', (req, res) => {
   // Distinct providers (excluding templates/demos)
   const allUrls = db.prepare(`SELECT url, protocol, is_template, is_demo, x402_payment_valid, health_status FROM services ${ACTIVE_FILTER}`).all()
   const providerSets = { total: new Set(), L402: new Set(), x402: new Set() }
+  const allProviderSets = { total: new Set(), L402: new Set(), x402: new Set() }
   for (const svc of allUrls) {
     if (svc.is_template || svc.is_demo) continue
     let host
     try { host = new URL(svc.url).hostname } catch { continue }
-    providerSets.total.add(host)
-    providerSets[svc.protocol]?.add(host)
+    allProviderSets.total.add(host)
+    allProviderSets[svc.protocol]?.add(host)
+    // Verified providers: L402 healthy or x402 payment_valid=1
+    if ((svc.protocol === 'L402' && svc.health_status === 'healthy') ||
+        (svc.protocol === 'x402' && svc.x402_payment_valid === 1)) {
+      providerSets.total.add(host)
+      providerSets[svc.protocol]?.add(host)
+    }
   }
 
   // Protocol breakdowns
@@ -225,8 +232,8 @@ router.get('/demo', (req, res) => {
     distinctProviders: providerSets.total.size,
     ...healthMap,
     lastHealthCheck,
-    l402: { endpoints: l402Total, verified: l402Healthy, healthy: l402Healthy, providers: providerSets.L402.size },
-    x402: { endpoints: x402Total, verified: x402Verified, healthy: x402Healthy, providers: providerSets.x402.size },
+    l402: { endpoints: l402Total, verified: l402Healthy, healthy: l402Healthy, providers: providerSets.L402.size, allProviders: allProviderSets.L402.size },
+    x402: { endpoints: x402Total, verified: x402Verified, healthy: x402Healthy, providers: providerSets.x402.size, allProviders: allProviderSets.x402.size },
   }
 
   // Probe sample for flow visualization

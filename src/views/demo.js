@@ -5,6 +5,11 @@ function formatNumber(n) {
   return Number(n).toLocaleString('en-US')
 }
 
+function pct(part, total) {
+  if (!total) return '0%'
+  return Math.round((part / total) * 100) + '%'
+}
+
 export function demoPage({ stats, probeSample }) {
   const s = stats
   const probe = probeSample
@@ -16,74 +21,15 @@ export function demoPage({ stats, probeSample }) {
       <p class="demo-subtitle">The paid API ecosystem — indexed, verified, and searchable by AI agents</p>
     </div>
 
-    <!-- ─── Panel 1: Ecosystem Dashboard ──────────────────────────────── -->
-    <section class="demo-panel demo-ecosystem">
-      <h2>Ecosystem Overview</h2>
-
-      <div class="demo-stat-cards">
-        <div class="demo-stat-card">
-          <div class="demo-stat-number">${formatNumber(s.totalIndexed)}</div>
-          <div class="demo-stat-label">Endpoints Indexed</div>
-        </div>
-        <div class="demo-stat-card demo-stat-verified">
-          <div class="demo-stat-number">${formatNumber(s.verified)}</div>
-          <div class="demo-stat-label">Payment-Verified</div>
-        </div>
-        <div class="demo-stat-card">
-          <div class="demo-stat-number">${formatNumber(s.distinctProviders)}</div>
-          <div class="demo-stat-label">Distinct Providers</div>
-        </div>
+    <!-- ─── Panel 1: Live Endpoint Probe ─────────────────────────────── -->
+    <section class="demo-panel demo-probe">
+      <h2>Live Endpoint Probe</h2>
+      <p class="demo-panel-desc">Paste any API URL to run a real-time health check — see the protocol handshake live</p>
+      <div class="demo-probe-input-row">
+        <input type="text" class="demo-probe-url" id="demo-probe-url" placeholder="https://api.example.com/endpoint" />
+        <button class="demo-healthcheck-btn" id="demo-probe-btn">Check Endpoint Health</button>
       </div>
-
-      <div class="demo-protocol-compare">
-        <div class="demo-protocol-card demo-protocol-l402">
-          <div class="demo-protocol-title"><span class="badge badge-l402">L402</span> Lightning Network</div>
-          <div class="demo-protocol-stats">
-            <div class="demo-protocol-row"><span>Verified</span><strong>${s.l402.verified} / ${s.l402.endpoints}</strong></div>
-            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.l402.healthy}</strong></div>
-            <div class="demo-protocol-row"><span>Providers</span><strong>${s.l402.providers}</strong></div>
-          </div>
-          <div class="demo-protocol-note">Decentralized, censorship-resistant, no facilitator dependency</div>
-        </div>
-        <div class="demo-protocol-card demo-protocol-x402">
-          <div class="demo-protocol-title"><span class="badge badge-x402">x402</span> Blockchain</div>
-          <div class="demo-protocol-stats">
-            <div class="demo-protocol-row"><span>Verified</span><strong>${s.x402.verified} / ${s.x402.endpoints}</strong></div>
-            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.x402.healthy}</strong></div>
-            <div class="demo-protocol-row"><span>Providers</span><strong>${s.x402.providers}</strong></div>
-          </div>
-          <div class="demo-protocol-note">Coinbase CDP facilitator, Base/Solana chains</div>
-        </div>
-      </div>
-
-      <div class="demo-health-bars">
-        <h3>Health Breakdown</h3>
-        <div class="demo-health-row">
-          <span class="health-dot health-healthy"></span>
-          <span class="demo-health-label">healthy</span>
-          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-healthy" style="width: ${s.totalIndexed ? (s.healthy / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
-          <span class="demo-health-count">${formatNumber(s.healthy)}</span>
-        </div>
-        <div class="demo-health-row">
-          <span class="health-dot health-degraded"></span>
-          <span class="demo-health-label">degraded</span>
-          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-degraded" style="width: ${s.totalIndexed ? (s.degraded / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
-          <span class="demo-health-count">${formatNumber(s.degraded)}</span>
-        </div>
-        <div class="demo-health-row">
-          <span class="health-dot health-down"></span>
-          <span class="demo-health-label">down</span>
-          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-down" style="width: ${s.totalIndexed ? (s.down / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
-          <span class="demo-health-count">${formatNumber(s.down)}</span>
-        </div>
-        <div class="demo-health-row">
-          <span class="health-dot health-unknown"></span>
-          <span class="demo-health-label">unknown</span>
-          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-unknown" style="width: ${s.totalIndexed ? (s.unknown / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
-          <span class="demo-health-count">${formatNumber(s.unknown)}</span>
-        </div>
-        <div class="demo-last-checked">Last checked: ${escapeHtml(s.lastHealthCheck || 'Never')}</div>
-      </div>
+      <div class="demo-probe-log" id="demo-probe-log"></div>
     </section>
 
     <!-- ─── Panel 2: Interactive MCP Search ───────────────────────────── -->
@@ -143,26 +89,86 @@ export function demoPage({ stats, probeSample }) {
       <div class="demo-search-results" id="demo-search-results">
         <p class="demo-search-hint">Start typing or adjust filters to search...</p>
       </div>
+    </section>
 
-      <div class="demo-probe-section">
-        <h3>Live Endpoint Probe</h3>
-        <p class="demo-panel-desc">Paste any API URL to run a real-time health check — see the protocol handshake live</p>
-        <div class="demo-probe-input-row">
-          <input type="text" class="demo-probe-url" id="demo-probe-url" placeholder="https://api.example.com/endpoint" />
-          <button class="demo-healthcheck-btn" id="demo-probe-btn">Check Endpoint Health</button>
+    <!-- ─── Panel 3: Ecosystem Dashboard ──────────────────────────────── -->
+    <section class="demo-panel demo-ecosystem">
+      <h2>Ecosystem Overview</h2>
+
+      <div class="demo-stat-cards">
+        <div class="demo-stat-card">
+          <div class="demo-stat-number">${formatNumber(s.totalIndexed)}</div>
+          <div class="demo-stat-label">Endpoints Indexed</div>
         </div>
-        <div class="demo-probe-log" id="demo-probe-log"></div>
+        <div class="demo-stat-card demo-stat-verified">
+          <div class="demo-stat-number">${formatNumber(s.verified)}</div>
+          <div class="demo-stat-label">Payment-Verified</div>
+        </div>
+        <div class="demo-stat-card">
+          <div class="demo-stat-number">${formatNumber(s.distinctProviders)}</div>
+          <div class="demo-stat-label">Distinct Providers</div>
+        </div>
+      </div>
+
+      <div class="demo-protocol-compare">
+        <div class="demo-protocol-card demo-protocol-l402">
+          <div class="demo-protocol-title"><span class="badge badge-l402">L402</span> Lightning Network</div>
+          <div class="demo-protocol-stats">
+            <div class="demo-protocol-row"><span>Verified</span><strong>${s.l402.verified} / ${formatNumber(s.l402.endpoints)} (${pct(s.l402.verified, s.l402.endpoints)})</strong></div>
+            <div class="demo-protocol-row"><span>Providers</span><strong>${s.l402.providers} / ${s.l402.allProviders} (${pct(s.l402.providers, s.l402.allProviders)})</strong></div>
+            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.l402.healthy}</strong></div>
+          </div>
+          <div class="demo-protocol-note">Decentralized, censorship-resistant, no facilitator dependency</div>
+        </div>
+        <div class="demo-protocol-card demo-protocol-x402">
+          <div class="demo-protocol-title"><span class="badge badge-x402">x402</span> Base, Solana, etc.</div>
+          <div class="demo-protocol-stats">
+            <div class="demo-protocol-row"><span>Verified</span><strong>${s.x402.verified} / ${formatNumber(s.x402.endpoints)} (${pct(s.x402.verified, s.x402.endpoints)})</strong></div>
+            <div class="demo-protocol-row"><span>Providers</span><strong>${s.x402.providers} / ${s.x402.allProviders} (${pct(s.x402.providers, s.x402.allProviders)})</strong></div>
+            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.x402.healthy}</strong></div>
+          </div>
+          <div class="demo-protocol-note">Coinbase CDP facilitator, Base/Solana chains</div>
+        </div>
+      </div>
+
+      <div class="demo-health-bars">
+        <h3>Health Breakdown</h3>
+        <div class="demo-health-row">
+          <span class="health-dot health-healthy"></span>
+          <span class="demo-health-label">healthy</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-healthy" style="width: ${s.totalIndexed ? (s.healthy / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.healthy)}</span>
+        </div>
+        <div class="demo-health-row">
+          <span class="health-dot health-degraded"></span>
+          <span class="demo-health-label">degraded</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-degraded" style="width: ${s.totalIndexed ? (s.degraded / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.degraded)}</span>
+        </div>
+        <div class="demo-health-row">
+          <span class="health-dot health-down"></span>
+          <span class="demo-health-label">down</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-down" style="width: ${s.totalIndexed ? (s.down / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.down)}</span>
+        </div>
+        <div class="demo-health-row">
+          <span class="health-dot health-unknown"></span>
+          <span class="demo-health-label">unknown</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-unknown" style="width: ${s.totalIndexed ? (s.unknown / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.unknown)}</span>
+        </div>
+        <div class="demo-last-checked">Last checked: ${escapeHtml(s.lastHealthCheck || 'Never')}</div>
       </div>
     </section>
 
-    <!-- ─── Panel 3: Payment Flow Visualization ───────────────────────── -->
+    <!-- ─── Panel 4: Payment Flow Visualization ───────────────────────── -->
     <section class="demo-panel demo-flow">
       <h2>Payment Flow</h2>
       <p class="demo-panel-desc">How an agent pays for an L402/x402 API call — step by step</p>
 
       <div class="demo-flow-toggle" id="demo-flow-toggle">
         <button class="demo-toggle-btn demo-toggle-active" data-protocol="L402">L402 (Lightning)</button>
-        <button class="demo-toggle-btn" data-protocol="x402">x402 (Blockchain)</button>
+        <button class="demo-toggle-btn" data-protocol="x402">x402 (Base, Solana)</button>
       </div>
 
       <div class="demo-flow-steps" id="demo-flow-steps">
@@ -221,7 +227,7 @@ Content-Type: application/json
 
   <script>
   (function() {
-    // ─── Panel 2: Interactive Search ────────────────────────────────────
+    // ─── Interactive Search ────────────────────────────────────────────
 
     const searchInput = document.getElementById('demo-q')
     const protocolSelect = document.getElementById('demo-protocol')
@@ -375,7 +381,7 @@ Content-Type: application/json
     // Initial search
     doSearch()
 
-    // ─── Panel 3: Flow Protocol Toggle ──────────────────────────────────
+    // ─── Flow Protocol Toggle ──────────────────────────────────────────
 
     var flowData = ${JSON.stringify({
       L402: {
