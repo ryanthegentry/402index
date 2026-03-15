@@ -71,4 +71,4 @@ Want your service featured (pinned to the top)? Open an issue or mention it in y
 
 ## Questions?
 
-Open an issue on this repo or reach out to [@ryanthegentry](https://twitter.com/ryanthegentry).
+Open an issue on this repo or email hello@402index.io.

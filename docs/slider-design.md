@@ -1,7 +1,7 @@
 # L402 vs x402 Slider — Design Document
 
 **Date:** 2026-03-01
-**Author:** Ryan Gentry / BIXI
+**Author:** 402index team
 **Status:** Draft — for review with Jordi/Fewsats on March 3
 
 ---
@@ -69,7 +69,7 @@ Below the slider bar:
 "Bitcoin is underrepresented. Add your L402 API → "
 ```
 
-Links to `github.com/ryanthegentry/402index/blob/main/CONTRIBUTING.md` — a guide for submitting new L402 listings via YAML PR.
+Links to `CONTRIBUTING.md` — a guide for submitting new L402 listings via YAML PR.
 
 When L402 reaches specific milestones, the CTA changes:
 - < 10%: "Bitcoin is underrepresented. Add your L402 API →"

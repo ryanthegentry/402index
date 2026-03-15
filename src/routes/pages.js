@@ -79,9 +79,6 @@ Setup: See mcp-server/ directory or npm install @402index/mcp-server
 - L402: Lightning-native HTTP 402 paywall. Returns WWW-Authenticate header with macaroon + invoice.
 - x402: Chain-agnostic HTTP 402 paywall (Base, Solana). Returns payment requirements in structured header.
 
-## Source Code
-
-https://github.com/bixi-global/402index
 `)
 })
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Register 402index's own L402 endpoints with the directory.
-// DO NOT run against production without Ryan's review.
+// DO NOT run against production without review.
 //
 // Usage: node scripts/self-register.js [base_url]
 // Default: http://localhost:3402 (safe default — NOT prod)
@@ -8,9 +8,9 @@
 // To register against production:
 //   node scripts/self-register.js https://402index.io
 //
-// NOTE: Category "data/api-directory" was specified by Ryan.
+// NOTE: Category "data/api-directory" was chosen deliberately.
 // Closest existing category is "tools/directory" (3 entries).
-// Ryan to confirm before running against prod.
+// Confirm before running against prod.
 
 const BASE = process.argv[2] || 'http://localhost:3402'
 const API = `${BASE}/api/v1`

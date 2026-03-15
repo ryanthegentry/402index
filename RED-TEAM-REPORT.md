@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-27
 **Auditor:** Claude (automated)
-**Codebase:** `ryanthegentry/402index` @ commit `cdf3907` (pre-fixes)
+**Codebase:** `402index` @ commit `cdf3907` (pre-fixes)
 
 ---
 
@@ -13,7 +13,7 @@
 | HTTPS (`curl -sI https://402index.io`) | **PASS** | HTTP/2 200, SSL working, served via Railway edge + Fastly CDN |
 | Featured services API | **PASS** | 15 featured services returned. Ganamos present. |
 | Health endpoint (`/api/v1/health`) | **PASS** | 3,712 services (up from 3,098). 3,136 healthy, 445 degraded, 126 down, 5 unknown. |
-| About page (no personal refs) | **PASS** | No BIXI/Golem/Ryan/walc references found. |
+| About page (no personal refs) | **PASS** | No personal references found. |
 | Railway logs | **N/A** | Railway CLI couldn't connect to service (needs `railway service` link). No indication of crashes from health data — syncs are running on schedule. |
 
 **Summary:** Production is healthy. HTTPS works. All systems operational. Service count grew from 3,098 to 3,712 since last session (Bazaar continuing to backfill).

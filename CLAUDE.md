@@ -1,6 +1,6 @@
 # 402index.io
 
-Protocol-agnostic directory of paid APIs (L402 + x402) for AI agents. Distribution layer for the Golem project.
+Protocol-agnostic directory of paid APIs (L402 + x402) for AI agents.
 
 ## Project Structure
 
@@ -128,4 +128,4 @@ Never skip step 1. If you can't write a failing test, the bug isn't well-enough 
 - Read `docs/strategy-v2.md` for founding strategic reasoning (historical — see `~/agent-state/projects/402index/status.md` and `roadmap.md` for current state)
 - For current project state, outreach status, and next priorities: `~/agent-state/projects/402index/status.md`
 - For phased roadmap: `~/agent-state/projects/402index/roadmap.md`
-- This is a loss leader for the Golem project. Speed > perfection. Ship ugly.
+- Speed > perfection. Ship ugly.
