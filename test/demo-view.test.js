@@ -13,8 +13,8 @@ const sampleStats = {
   down: 411,
   unknown: 2,
   lastHealthCheck: '2026-03-14T12:00:00Z',
-  l402: { endpoints: 91, verified: 41, healthy: 41, providers: 24 },
-  x402: { endpoints: 13700, verified: 761, healthy: 11858, providers: 311 },
+  l402: { endpoints: 91, verified: 41, healthy: 41, providers: 7, allProviders: 46 },
+  x402: { endpoints: 13700, verified: 761, healthy: 11858, providers: 150, allProviders: 311 },
 }
 
 const sampleProbeSample = {
@@ -196,6 +196,68 @@ describe('demoPage — Panel 3: Payment Flow Visualization', () => {
       html.includes('Authorization: L402') || html.includes('Authorization'),
       'should show authorization header in retry step'
     )
+  })
+})
+
+// ─── Panel ordering ─────────────────────────────────────────────────────────
+
+describe('demoPage — panel order', () => {
+  it('shows Live Endpoint Probe first, then Agent Discovery, then Ecosystem, then Payment Flow', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    // Use section class markers to find panel positions (not JS code)
+    const probeIdx = html.indexOf('class="demo-panel demo-probe"')
+    const searchIdx = html.indexOf('class="demo-panel demo-search"')
+    const ecosystemIdx = html.indexOf('class="demo-panel demo-ecosystem"')
+    const flowIdx = html.indexOf('class="demo-panel demo-flow"')
+    assert.ok(probeIdx > 0, 'should have probe section')
+    assert.ok(searchIdx > 0, 'should have search section')
+    assert.ok(ecosystemIdx > 0, 'should have ecosystem section')
+    assert.ok(flowIdx > 0, 'should have flow section')
+    assert.ok(probeIdx < searchIdx, 'probe should come before search')
+    assert.ok(searchIdx < ecosystemIdx, 'search should come before ecosystem')
+    assert.ok(ecosystemIdx < flowIdx, 'ecosystem should come before flow')
+  })
+})
+
+// ─── Verified percentage display ────────────────────────────────────────────
+
+describe('demoPage — verified percentages', () => {
+  it('shows L402 verified as fraction with percentage', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    // L402: 41 / 91 (45%)
+    assert.ok(html.includes('41 / 91'), 'should show L402 verified/total fraction')
+    assert.ok(html.includes('45%'), 'should show L402 verified percentage')
+  })
+
+  it('shows x402 verified as fraction with percentage', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    // x402: 761 / 13,700 (6%)
+    assert.ok(html.includes('761 / 13,700') || html.includes('761 / 13700'), 'should show x402 verified/total fraction')
+    assert.ok(html.includes('6%') || html.includes('5%'), 'should show x402 verified percentage')
+  })
+
+  it('shows L402 providers as fraction with percentage', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    // L402 providers: 7 / 46 (15%)
+    assert.ok(html.includes('7 / 46'), 'should show L402 providers fraction')
+    assert.ok(html.includes('15%'), 'should show L402 providers percentage')
+  })
+
+  it('shows x402 providers as fraction with percentage', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    // x402 providers: 150 / 311 (48%)
+    assert.ok(html.includes('150 / 311'), 'should show x402 providers fraction')
+    assert.ok(html.includes('48%'), 'should show x402 providers percentage')
+  })
+})
+
+// ─── x402 label ─────────────────────────────────────────────────────────────
+
+describe('demoPage — x402 label', () => {
+  it('shows "Base, Solana, etc." instead of "Blockchain"', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    assert.ok(!html.includes('>Blockchain<'), 'should not show "Blockchain" label')
+    assert.ok(html.includes('Base, Solana'), 'should show "Base, Solana" in x402 label')
   })
 })
 

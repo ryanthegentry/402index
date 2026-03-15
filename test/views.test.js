@@ -22,6 +22,11 @@ describe('layout', () => {
     assert.ok(html.includes('href="/api-docs"'))
   })
 
+  it('does not include opportunities in nav', () => {
+    const html = layout('Test', '')
+    assert.ok(!html.includes('href="/opportunities"'), 'nav should not link to opportunities')
+  })
+
   it('includes footer', () => {
     const html = layout('Test', '')
     assert.ok(html.includes('402 Index'))
