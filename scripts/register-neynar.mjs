@@ -6,7 +6,7 @@
 // - Provider: Neynar (neynar.com) — Farcaster social data API
 // - Base URL: https://api.neynar.com
 // - x402: requests without API key get HTTP 402 + pay-per-request
-// - $0.001 USDC per request on Base (EIP-3009 gasless transfer)
+// - $0.01 USDC per request on Base (EIP-3009 gasless transfer)
 // - Also: hub-api.neynar.com for hub data (also x402-enabled)
 // - Blog: neynar.com/blog/agents-frames-and-the-future-of-farcaster-neynar-s-vision-for-x402
 // - Docs: docs.neynar.com/reference/quickstart
@@ -85,7 +85,7 @@ for (const ep of endpoints) {
   upsert.run({
     id: existing ? existing.id : randomUUID(),
     ...ep,
-    price_usd: 0.001,
+    price_usd: 0.01,
   })
   if (existing) {
     updated++

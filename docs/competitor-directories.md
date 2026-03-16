@@ -8,61 +8,81 @@ Directories and tools that index, discover, or analyze x402/L402 services. Track
 
 | Directory | URL | Description | Has API? | Services Listed | Priority |
 |-----------|-----|-------------|----------|-----------------|----------|
-| x402scan (Merit Systems) | x402scan.com | x402 ecosystem explorer. Rich UI, transaction analytics. Our primary competitor. | Yes (REST) | ~13K+ | Known — tracked in competitive-intel.md |
-| Rencom | x402.rencom.ai | Search x402 resources with historical outcome ranking. AI-powered discovery. | TBD — needs deeper investigation | Unknown | Medium |
-| EntRoute | entroute.dev (TBD) | Machine-first API discovery with "semantic intent resolution." Agents describe what they need, EntRoute finds matching APIs. | Likely — agent-native by design | Unknown | **High** — agent-relevant, potential aggregator source |
-| x402list.fun | x402list.fun | Community-maintained list of x402 services. Simple catalog UI. | Unlikely (static site) | Unknown | Low |
-| x402station | TBD | Analytics platform for monitoring x402 service health and usage. | TBD | N/A (analytics, not directory) | Low |
-| Slinky Layer | TBD | Open market for APIs as on-chain x402 resources. Marketplace focus. | TBD | Unknown | Medium |
-| x402-watch | GitHub | Open-source health monitoring tool for x402 endpoints. | N/A (tool, not service) | N/A | Medium — health data could supplement our checker |
-| Fluora | fluora.xyz (TBD) | MonetizedMCP marketplace — MCP servers with x402 payment. | Likely — marketplace with listings | Unknown | **High** — MCP-relevant, potential aggregator source |
-| x402 Registry (USDC.org) | usdc.org/x402 | Official USDC.org x402 registry. Lists sites accepting x402 USDC payments. | TBD | Unknown | Medium — official source |
-| x402 Bazaar (Coinbase) | api.cdp.coinbase.com | Our primary aggregator source. ~13,990 resources. | Yes (REST, paginated) | ~13,990 | Already integrated |
+| x402scan (Merit Systems) | x402scan.com | x402 ecosystem explorer. Rich UI, transaction analytics. Primary competitor. | Yes (REST) | ~13K+ | Known — tracked in competitive-intel.md |
+| Rencom | x402.rencom.ai | Paid semantic search for x402 resources. $0.01/query via x402. | Yes — `GET api.rencom.ai/x402/v1/paid/search` | Unknown (indexes Bazaar) | **High** (competitive, not integration target) |
+| x402list.fun | x402list.fun | Largest x402 directory. Pulls from facilitators (Coinbase, PayAI, Thirdweb, Questflow). | MCP only ($0.001/search) | **14,646 services, 827 providers** | Medium (same upstream sources we already poll) |
+| Fluora | glama.ai/mcp/servers/@fluora-ai/fluora-mcp | MonetizedMCP broker. AI agents discover and pay for services via MCP + x402 USDC. | MCP server (STDIO/SSE) | **76+ monetized services** | Medium (small unique catalog, MCP integration non-trivial) |
+| SlinkyLayer | slinkylayer.ai | On-chain API marketplace. Wraps existing APIs with x402. ERC-8004 reputation. | Unknown (JS SPA) | Unknown | Medium (unique angle — wrapped non-native APIs) |
+| x402.watch | x402.watch | Facilitator monitoring — real vs gamed txns, latency, uptime, chain distribution. | Docs at docs.x402.watch (may need auth) | 10 verified facilitators | Medium (complementary health data) |
+| x402 Registry (USDC.org) | usdc.org/x402 | Official USDC.org x402 registry. | TBD | Unknown | Medium |
+| x402station | x402station.com | Analytics platform claiming real-time monitoring. | npm `x402-analytics` | **0 currently (placeholder)** | Low (not operational) |
+| x402 Bazaar (Coinbase) | api.cdp.coinbase.com | Our primary aggregator source. | Yes (REST, paginated) | ~13,990 | Already integrated |
 
-## Potential Aggregator Sources
+**Not found:** EntRoute — searched for entroute.io, entroute.ai, "entroute x402" across web/GitHub/X. No results. Likely misremembered, vaporware, or pre-launch.
 
-### EntRoute (High Priority)
+## Detailed API Findings
 
-If EntRoute has a public API, it could become an aggregator source like Bazaar. Key questions:
-- Does it expose a resource listing endpoint?
-- What's the data format? (likely JSON)
-- Does it have pagination?
-- What metadata per service? (URL, pricing, description, category)
+### Rencom (`x402.rencom.ai`)
 
-**Hypothetical aggregator spec:**
+Paid semantic search engine. You pay $0.01 USDC per query via x402.
+
 ```
-// GET https://api.entroute.dev/v1/resources?page=1&limit=100
-// Response: { resources: [...], pagination: { total, page, limit } }
-// Each resource: { url, name, description, price, payment_chain, category, intent_tags }
+GET https://api.rencom.ai/x402/v1/paid/search
+  ?q=<query>&sort_by=recommended&limit=3&offset=0
+
+Response: {
+  "results": [{ "id", "resource" (URL), "description", "max_amount_required", "network", "final_score" }],
+  "has_more": boolean, "limit", "offset"
+}
+
+Free: GET /health, GET / (metadata)
 ```
 
-### Fluora (High Priority)
+**Not viable as aggregator** — x402 paywall makes bulk polling expensive. Competitive threat to our search, not a data source.
 
-MonetizedMCP marketplace could feed us MCP-specific x402 services. Key questions:
-- Does it expose a catalog API?
-- What's the MCP server listing format?
-- How does pricing work for MCP tools vs endpoints?
+### x402list.fun
 
-**Hypothetical aggregator spec:**
-```
-// GET https://api.fluora.xyz/v1/servers?page=1&limit=100
-// Response: { servers: [...], pagination: { total, page, limit } }
-// Each server: { url, name, tools: [...], price_per_tool, payment_chain }
-```
+14,646 services, 827 providers. Pulls from same upstream facilitators we already poll (Coinbase Bazaar, PayAI, Thirdweb, Questflow). MCP-only access at $0.001/search. Categories: Data, Developer Tools, AI, DeFi, Storage, Identity, NFT, Gaming.
+
+**Not viable as aggregator** — no REST API, MCP-only. We already poll the same upstream sources via Bazaar.
+
+### Fluora (MonetizedMCP)
+
+76+ monetized services. MCP broker for paid services (PDF gen, DeFi data, web scraping, AI research, social scraping).
+
+**MCP tools:**
+- `exploreServices` — discover services by category/query
+- Service invocation with automatic USDC payment
+
+**Hypothetical aggregator:**
+1. Run local MCP client → connect to Fluora server (STDIO/SSE)
+2. Call `exploreServices` across category queries ("PDF", "DeFi", "AI", "scraping", etc.)
+3. Parse: service name, description, price, category, capabilities
+4. ~$0.10 per full catalog sweep (76 services at $0.001/query)
+5. Normalize to our schema, run weekly
+
+**Challenge:** Requires MCP client infrastructure (`@modelcontextprotocol/sdk`).
+
+### x402.watch
+
+Facilitator-level monitoring (not service-level). 10 verified facilitators: NetPay, PayAI, OpenFacilitator, Dexter, Ultravioleta DAO, Daydreams, Kobaru, x402jobs, Meridian. Tracks real vs gamed transactions, chain distribution, p50/p95 latencies, fee structures.
+
+**Useful for:** Enriching our facilitator metadata. Not a service directory.
 
 ## Differentiation
 
 402index differentiates from all of the above by:
-1. **Protocol-agnostic** — we index both L402 (Lightning) and x402 (stablecoin) services
-2. **Verified health data** — active health monitoring every 15 min, not just a static catalog
+1. **Protocol-agnostic** — we index both L402 (Lightning) and x402 (stablecoin)
+2. **Verified health data** — active monitoring every 15 min, not just a static catalog
 3. **API-first** — our own API is L402-gated, dog-fooding the protocol
-4. **Distribution layer** — RSS, webhooks, Nostr publishing, not just a web UI
+4. **Distribution layer** — RSS, webhooks, Nostr publishing
 5. **Multiple aggregator sources** — Bazaar + Satring + L402Apps + Sponge + self-registration + well-known discovery
 
 ## Action Items
 
-- [ ] Investigate EntRoute API — if public, draft aggregator
-- [ ] Investigate Fluora API — if public, draft aggregator
-- [ ] Check Rencom for API access
-- [ ] Monitor x402-watch GitHub for useful health check patterns
-- [ ] Periodically re-check x402list.fun and x402station for growth
+- [ ] Monitor Rencom for competitive intelligence (search quality, coverage)
+- [ ] Investigate SlinkyLayer developer docs for registry API
+- [ ] Evaluate Fluora MCP integration cost/benefit (76 services worth the infra?)
+- [ ] Check x402.watch facilitator health data for enrichment
+- [ ] Periodically re-check x402station for activation
+- [ ] ~~Investigate EntRoute~~ — does not appear to exist
