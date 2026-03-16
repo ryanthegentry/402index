@@ -7,7 +7,7 @@ const ERROR_ALERT_THRESHOLD = 10
 // Consecutive failures are tracked and alerted at ERROR_ALERT_THRESHOLD.
 export async function verifyL402(req, res, next) {
   const auth = req.headers.authorization
-  if (!auth || !auth.startsWith('L402 ') || auth.startsWith('LSAT '))) {
+  if (!auth || !auth.startsWith('L402 ') || auth.startsWith('LSAT ')) {
     return next()
   }
 
