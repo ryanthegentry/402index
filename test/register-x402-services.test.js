@@ -81,6 +81,7 @@ const newScripts = [
   'register-spraay.mjs',
   'register-x402engine.mjs',
   'register-agoragentic.mjs',
+  'register-pinata.mjs',
 ]
 
 describe('x402 registration scripts — existence and syntax', () => {
@@ -156,6 +157,13 @@ describe('x402 registration scripts — provider-specific checks', () => {
     assert.ok(source.includes('agoragentic.com'))
     assert.ok(source.includes('marketplace'))
   })
+
+  it('pinata has Pinata provider and storage category', () => {
+    const source = readFileSync(join(scriptsDir, 'register-pinata.mjs'), 'utf-8')
+    assert.ok(source.includes("'Pinata'"))
+    assert.ok(source.includes('402.pinata.cloud'))
+    assert.ok(source.includes('storage'))
+  })
 })
 
 describe('x402 registration scripts — SQL safety', () => {
@@ -205,5 +213,11 @@ describe('x402 registration scripts — endpoint counts', () => {
     const source = readFileSync(join(scriptsDir, 'register-agoragentic.mjs'), 'utf-8')
     const eps = extractEndpoints(source)
     assert.equal(eps.length, 5)
+  })
+
+  it('pinata: 3 endpoints', () => {
+    const source = readFileSync(join(scriptsDir, 'register-pinata.mjs'), 'utf-8')
+    const eps = extractEndpoints(source)
+    assert.equal(eps.length, 3)
   })
 })
