@@ -3,6 +3,7 @@ import { pollBazaar } from './aggregators/bazaar.js'
 import { pollSatring } from './aggregators/satring.js'
 import { pollL402Apps } from './aggregators/l402apps.js'
 import { pollSponge } from './aggregators/sponge.js'
+import { pollL402Directory } from './aggregators/l402directory.js'
 import { runHealthChecks } from './health/checker.js'
 import { classifyServices } from './services/classify.js'
 
@@ -40,6 +41,15 @@ function runSpongePoll() {
     .catch(err => console.error('[scheduler] sponge poll failed:', err.message))
 }
 
+function runL402DirectoryPoll() {
+  return pollL402Directory()
+    .then(() => {
+      loadFeatured()
+      classifyServices()
+    })
+    .catch(err => console.error('[scheduler] l402directory poll failed:', err.message))
+}
+
 function runHealthCheckGuarded() {
   if (healthCheckRunning) return
   healthCheckRunning = true
@@ -55,6 +65,7 @@ export function startScheduler() {
   runPolls()
   runL402AppsPoll()
   runSpongePoll()
+  runL402DirectoryPoll()
 
   const bazaarInterval = parseInt(process.env.BAZAAR_POLL_INTERVAL_MS) || 3600000
   setInterval(runPolls, bazaarInterval)
@@ -65,6 +76,10 @@ export function startScheduler() {
 
   const spongeInterval = parseInt(process.env.SPONGE_POLL_INTERVAL_MS) || 86400000
   setInterval(runSpongePoll, spongeInterval)
+
+  // l402directory: hourly poll (small directory, fast API, no rate limits)
+  const l402dirInterval = parseInt(process.env.L402DIR_POLL_INTERVAL_MS) || 3600000
+  setInterval(runL402DirectoryPoll, l402dirInterval)
 
   // Delay health checks 30s to let polls finish first
   setTimeout(runHealthCheckGuarded, 30000)
