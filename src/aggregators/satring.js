@@ -4,18 +4,20 @@ import { normalizeRawService } from './satring-utils.js'
 
 const SATRING_URL = 'https://satring.com/api/v1/services'
 
-// Permanently skip confirmed non-L402 providers (re-imported every poll cycle otherwise)
+// Permanently skip confirmed junk providers (not valid on either L402 or x402)
 export const BLOCKED_HOSTS = new Set([
-  // LightningProx ecosystem — prepaid spend tokens, not per-request L402
+  // LightningProx ecosystem — prepaid spend tokens, not per-request L402 or x402
   'lightningprox.com',
   'lpxpoly.com',
   'satsforai.com',
-  // Confirmed non-L402 (Mar 6 investigation)
-  'aiprox.dev',
-  'certvera.com',
-  'isitarug.com',
 ])
 const PAGE_SIZE = 20 // Satring max per page
+const PAGE_DELAY_MS = 5000 // Delay between pages to avoid rate limiting
+const RATE_LIMIT_WAIT_MS = 30000 // Wait time on 429 before retry
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 // Lazy-initialized prepared statements
 const stmts = {}
@@ -26,19 +28,43 @@ function stmt(key, sql) {
 
 const upsert = () => stmt('upsert', `
   INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id)
-  VALUES (@id, @name, @description, @url, 'L402', @price_sats, @price_usd, 'BTC', 'Lightning', @category, @provider, 'satring', @source_id)
+  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'satring', @source_id)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = excluded.name,
     description = excluded.description,
     price_sats = excluded.price_sats,
     price_usd = excluded.price_usd,
+    payment_asset = excluded.payment_asset,
+    payment_network = excluded.payment_network,
     category = excluded.category,
     provider = excluded.provider,
     source_id = excluded.source_id,
     updated_at = datetime('now')
 `)
 
-const findExisting = () => stmt('findExisting', "SELECT id FROM services WHERE url = ? AND protocol = 'L402'")
+const findExisting = () => stmt('findExisting', 'SELECT id FROM services WHERE url = ? AND protocol = ?')
+
+async function fetchPage(page) {
+  const res = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`)
+
+  if (res.status === 429) {
+    console.log(`[satring] Rate limited at page ${page}, waiting ${RATE_LIMIT_WAIT_MS / 1000}s...`)
+    await sleep(RATE_LIMIT_WAIT_MS)
+    const retry = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`)
+    if (!retry.ok) {
+      console.error(`[satring] Retry failed with ${retry.status} at page ${page}`)
+      return null
+    }
+    return retry.json()
+  }
+
+  if (!res.ok) {
+    console.error(`[satring] API returned ${res.status} at page ${page}`)
+    return null
+  }
+
+  return res.json()
+}
 
 export async function pollSatring() {
   if (process.env.SATRING_ENABLED !== 'true') {
@@ -58,18 +84,12 @@ export async function pollSatring() {
   let errorCount = 0
 
   while (totalPages === null || page <= totalPages) {
-    let data
-    try {
-      const res = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`)
-      if (!res.ok) {
-        console.error(`[satring] API returned ${res.status} at page ${page}`)
-        break
-      }
-      data = await res.json()
-    } catch (err) {
+    const data = await fetchPage(page).catch(err => {
       console.error(`[satring] Fetch error at page ${page}:`, err.message)
-      break
-    }
+      return null
+    })
+
+    if (!data) break
 
     if (totalPages === null) {
       const total = data.total || 0
@@ -82,31 +102,33 @@ export async function pollSatring() {
 
     for (const svc of services) {
       try {
-        const normalized = normalizeRawService(svc, getCachedBtcUsdRate())
+        const rows = normalizeRawService(svc, getCachedBtcUsdRate())
 
-        // Skip .well-known discovery URLs — these are metadata documents, not L402 endpoints
-        if (normalized.url.includes('/.well-known/')) {
-          continue
-        }
-
-        // Skip blocked hosts (confirmed non-L402 providers)
-        try {
-          const host = new URL(normalized.url).hostname
-          if (BLOCKED_HOSTS.has(host)) {
+        for (const normalized of rows) {
+          // Skip .well-known discovery URLs — these are metadata documents, not endpoints
+          if (normalized.url.includes('/.well-known/')) {
             continue
           }
-        } catch {
-          // invalid URL — let upsert handle it
-        }
 
-        const existing = findExisting().get(normalized.url)
+          // Skip blocked hosts (confirmed junk providers)
+          try {
+            const host = new URL(normalized.url).hostname
+            if (BLOCKED_HOSTS.has(host)) {
+              continue
+            }
+          } catch {
+            // invalid URL — let upsert handle it
+          }
 
-        upsert().run(normalized)
+          const existing = findExisting().get(normalized.url, normalized.protocol)
 
-        if (existing) {
-          updatedCount++
-        } else {
-          newCount++
+          upsert().run(normalized)
+
+          if (existing) {
+            updatedCount++
+          } else {
+            newCount++
+          }
         }
       } catch (err) {
         errorCount++
@@ -117,6 +139,11 @@ export async function pollSatring() {
     }
 
     page++
+
+    // Delay between pages to respect rate limits
+    if (totalPages !== null && page <= totalPages) {
+      await sleep(PAGE_DELAY_MS)
+    }
   }
 
   const totalSynced = newCount + updatedCount

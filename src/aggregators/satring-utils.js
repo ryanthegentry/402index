@@ -34,24 +34,89 @@ export function satsToUsd(sats, btcUsdRate) {
   return (sats / 100_000_000) * btcUsdRate
 }
 
+const NETWORK_MAP = {
+  'eip155:8453': 'Base',
+  'eip155:1': 'Ethereum',
+  'eip155:42161': 'Arbitrum',
+  'eip155:10': 'Optimism',
+  'eip155:137': 'Polygon',
+  'base': 'Base',
+  'ethereum': 'Ethereum',
+  'arbitrum': 'Arbitrum',
+  'optimism': 'Optimism',
+  'polygon': 'Polygon',
+  'solana': 'Solana',
+}
+
 /**
- * Normalize a Satring API service into the internal service schema.
+ * Map a Satring x402 network identifier to a human-readable name.
+ * @param {string|null} network - e.g. 'eip155:8453' or 'base'
+ * @returns {string} Human-readable network name
+ */
+export function mapX402Network(network) {
+  if (!network) return 'Base'
+  return NETWORK_MAP[network] || network
+}
+
+/**
+ * Normalize a Satring API service into one or more internal service objects.
+ * Returns an array — dual-protocol ("L402+x402") entries produce two rows.
  * @param {object} svc - Raw Satring API service object
  * @param {number} btcUsdRate - Current BTC/USD exchange rate for price conversion
- * @returns {object} Normalized service object matching the internal schema
+ * @returns {object[]} Array of normalized service objects
  * @throws {Error} If the service is missing a URL.
  */
 export function normalizeRawService(svc, btcUsdRate) {
   if (!svc.url) throw new Error('missing URL')
-  return {
-    id: randomUUID(),
+
+  const protocol = (svc.protocol || 'L402').trim()
+  const base = {
     name: svc.name || svc.url,
     description: svc.description || null,
     url: normalizeUrl(svc.url),
-    price_sats: svc.pricing_sats || null,
-    price_usd: satsToUsd(svc.pricing_sats, btcUsdRate),
     category: mapCategory(svc.categories) || 'uncategorized',
     provider: svc.owner_name || null,
     source_id: String(svc.id),
   }
+
+  const results = []
+
+  if (protocol === 'L402' || protocol === 'L402+x402') {
+    results.push({
+      ...base,
+      id: randomUUID(),
+      protocol: 'L402',
+      price_sats: svc.pricing_sats || null,
+      price_usd: satsToUsd(svc.pricing_sats, btcUsdRate),
+      payment_asset: 'BTC',
+      payment_network: 'Lightning',
+    })
+  }
+
+  if (protocol === 'x402' || protocol === 'L402+x402') {
+    results.push({
+      ...base,
+      id: randomUUID(),
+      protocol: 'x402',
+      price_sats: null,
+      price_usd: svc.pricing_usd || null,
+      payment_asset: svc.x402_asset || 'USDC',
+      payment_network: mapX402Network(svc.x402_network),
+    })
+  }
+
+  // Fallback: unknown protocol string — treat as L402 (legacy behavior)
+  if (results.length === 0) {
+    results.push({
+      ...base,
+      id: randomUUID(),
+      protocol: 'L402',
+      price_sats: svc.pricing_sats || null,
+      price_usd: satsToUsd(svc.pricing_sats, btcUsdRate),
+      payment_asset: 'BTC',
+      payment_network: 'Lightning',
+    })
+  }
+
+  return results
 }
