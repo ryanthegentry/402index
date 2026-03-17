@@ -738,6 +738,9 @@ export const styles = `
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .demo-mcp-header .copy-btn {
+      position: static;
+    }
     .demo-mcp-query .demo-code-block {
       margin: 0;
       border: none;
