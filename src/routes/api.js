@@ -380,7 +380,14 @@ router.post('/register', async (req, res) => {
       probe_body: probeBody !== '{}' ? probeBody : null,
     }
 
-    const service = registerUpsert().get(params)
+    let service = registerUpsert().get(params)
+
+    // Auto-approve trusted providers — probe already validated L402 compliance above
+    if (service.status === 'pending' && body.provider === 'golem-gateway') {
+      approveService().run({ id: service.id })
+      service = { ...service, status: 'active' }
+      console.log(`[register] Auto-approved golem-gateway registration: ${url}`)
+    }
 
     // Fire-and-forget event distribution (webhooks, Nostr, email — only on genuinely new registrations)
     if (service.registered_at === service.updated_at) {
@@ -388,7 +395,7 @@ router.post('/register', async (req, res) => {
     }
 
     const message = service.status === 'active'
-      ? 'Service updated (already active)'
+      ? 'Service registered and live'
       : 'Service registered and pending review'
 
     return res.status(201).json({
