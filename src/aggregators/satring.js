@@ -12,7 +12,7 @@ export const BLOCKED_HOSTS = new Set([
   'satsforai.com',
 ])
 const PAGE_SIZE = 20 // Satring max per page
-const PAGE_DELAY_MS = 5000 // Delay between pages to avoid rate limiting
+const PAGE_DELAY_MS = 8000 // Delay between pages to avoid rate limiting
 const RATE_LIMIT_WAIT_MS = 30000 // Wait time on 429 before retry
 
 function sleep(ms) {
