@@ -242,7 +242,7 @@ const registerUpsert = () => stmt('registerUpsert', `
     http_method = COALESCE(excluded.http_method, services.http_method),
     probe_body = COALESCE(excluded.probe_body, services.probe_body),
     health_status = 'healthy',
-    status = CASE WHEN services.status = 'active' THEN 'active' ELSE services.status END,
+    status = CASE WHEN services.status = 'active' THEN 'active' ELSE 'pending' END,
     updated_at = datetime('now')
   RETURNING *
 `)
