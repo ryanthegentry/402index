@@ -274,9 +274,10 @@ router.post('/register', async (req, res) => {
     }
 
     // Validate protocol — only L402 accepted (case-insensitive)
+    // x402 endpoints are auto-indexed from Bazaar; MPP endpoints are auto-indexed from mpp.dev
     if (String(body.protocol).toUpperCase() !== 'L402') {
       return res.status(400).json({
-        error: 'Invalid protocol. Only "L402" is currently accepted.',
+        error: 'Invalid protocol. Only "L402" is accepted for self-registration. x402 endpoints are auto-indexed from Bazaar, and MPP endpoints are auto-indexed from mpp.dev.',
       })
     }
 

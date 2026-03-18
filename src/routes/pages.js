@@ -40,14 +40,15 @@ router.get('/llms.txt', (req, res) => {
   const totalEndpoints = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER}`).get().c
   const l402Count = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER} AND protocol = 'L402'`).get().c
   const x402Count = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER} AND protocol = 'x402'`).get().c
+  const mppCount = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER} AND protocol = 'MPP'`).get().c
 
   res.set('Content-Type', 'text/plain; charset=utf-8')
   res.send(`# 402 Index
 
-> Protocol-agnostic directory of paid APIs (L402 + x402) for AI agents.
+> Protocol-agnostic directory of paid APIs (L402 + x402 + MPP) for AI agents.
 
 Live at: https://402index.io
-Currently indexing: ${totalEndpoints} endpoints (${l402Count} L402, ${x402Count} x402)
+Currently indexing: ${totalEndpoints} endpoints (${l402Count} L402, ${x402Count} x402, ${mppCount} MPP)
 
 ## API
 
@@ -78,6 +79,7 @@ Setup: See mcp-server/ directory or npm install @402index/mcp-server
 
 - L402: Lightning-native HTTP 402 paywall. Returns WWW-Authenticate header with macaroon + invoice.
 - x402: Chain-agnostic HTTP 402 paywall (Base, Solana). Returns payment requirements in structured header.
+- MPP: Machine Payments Protocol (Stripe/Tempo). Returns WWW-Authenticate: Payment header with intent and method.
 
 `)
 })
@@ -92,7 +94,7 @@ router.get('/', (req, res) => {
 
   // Verified count: matches the payment_valid checkbox filter exactly
   const verifiedCount = db.prepare(
-    "SELECT COUNT(*) as c FROM services WHERE (status = 'active' OR status IS NULL) AND ((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy'))"
+    "SELECT COUNT(*) as c FROM services WHERE (status = 'active' OR status IS NULL) AND ((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy') OR (protocol = 'MPP' AND health_status = 'healthy'))"
   ).get().c
 
   // Health breakdown: ALL endpoints (unfiltered)
@@ -107,10 +109,10 @@ router.get('/', (req, res) => {
 
   // Distinct services (by hostname) and providers (hostname-based, filtered + unfiltered)
   const distinctHosts = new Set()
-  const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set() }
-  const chainProviders = { base: new Set(), solana: new Set() }
-  const allProviders = { total: new Set(), L402: new Set(), x402: new Set() }
-  const allChainProviders = { base: new Set(), solana: new Set() }
+  const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set(), MPP: new Set() }
+  const chainProviders = { base: new Set(), solana: new Set(), tempo: new Set() }
+  const allProviders = { total: new Set(), L402: new Set(), x402: new Set(), MPP: new Set() }
+  const allChainProviders = { base: new Set(), solana: new Set(), tempo: new Set() }
   const allUrls = db.prepare('SELECT url, protocol, payment_network, is_template, is_demo, x402_payment_valid, health_status FROM services').all()
   for (const svc of allUrls) {
     let host
@@ -125,17 +127,26 @@ router.get('/', (req, res) => {
         if (network === 'base' || network.includes('base')) allChainProviders.base.add(host)
         else if (network === 'solana' || network.includes('solana')) allChainProviders.solana.add(host)
       }
+      if (svc.protocol === 'MPP') {
+        const network = (svc.payment_network || '').toLowerCase()
+        if (network === 'tempo' || network.includes('tempo')) allChainProviders.tempo.add(host)
+      }
     }
-    // Filtered provider counts: exclude x402 with payment_valid=0, exclude L402 without healthy status
+    // Filtered provider counts: exclude x402 with payment_valid=0, exclude L402/MPP without healthy status
     if (!svc.is_template && !svc.is_demo
       && !(svc.protocol === 'x402' && svc.x402_payment_valid === 0)
-      && !(svc.protocol === 'L402' && svc.health_status !== 'healthy')) {
+      && !(svc.protocol === 'L402' && svc.health_status !== 'healthy')
+      && !(svc.protocol === 'MPP' && svc.health_status !== 'healthy')) {
       filteredProviders.total.add(host)
       filteredProviders[svc.protocol]?.add(host)
       if (svc.protocol === 'x402') {
         const network = (svc.payment_network || '').toLowerCase()
         if (network === 'base' || network.includes('base')) chainProviders.base.add(host)
         else if (network === 'solana' || network.includes('solana')) chainProviders.solana.add(host)
+      }
+      if (svc.protocol === 'MPP') {
+        const network = (svc.payment_network || '').toLowerCase()
+        if (network === 'tempo' || network.includes('tempo')) chainProviders.tempo.add(host)
       }
     }
   }
@@ -148,6 +159,10 @@ router.get('/', (req, res) => {
   stats.allL402Providers = allProviders.L402.size
   stats.allBaseProviders = allChainProviders.base.size
   stats.allSolanaProviders = allChainProviders.solana.size
+  stats.mppProviders = filteredProviders.MPP.size
+  stats.tempoProviders = chainProviders.tempo.size
+  stats.allMppProviders = allProviders.MPP.size
+  stats.allTempoProviders = allChainProviders.tempo.size
 
   // Categories for dropdown
   const categories = db.prepare(
