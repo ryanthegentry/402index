@@ -12,7 +12,7 @@ export function validateProbeUrl(url) {
 
   try {
     const parsed = new URL(url)
-    if (parsed.protocol !== 'https:') return 'Only HTTPS URLs are supported'
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return 'Only HTTP/HTTPS URLs are supported'
 
     const hostname = parsed.hostname.replace(/^\[|\]$/g, '')
     if (hostname === 'localhost') return 'Cannot probe localhost'
