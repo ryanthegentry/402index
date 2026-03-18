@@ -434,6 +434,7 @@ Content-Type: application/json
       if (step === 'request') return '→'
       if (step === 'response') return '←'
       if (step === 'headers') return '←'
+      if (step === 'l402_validation' || step === 'mpp_validation' || step === 'x402_validation') return '◆'
       if (step === 'analysis') return '◆'
       if (step === 'done') return '✓'
       if (step === 'error') return '✗'
@@ -445,6 +446,7 @@ Content-Type: application/json
       if (step === 'error') return 'demo-probe-step-error'
       if (step === 'headers') return 'demo-probe-step-headers'
       if (step === 'response') return 'demo-probe-step-response'
+      if (step === 'l402_validation' || step === 'mpp_validation' || step === 'x402_validation') return 'demo-probe-step-headers'
       return ''
     }
 

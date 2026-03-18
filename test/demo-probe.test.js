@@ -91,6 +91,15 @@ describe('formatProbeSteps', () => {
     assert.ok(step.message.includes('x402'), 'should identify x402 protocol')
   })
 
+  it('formats MPP headers step', () => {
+    const step = formatProbeSteps.headers('MPP', {
+      'WWW-Authenticate': 'Payment id="x", realm="r", method="tempo", intent="charge", request="dGVzdA"'
+    })
+    assert.equal(step.step, 'headers')
+    assert.equal(step.protocol, 'MPP')
+    assert.ok(step.message.includes('MPP'), 'should identify MPP protocol')
+  })
+
   it('formats no-protocol headers step when neither detected', () => {
     const step = formatProbeSteps.headers(null, {})
     assert.equal(step.step, 'headers')
@@ -240,5 +249,27 @@ describe('formatProbeSteps — POST method display', () => {
     const step = formatProbeSteps.x402Validation(false, { assetKnown: false, facilitatorReachable: false })
     assert.equal(step.step, 'x402_validation')
     assert.equal(step.valid, false)
+  })
+
+  it('formats MPP challenge validation step (valid)', () => {
+    const step = formatProbeSteps.mppValidation(true, { method: 'tempo', intent: 'charge' })
+    assert.equal(step.step, 'mpp_validation')
+    assert.equal(step.valid, true)
+    assert.ok(step.message.includes('tempo/charge'), 'should include method/intent')
+  })
+
+  it('formats MPP challenge validation step (invalid)', () => {
+    const step = formatProbeSteps.mppValidation(false, { degradeReason: 'missing required MPP field: intent' })
+    assert.equal(step.step, 'mpp_validation')
+    assert.equal(step.valid, false)
+    assert.ok(step.message.includes('incomplete'), 'should indicate incomplete')
+  })
+
+  it('formats MPP validation with decoded price', () => {
+    // base64url-encode a request with amount
+    const payload = { amount: '200000', methodDetails: { decimals: 6 } }
+    const request = Buffer.from(JSON.stringify(payload)).toString('base64url')
+    const step = formatProbeSteps.mppValidation(true, { method: 'tempo', intent: 'charge', request })
+    assert.ok(step.message.includes('$0.2000'), 'should decode and format price')
   })
 })

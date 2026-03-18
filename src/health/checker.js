@@ -5,6 +5,7 @@ import { dirname } from 'path'
 import db, { DB_PATH } from '../db.js'
 import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from '../services/l402-utils.js'
 import { parsePaymentRequired, parsePaymentRequiredBody, validatePaymentRequirements } from '../services/x402-utils.js'
+import { detectProtocol } from '../services/detect-protocol.js'
 
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
@@ -458,41 +459,19 @@ async function checkService(service) {
     httpResult.httpStatus, httpResult.errorMessage, prevFailures, historicalP50, httpResult.responseTimeMs
   )
 
-  // Enhanced L402 compliance check: validate scheme, macaroon, and invoice
-  if (protocol === 'L402' && httpResult.httpStatus === 402 && classification.healthStatus === 'healthy') {
-    const parsed = parseWwwAuthenticate(httpResult.wwwAuthenticate)
-    if (!parsed.scheme || !/L402|LSAT/i.test(parsed.scheme)) {
-      classification.healthStatus = 'degraded'
-      classification.checkStatus = 'degraded'
-    } else if (!isValidMacaroon(parsed.macaroon) || !isValidInvoice(parsed.invoice)) {
+  // L402/MPP compliance check via shared detectProtocol()
+  if ((protocol === 'L402' || protocol === 'MPP') && httpResult.httpStatus === 402 && classification.healthStatus === 'healthy') {
+    const detection = detectProtocol(httpResult)
+    if (!detection.valid) {
       classification.healthStatus = 'degraded'
       classification.checkStatus = 'degraded'
     }
   }
 
-  // MPP compliance check: validate Payment scheme in WWW-Authenticate
-  if (protocol === 'MPP' && httpResult.httpStatus === 402 && classification.healthStatus === 'healthy') {
-    const wwwAuth = httpResult.wwwAuthenticate || ''
-    if (!wwwAuth.startsWith('Payment ')) {
-      classification.healthStatus = 'degraded'
-      classification.checkStatus = 'degraded'
-    } else {
-      // Validate required fields: id, realm, method, intent, request
-      const hasId = /\bid=/.test(wwwAuth)
-      const hasRealm = /\brealm=/.test(wwwAuth)
-      const hasMethod = /\bmethod=/.test(wwwAuth)
-      const hasIntent = /\bintent=/.test(wwwAuth)
-      const hasRequest = /\brequest=/.test(wwwAuth)
-      if (!(hasId && hasRealm && hasMethod && hasIntent && hasRequest)) {
-        classification.healthStatus = 'degraded'
-        classification.checkStatus = 'degraded'
-      }
-    }
-  }
-
-  // L402 http_method auto-detection: retry with POST when GET/HEAD returns 405/400/200
-  // Only for L402 endpoints that haven't been manually set to a specific method
-  if (protocol === 'L402' && (!http_method || http_method === 'GET') && classification.healthStatus !== 'healthy') {
+  // POST auto-detection for L402 and MPP (unified)
+  if ((protocol === 'L402' || protocol === 'MPP') &&
+      (!http_method || http_method === 'GET') &&
+      classification.healthStatus !== 'healthy') {
     const shouldTryPost = (
       classification.checkStatus === 'method_not_allowed' ||  // 405
       httpResult.httpStatus === 400 ||                         // 400 (often wrong method)
@@ -503,49 +482,12 @@ async function checkService(service) {
       try {
         const postResult = await performHttpCheck(url, 'POST')
         if (postResult.httpStatus === 402) {
-          const postParsed = parseWwwAuthenticate(postResult.wwwAuthenticate)
-          if (postParsed.scheme && /L402|LSAT/i.test(postParsed.scheme) &&
-              isValidMacaroon(postParsed.macaroon) && isValidInvoice(postParsed.invoice)) {
-            // POST returns valid 402 — this is a POST-only endpoint
+          const postDetection = detectProtocol(postResult)
+          if (postDetection.protocol === protocol && postDetection.valid) {
             classification.healthStatus = 'healthy'
             classification.checkStatus = 'healthy'
             classification.consecutiveFailures = 0
-
-            // Persist http_method=POST for future checks (only if not manually set)
             persistHttpMethod().run({ id, http_method: 'POST' })
-          }
-        }
-      } catch {
-        // POST retry failed — keep original classification
-      }
-    }
-  }
-
-  // MPP http_method auto-detection: retry with POST when GET/HEAD returns 405/400/200
-  if (protocol === 'MPP' && (!http_method || http_method === 'GET') && classification.healthStatus !== 'healthy') {
-    const shouldTryPost = (
-      classification.checkStatus === 'method_not_allowed' ||  // 405
-      httpResult.httpStatus === 400 ||                         // 400 (often wrong method)
-      httpResult.httpStatus === 200                            // 200 (paywall may only gate POST)
-    )
-
-    if (shouldTryPost) {
-      try {
-        const postResult = await performHttpCheck(url, 'POST')
-        if (postResult.httpStatus === 402) {
-          const wwwAuth = postResult.wwwAuthenticate || ''
-          if (wwwAuth.startsWith('Payment ')) {
-            const hasId = /\bid=/.test(wwwAuth)
-            const hasRealm = /\brealm=/.test(wwwAuth)
-            const hasMethod = /\bmethod=/.test(wwwAuth)
-            const hasIntent = /\bintent=/.test(wwwAuth)
-            const hasRequest = /\brequest=/.test(wwwAuth)
-            if (hasId && hasRealm && hasMethod && hasIntent && hasRequest) {
-              classification.healthStatus = 'healthy'
-              classification.checkStatus = 'healthy'
-              classification.consecutiveFailures = 0
-              persistHttpMethod().run({ id, http_method: 'POST' })
-            }
           }
         }
       } catch {

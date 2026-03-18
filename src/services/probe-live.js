@@ -1,6 +1,5 @@
 import { isPrivateIp, resolveAndCheck, performHttpCheck, classifyHealthStatus } from '../health/checker.js'
-import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from './l402-utils.js'
-import { parsePaymentRequired, parsePaymentRequiredBody, validatePaymentRequirements } from './x402-utils.js'
+import { detectProtocol, decodeMppRequest } from './detect-protocol.js'
 
 /**
  * Validate a URL for the live probe endpoint.
@@ -102,6 +101,15 @@ export const formatProbeSteps = {
         headers: { 'PAYMENT-REQUIRED': headerVal },
       }
     }
+    if (protocol === 'MPP') {
+      const headerVal = rawHeaders['WWW-Authenticate'] || rawHeaders['www-authenticate'] || ''
+      return {
+        step: 'headers',
+        protocol: 'MPP',
+        message: 'MPP protocol detected',
+        headers: { 'WWW-Authenticate': headerVal },
+      }
+    }
     return {
       step: 'headers',
       protocol: null,
@@ -115,6 +123,31 @@ export const formatProbeSteps = {
       ? `L402 compliance: valid (scheme=${details.scheme}, macaroon=${details.macaroon ? 'valid' : 'missing'}, invoice=${details.invoice ? 'valid' : 'missing'})`
       : `L402 compliance: failed (${!details.scheme ? 'missing scheme' : !details.macaroon ? 'invalid macaroon' : 'invalid invoice'})`
     return { step: 'l402_validation', valid, details, message: msg }
+  },
+
+  mppValidation(valid, details) {
+    if (valid) {
+      const parts = [`${details.method || '?'}/${details.intent || '?'}`]
+      if (details.request) {
+        const decoded = decodeMppRequest(details.request)
+        if (decoded?.amount) {
+          const decimals = decoded.methodDetails?.decimals || 6
+          parts.push(`$${(parseFloat(decoded.amount) / Math.pow(10, decimals)).toFixed(4)}`)
+        }
+      }
+      return {
+        step: 'mpp_validation',
+        valid: true,
+        details,
+        message: `MPP challenge valid — ${parts.join(', ')}`,
+      }
+    }
+    return {
+      step: 'mpp_validation',
+      valid: false,
+      details,
+      message: `MPP challenge incomplete — ${details.degradeReason || 'missing fields'}`,
+    }
   },
 
   postRetry(method, resultStatus) {
@@ -206,43 +239,46 @@ export async function* runProbeSteps(url, db) {
   )
 
   // ─── Protocol detection + validation ─────────────────────────────────
+  const detection = detectProtocol(httpResult)
+  let detectedProtocol = detection.protocol || config.protocol
 
-  let detectedProtocol = config.protocol // Trust DB if known
-  const rawHeaders = {}
+  // Emit headers + protocol-specific validation
+  if (detection.protocol) {
+    yield formatProbeSteps.headers(detection.protocol, detection.rawHeaders)
 
-  // L402 detection + compliance validation
-  if (httpResult.wwwAuthenticate) {
-    const parsed = parseWwwAuthenticate(httpResult.wwwAuthenticate)
-    if (parsed.scheme && /L402|LSAT/i.test(parsed.scheme)) {
-      detectedProtocol = 'L402'
-      rawHeaders['WWW-Authenticate'] = httpResult.wwwAuthenticate
-
-      // L402 compliance check (same as checker.js lines 446-456)
-      const macaroonValid = isValidMacaroon(parsed.macaroon)
-      const invoiceValid = isValidInvoice(parsed.invoice)
-      const isCompliant = macaroonValid && invoiceValid
-
-      yield formatProbeSteps.headers('L402', rawHeaders)
-      yield formatProbeSteps.l402Validation(isCompliant, {
-        scheme: parsed.scheme,
-        macaroon: macaroonValid ? 'valid' : null,
-        invoice: invoiceValid ? 'valid' : null,
+    if (detection.protocol === 'L402') {
+      yield formatProbeSteps.l402Validation(detection.valid, {
+        scheme: detection.details.scheme,
+        macaroon: detection.details.macaroonValid ? 'valid' : null,
+        invoice: detection.details.invoiceValid ? 'valid' : null,
       })
-
-      if (!isCompliant) {
+      if (!detection.valid) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
       }
     }
+
+    if (detection.protocol === 'MPP') {
+      yield formatProbeSteps.mppValidation(detection.valid, detection.details)
+      if (!detection.valid) {
+        classification.healthStatus = 'degraded'
+        classification.checkStatus = 'degraded'
+      }
+    }
+
+    if (detection.protocol === 'x402') {
+      yield formatProbeSteps.x402Validation(detection.valid, {
+        assetKnown: detection.details.assetKnown,
+        facilitatorReachable: null, // Skip live facilitator check for speed in demo
+      })
+    }
   }
 
-  // L402 POST auto-detection (same as checker.js lines 458-487)
-  // If L402 (known or suspected) and initial probe wasn't healthy, try POST
-  if (
-    (detectedProtocol === 'L402' || config.protocol === 'L402') &&
-    (!method || method === 'GET') &&
-    classification.healthStatus !== 'healthy'
-  ) {
+  // POST auto-detection for L402 and MPP (unified)
+  if ((detectedProtocol === 'L402' || detectedProtocol === 'MPP' ||
+       config.protocol === 'L402' || config.protocol === 'MPP') &&
+      (!method || method === 'GET') &&
+      classification.healthStatus !== 'healthy') {
     const shouldTryPost = (
       classification.checkStatus === 'method_not_allowed' ||
       httpResult.httpStatus === 400 ||
@@ -255,70 +291,31 @@ export async function* runProbeSteps(url, db) {
       yield formatProbeSteps.postRetry('POST', postResult.httpStatus || 0)
 
       if (postResult.httpStatus === 402) {
-        const postParsed = parseWwwAuthenticate(postResult.wwwAuthenticate)
-        if (postParsed.scheme && /L402|LSAT/i.test(postParsed.scheme) &&
-            isValidMacaroon(postParsed.macaroon) && isValidInvoice(postParsed.invoice)) {
-          // POST works! Update classification
+        const postDetection = detectProtocol(postResult)
+        if (postDetection.protocol && postDetection.valid) {
           classification.healthStatus = 'healthy'
           classification.checkStatus = 'healthy'
           classification.consecutiveFailures = 0
-          detectedProtocol = 'L402'
+          detectedProtocol = postDetection.protocol
 
-          // Show the real headers from POST
-          rawHeaders['WWW-Authenticate'] = postResult.wwwAuthenticate
-          yield formatProbeSteps.headers('L402', rawHeaders)
-          yield formatProbeSteps.l402Validation(true, {
-            scheme: postParsed.scheme,
-            macaroon: 'valid',
-            invoice: 'valid',
-          })
+          yield formatProbeSteps.headers(postDetection.protocol, postDetection.rawHeaders)
+          if (postDetection.protocol === 'L402') {
+            yield formatProbeSteps.l402Validation(true, {
+              scheme: postDetection.details.scheme,
+              macaroon: 'valid',
+              invoice: 'valid',
+            })
+          } else if (postDetection.protocol === 'MPP') {
+            yield formatProbeSteps.mppValidation(true, postDetection.details)
+          }
         }
       }
     }
   }
 
-  // x402 detection + payment validation
-  if (!detectedProtocol || detectedProtocol === 'x402') {
-    let paymentRequiredHeader = httpResult.paymentRequired
-    let v1BodyText = httpResult.responseBody
-
-    // x402 V2 header parsing
-    const parsed = parsePaymentRequired(paymentRequiredHeader)
-    let accepts = null
-
-    if (parsed.valid) {
-      accepts = parsed.accepts
-      detectedProtocol = 'x402'
-      rawHeaders['PAYMENT-REQUIRED'] = paymentRequiredHeader
-    } else if (v1BodyText) {
-      // V1 body fallback
-      const bodyParsed = parsePaymentRequiredBody(v1BodyText)
-      if (bodyParsed.valid) {
-        accepts = bodyParsed.accepts
-        detectedProtocol = 'x402'
-        rawHeaders['PAYMENT-REQUIRED'] = '(from response body — x402 V1)'
-      }
-    }
-
-    if (detectedProtocol === 'x402') {
-      // Only emit headers step if we haven't already (L402 path emits its own)
-      if (!rawHeaders['WWW-Authenticate']) {
-        yield formatProbeSteps.headers('x402', rawHeaders)
-      }
-
-      if (accepts) {
-        const validation = validatePaymentRequirements(accepts)
-        yield formatProbeSteps.x402Validation(validation.valid, {
-          assetKnown: validation.assetKnown,
-          facilitatorReachable: null, // Skip live facilitator check for speed in demo
-        })
-      }
-    }
-  }
-
-  // If we still haven't emitted a headers step, emit one now
-  if (!rawHeaders['WWW-Authenticate'] && !rawHeaders['PAYMENT-REQUIRED']) {
-    yield formatProbeSteps.headers(detectedProtocol, rawHeaders)
+  // Emit fallback headers step if nothing was detected
+  if (!detection.protocol) {
+    yield formatProbeSteps.headers(detectedProtocol, {})
   }
 
   yield formatProbeSteps.analysis(classification.healthStatus, detectedProtocol)
