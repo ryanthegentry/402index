@@ -342,6 +342,49 @@ try {
   console.warn(`[db] health_checks migration note: ${err.message}`)
 }
 
+// Migration: expand protocol CHECK constraint to include 'MPP'
+try {
+  const needsMppMigration = (() => {
+    try {
+      db.exec("INSERT INTO services (id, name, url, protocol, source) VALUES ('__mpp_test__', 'test', 'https://test.mpp', 'MPP', 'test')")
+      db.exec("DELETE FROM services WHERE id = '__mpp_test__'")
+      return false
+    } catch {
+      return true
+    }
+  })()
+
+  if (needsMppMigration) {
+    console.log('[db] Migrating: expanding protocol CHECK to include MPP...')
+    const currentSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='services'").get()
+    const newSchema = currentSchema.sql.replace(
+      /CHECK\(protocol IN \('L402', 'x402', 'both'\)\)/,
+      "CHECK(protocol IN ('L402', 'x402', 'both', 'MPP'))"
+    )
+    // Handle both quoted and unquoted table names in schema SQL
+    const tempSchema = newSchema.replace(/CREATE TABLE (?:"services"|services)/i, 'CREATE TABLE services_mpp')
+    db.pragma('foreign_keys = OFF')
+    db.exec(`
+      BEGIN IMMEDIATE;
+      ${tempSchema};
+      INSERT INTO services_mpp SELECT * FROM services;
+      DROP TABLE services;
+      ALTER TABLE services_mpp RENAME TO services;
+      CREATE INDEX IF NOT EXISTS idx_services_protocol ON services(protocol);
+      CREATE INDEX IF NOT EXISTS idx_services_category ON services(category);
+      CREATE INDEX IF NOT EXISTS idx_services_source ON services(source);
+      CREATE INDEX IF NOT EXISTS idx_services_health ON services(health_status);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_services_url_protocol ON services(url, protocol);
+      COMMIT;
+    `)
+    db.pragma('foreign_keys = ON')
+    db.pragma('foreign_key_check')
+    console.log('[db] Protocol CHECK constraint updated to include MPP')
+  }
+} catch (err) {
+  console.warn(`[db] Protocol migration note: ${err.message}`)
+}
+
 // Reclaim space after bulk deletions
 try {
   db.pragma('incremental_vacuum')
