@@ -474,7 +474,26 @@ router.get('/demo/probe-live', async (req, res) => {
 
 // ─── Admin Endpoints ──────────────────────────────────────────────────────────
 
+const ADMIN_COLUMNS = `id, name, url, status, protocol, provider, category,
+  price_sats, payment_asset, payment_network, contact_email,
+  health_status, verified, registered_at`
+
 const getPending = () => stmt('getPending', "SELECT * FROM services WHERE status = 'pending' ORDER BY registered_at DESC")
+
+const getRecent = () => stmt('getRecent', `
+  SELECT ${ADMIN_COLUMNS} FROM services ORDER BY registered_at DESC LIMIT @limit
+`)
+
+const searchServices = () => stmt('searchServices', `
+  SELECT ${ADMIN_COLUMNS} FROM services
+  WHERE name LIKE @q OR url LIKE @q OR provider LIKE @q OR category LIKE @q
+  ORDER BY registered_at DESC
+  LIMIT @limit
+`)
+
+const deleteServiceById = () => stmt('deleteServiceById', `
+  DELETE FROM services WHERE id = @id
+`)
 
 const approveService = () => stmt('approveService', `
   UPDATE services SET status = 'active', updated_at = datetime('now') WHERE id = @id AND status = 'pending'
@@ -487,6 +506,30 @@ const rejectService = () => stmt('rejectService', `
 router.get('/admin/pending', (req, res) => {
   const services = getPending().all()
   res.json({ services, total: services.length })
+})
+
+router.get('/admin/recent', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100)
+  const services = getRecent().all({ limit })
+  res.json({ services, total: services.length })
+})
+
+router.get('/admin/search', (req, res) => {
+  const q = (req.query.q || '').trim()
+  if (!q) {
+    return res.status(400).json({ error: 'q param is required' })
+  }
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100)
+  const services = searchServices().all({ q: `%${q}%`, limit })
+  res.json({ services, total: services.length })
+})
+
+router.delete('/admin/services/:id', (req, res) => {
+  const result = deleteServiceById().run({ id: req.params.id })
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'No service with that ID' })
+  }
+  res.json({ deleted: true, id: req.params.id })
 })
 
 router.post('/admin/approve/:id', (req, res) => {
