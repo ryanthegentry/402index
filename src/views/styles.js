@@ -594,7 +594,7 @@ export const styles = `
 
     /* Demo page */
     .demo-page { padding: 32px 0; }
-    .demo-header { margin-bottom: 32px; }
+    .demo-header { margin-bottom: 32px; padding-left: 24px; }
     .demo-header h1 { font-size: 28px; color: var(--text-bright); margin-bottom: 8px; }
     .demo-subtitle { color: var(--text-muted); font-size: 15px; }
 
@@ -699,23 +699,24 @@ export const styles = `
       border-radius: 6px;
       font-size: 14px;
       font-family: var(--mono);
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     .demo-search-input:focus { outline: none; border-color: var(--accent); }
     .demo-filter-chips {
       display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
+      gap: 8px;
+      flex-wrap: nowrap;
+      align-items: center;
     }
-    .demo-filter-group { display: flex; flex-direction: column; gap: 4px; }
-    .demo-filter-group label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .demo-filter-group { display: flex; flex-direction: row; align-items: center; gap: 4px; }
+    .demo-filter-group label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
     .demo-filter-group select {
       background: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 6px 10px;
+      padding: 4px 8px;
       border-radius: 4px;
-      font-size: 13px;
+      font-size: 12px;
       font-family: var(--mono);
     }
     .demo-filter-group select:focus { outline: none; border-color: var(--accent); }
@@ -1002,9 +1003,6 @@ export const styles = `
       .demo-stat-label { font-size: 11px; }
       .demo-protocol-compare { grid-template-columns: 1fr; }
       .demo-panel { padding: 16px; }
-      .demo-filter-chips { flex-direction: column; }
-      .demo-filter-group { width: 100%; }
-      .demo-filter-group select { width: 100%; min-height: 36px; }
       .demo-flow-steps { padding-left: 36px; }
       .demo-flow-step-number { width: 26px; height: 26px; font-size: 11px; left: -36px; }
       .demo-flow-step-content { padding: 12px; }
@@ -1020,6 +1018,13 @@ export const styles = `
       .demo-healthcheck-btn { width: 100%; }
       .demo-probe-input-row { flex-direction: column; }
       .demo-probe-url { font-size: 12px; }
+    }
+
+    /* True mobile: stack filters vertically */
+    @media (max-width: 480px) {
+      .demo-filter-chips { flex-direction: column; flex-wrap: wrap; }
+      .demo-filter-group { width: 100%; }
+      .demo-filter-group select { width: 100%; min-height: 36px; }
     }
 
     /* Desktop enhancements */

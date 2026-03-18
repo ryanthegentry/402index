@@ -21,9 +21,9 @@ export function demoPage({ stats, probeSample }) {
       <p class="demo-subtitle">The paid API ecosystem — indexed, verified, and searchable by AI agents</p>
     </div>
 
-    <!-- ─── Panel 1: Live Endpoint Probe ─────────────────────────────── -->
+    <!-- ─── Panel 1: Live Endpoint Health Check ─────────────────────── -->
     <section class="demo-panel demo-probe">
-      <h2>Live Endpoint Probe</h2>
+      <h2>Live Endpoint Health Check</h2>
       <p class="demo-panel-desc">Paste any API URL to run a real-time health check — see the protocol handshake live</p>
       <div class="demo-probe-input-row">
         <input type="text" class="demo-probe-url" id="demo-probe-url" placeholder="https://api.example.com/endpoint" />
