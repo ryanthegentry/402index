@@ -84,7 +84,73 @@ Setup: See mcp-server/ directory or npm install @402index/mcp-server
 `)
 })
 
+// Homepage: ecosystem overview (formerly /demo)
 router.get('/', (req, res) => {
+  const ACTIVE_FILTER = "WHERE (status = 'active' OR status IS NULL)"
+
+  // Gather stats
+  const totalIndexed = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER}`).get().c
+
+  const verifiedCount = db.prepare(
+    `SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND ((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy') OR (protocol = 'MPP' AND health_status = 'healthy'))`
+  ).get().c
+
+  const healthRows = db.prepare(`SELECT health_status, COUNT(*) as c FROM services ${ACTIVE_FILTER} GROUP BY health_status`).all()
+  const healthMap = { healthy: 0, degraded: 0, down: 0, unknown: 0 }
+  for (const row of healthRows) {
+    healthMap[row.health_status] = row.c
+  }
+
+  // Distinct providers (excluding templates/demos)
+  const allUrls = db.prepare(`SELECT url, protocol, is_template, is_demo, x402_payment_valid, health_status FROM services ${ACTIVE_FILTER}`).all()
+  const providerSets = { total: new Set(), L402: new Set(), x402: new Set(), MPP: new Set() }
+  const allProviderSets = { total: new Set(), L402: new Set(), x402: new Set(), MPP: new Set() }
+  for (const svc of allUrls) {
+    if (svc.is_template || svc.is_demo) continue
+    let host
+    try { host = new URL(svc.url).hostname } catch { continue }
+    allProviderSets.total.add(host)
+    allProviderSets[svc.protocol]?.add(host)
+    // Verified providers: L402 healthy, x402 payment_valid=1, MPP healthy
+    if ((svc.protocol === 'L402' && svc.health_status === 'healthy') ||
+        (svc.protocol === 'x402' && svc.x402_payment_valid === 1) ||
+        (svc.protocol === 'MPP' && svc.health_status === 'healthy')) {
+      providerSets.total.add(host)
+      providerSets[svc.protocol]?.add(host)
+    }
+  }
+
+  // Protocol breakdowns
+  const l402Total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'L402'`).get().c
+  const l402Healthy = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'L402' AND health_status = 'healthy'`).get().c
+  const x402Total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'x402'`).get().c
+  const x402Verified = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'x402' AND x402_payment_valid = 1`).get().c
+  const x402Healthy = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'x402' AND health_status = 'healthy'`).get().c
+  const mppTotal = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'MPP'`).get().c
+  const mppHealthy = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'MPP' AND health_status = 'healthy'`).get().c
+  const mppVerified = mppHealthy
+
+  const lastHealthCheck = db.prepare('SELECT MAX(checked_at) as t FROM health_checks').get()?.t || null
+
+  const stats = {
+    totalIndexed,
+    verified: verifiedCount,
+    distinctProviders: providerSets.total.size,
+    ...healthMap,
+    lastHealthCheck,
+    l402: { endpoints: l402Total, verified: l402Healthy, healthy: l402Healthy, providers: providerSets.L402.size, allProviders: allProviderSets.L402.size },
+    x402: { endpoints: x402Total, verified: x402Verified, healthy: x402Healthy, providers: providerSets.x402.size, allProviders: allProviderSets.x402.size },
+    mpp: { endpoints: mppTotal, verified: mppVerified, healthy: mppHealthy, providers: providerSets.MPP.size, allProviders: allProviderSets.MPP.size },
+  }
+
+  // Probe sample for flow visualization
+  const probeSample = buildProbeSample(db, 'L402')
+
+  res.send(demoPage({ stats, probeSample }))
+})
+
+// Directory page (formerly /)
+router.get('/directory', (req, res) => {
   const { protocol, category, health, source, q, featured, sort, payment_valid, limit: rawLimit, offset: rawOffset } = req.query
   const filters = { protocol, category, health, source, q, featured: featured === 'true', sort, payment_valid: payment_valid === 'true' }
 
@@ -92,77 +158,7 @@ router.get('/', (req, res) => {
     protocol, category, health, source, q, featured, sort, payment_valid, order: sort ? 'desc' : undefined, rawLimit, rawOffset,
   }, PAGE_COLUMNS)
 
-  // Verified count: matches the payment_valid checkbox filter exactly
-  const verifiedCount = db.prepare(
-    "SELECT COUNT(*) as c FROM services WHERE (status = 'active' OR status IS NULL) AND ((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy') OR (protocol = 'MPP' AND health_status = 'healthy'))"
-  ).get().c
-
-  // Health breakdown: ALL endpoints (unfiltered)
-  const healthRows = db.prepare("SELECT health_status, COUNT(*) as c FROM services WHERE (status = 'active' OR status IS NULL) GROUP BY health_status").all()
-  const stats = { verified: verifiedCount, healthy: 0, degraded: 0, down: 0, unknown: 0 }
-  for (const row of healthRows) {
-    stats[row.health_status] = row.c
-  }
-
-  // Total indexed (unfiltered) counts
-  stats.totalIndexed = db.prepare("SELECT COUNT(*) as c FROM services WHERE (status = 'active' OR status IS NULL)").get().c
-
-  // Distinct services (by hostname) and providers (hostname-based, filtered + unfiltered)
-  const distinctHosts = new Set()
-  const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set(), MPP: new Set() }
-  const chainProviders = { base: new Set(), solana: new Set(), tempo: new Set() }
-  const allProviders = { total: new Set(), L402: new Set(), x402: new Set(), MPP: new Set() }
-  const allChainProviders = { base: new Set(), solana: new Set(), tempo: new Set() }
-  const allUrls = db.prepare('SELECT url, protocol, payment_network, is_template, is_demo, x402_payment_valid, health_status FROM services').all()
-  for (const svc of allUrls) {
-    let host
-    try { host = new URL(svc.url).hostname } catch { continue }
-    distinctHosts.add(host)
-    // Unfiltered provider counts (excluding templates/demos only)
-    if (!svc.is_template && !svc.is_demo) {
-      allProviders.total.add(host)
-      allProviders[svc.protocol]?.add(host)
-      if (svc.protocol === 'x402') {
-        const network = (svc.payment_network || '').toLowerCase()
-        if (network === 'base' || network.includes('base')) allChainProviders.base.add(host)
-        else if (network === 'solana' || network.includes('solana')) allChainProviders.solana.add(host)
-      }
-      if (svc.protocol === 'MPP') {
-        const network = (svc.payment_network || '').toLowerCase()
-        if (network === 'tempo' || network.includes('tempo')) allChainProviders.tempo.add(host)
-      }
-    }
-    // Filtered provider counts: exclude x402 with payment_valid=0, exclude L402/MPP without healthy status
-    if (!svc.is_template && !svc.is_demo
-      && !(svc.protocol === 'x402' && svc.x402_payment_valid === 0)
-      && !(svc.protocol === 'L402' && svc.health_status !== 'healthy')
-      && !(svc.protocol === 'MPP' && svc.health_status !== 'healthy')) {
-      filteredProviders.total.add(host)
-      filteredProviders[svc.protocol]?.add(host)
-      if (svc.protocol === 'x402') {
-        const network = (svc.payment_network || '').toLowerCase()
-        if (network === 'base' || network.includes('base')) chainProviders.base.add(host)
-        else if (network === 'solana' || network.includes('solana')) chainProviders.solana.add(host)
-      }
-      if (svc.protocol === 'MPP') {
-        const network = (svc.payment_network || '').toLowerCase()
-        if (network === 'tempo' || network.includes('tempo')) chainProviders.tempo.add(host)
-      }
-    }
-  }
-  stats.distinctServices = distinctHosts.size
-  stats.distinctProviders = filteredProviders.total.size
-  stats.l402Providers = filteredProviders.L402.size
-  stats.x402Providers = filteredProviders.x402.size
-  stats.baseProviders = chainProviders.base.size
-  stats.solanaProviders = chainProviders.solana.size
-  stats.allL402Providers = allProviders.L402.size
-  stats.allBaseProviders = allChainProviders.base.size
-  stats.allSolanaProviders = allChainProviders.solana.size
-  stats.mppProviders = filteredProviders.MPP.size
-  stats.tempoProviders = chainProviders.tempo.size
-  stats.allMppProviders = allProviders.MPP.size
-  stats.allTempoProviders = allChainProviders.tempo.size
+  const stats = { verified: 0, totalIndexed: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 }
 
   // Categories for dropdown
   const categories = db.prepare(
@@ -197,64 +193,9 @@ router.get('/api-docs', (req, res) => {
   res.send(apiDocsPage())
 })
 
-// Demo page
+// Demo redirect (301 to homepage)
 router.get('/demo', (req, res) => {
-  const ACTIVE_FILTER = "WHERE (status = 'active' OR status IS NULL)"
-
-  // Gather stats
-  const totalIndexed = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER}`).get().c
-
-  const verifiedCount = db.prepare(
-    `SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND ((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy'))`
-  ).get().c
-
-  const healthRows = db.prepare(`SELECT health_status, COUNT(*) as c FROM services ${ACTIVE_FILTER} GROUP BY health_status`).all()
-  const healthMap = { healthy: 0, degraded: 0, down: 0, unknown: 0 }
-  for (const row of healthRows) {
-    healthMap[row.health_status] = row.c
-  }
-
-  // Distinct providers (excluding templates/demos)
-  const allUrls = db.prepare(`SELECT url, protocol, is_template, is_demo, x402_payment_valid, health_status FROM services ${ACTIVE_FILTER}`).all()
-  const providerSets = { total: new Set(), L402: new Set(), x402: new Set() }
-  const allProviderSets = { total: new Set(), L402: new Set(), x402: new Set() }
-  for (const svc of allUrls) {
-    if (svc.is_template || svc.is_demo) continue
-    let host
-    try { host = new URL(svc.url).hostname } catch { continue }
-    allProviderSets.total.add(host)
-    allProviderSets[svc.protocol]?.add(host)
-    // Verified providers: L402 healthy or x402 payment_valid=1
-    if ((svc.protocol === 'L402' && svc.health_status === 'healthy') ||
-        (svc.protocol === 'x402' && svc.x402_payment_valid === 1)) {
-      providerSets.total.add(host)
-      providerSets[svc.protocol]?.add(host)
-    }
-  }
-
-  // Protocol breakdowns
-  const l402Total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'L402'`).get().c
-  const l402Healthy = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'L402' AND health_status = 'healthy'`).get().c
-  const x402Total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'x402'`).get().c
-  const x402Verified = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'x402' AND x402_payment_valid = 1`).get().c
-  const x402Healthy = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'x402' AND health_status = 'healthy'`).get().c
-
-  const lastHealthCheck = db.prepare('SELECT MAX(checked_at) as t FROM health_checks').get()?.t || null
-
-  const stats = {
-    totalIndexed,
-    verified: verifiedCount,
-    distinctProviders: providerSets.total.size,
-    ...healthMap,
-    lastHealthCheck,
-    l402: { endpoints: l402Total, verified: l402Healthy, healthy: l402Healthy, providers: providerSets.L402.size, allProviders: allProviderSets.L402.size },
-    x402: { endpoints: x402Total, verified: x402Verified, healthy: x402Healthy, providers: providerSets.x402.size, allProviders: allProviderSets.x402.size },
-  }
-
-  // Probe sample for flow visualization
-  const probeSample = buildProbeSample(db, 'L402')
-
-  res.send(demoPage({ stats, probeSample }))
+  res.redirect(301, '/')
 })
 
 // Admin dashboard (auth is client-side via API calls)
@@ -271,7 +212,7 @@ router.get('/opportunities', (req, res) => {
 // ─── Probe Sample Builder ─────────────────────────────────────────────────────
 
 export function buildProbeSample(database, protocol = 'L402') {
-  const proto = protocol === 'x402' ? 'x402' : 'L402'
+  const proto = protocol === 'x402' ? 'x402' : protocol === 'MPP' ? 'MPP' : 'L402'
 
   // Find a healthy service with recent health check data
   const service = database.prepare(`
@@ -297,7 +238,15 @@ export function buildProbeSample(database, protocol = 'L402') {
     LIMIT 1
   `).get(service.id)
 
-  const flow = proto === 'L402' ? {
+  const flow = proto === 'MPP' ? {
+    request: `GET ${service.url}`,
+    responseStatus: 402,
+    protocolHeaders: {
+      MPP: `WWW-Authenticate: Payment id="<session-id>", realm="${service.provider || 'provider'}", method="tempo", intent="session", request="<base64-payment-details>"`,
+    },
+    retryHeader: 'Authorization: Payment <session-token>',
+    successStatus: 200,
+  } : proto === 'L402' ? {
     request: `GET ${service.url}`,
     responseStatus: 402,
     protocolHeaders: {
@@ -336,6 +285,29 @@ export function buildProbeSample(database, protocol = 'L402') {
 }
 
 function buildStaticProbeSample(protocol) {
+  if (protocol === 'MPP') {
+    return {
+      service: {
+        name: 'Example MPP API',
+        url: 'https://api.example.com/resource',
+        protocol: 'MPP',
+        price_sats: null,
+        price_usd: 0.002,
+        category: 'ai',
+        provider: 'Example',
+      },
+      healthCheck: { checked_at: null, status: 'unknown', response_time_ms: null, http_status: null },
+      flow: {
+        request: 'GET https://api.example.com/resource',
+        responseStatus: 402,
+        protocolHeaders: {
+          MPP: 'WWW-Authenticate: Payment id="sess_abc123", realm="example", method="tempo", intent="session", request="eyJhbW91bnQiOiIxMDAwMCJ9"',
+        },
+        retryHeader: 'Authorization: Payment <session-token>',
+        successStatus: 200,
+      },
+    }
+  }
   if (protocol === 'x402') {
     return {
       service: {

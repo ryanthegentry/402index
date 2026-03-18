@@ -15,6 +15,7 @@ const sampleStats = {
   lastHealthCheck: '2026-03-14T12:00:00Z',
   l402: { endpoints: 91, verified: 41, healthy: 41, providers: 7, allProviders: 46 },
   x402: { endpoints: 13700, verified: 761, healthy: 11858, providers: 150, allProviders: 311 },
+  mpp: { endpoints: 459, verified: 42, healthy: 42, providers: 12, allProviders: 15 },
 }
 
 const sampleProbeSample = {
@@ -54,9 +55,9 @@ describe('demoPage', () => {
     assert.ok(html.includes('demo-flow'), 'should have flow panel')
   })
 
-  it('includes Demo in navigation', () => {
+  it('includes Directory in navigation', () => {
     const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
-    assert.ok(html.includes('href="/demo"'), 'should have Demo nav link')
+    assert.ok(html.includes('href="/directory"'), 'should have Directory nav link')
   })
 })
 
@@ -202,20 +203,20 @@ describe('demoPage — Panel 3: Payment Flow Visualization', () => {
 // ─── Panel ordering ─────────────────────────────────────────────────────────
 
 describe('demoPage — panel order', () => {
-  it('shows Live Endpoint Probe first, then Agent Discovery, then Ecosystem, then Payment Flow', () => {
+  it('shows Ecosystem first, then Agent Discovery, then Live Probe, then Payment Flow', () => {
     const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
     // Use section class markers to find panel positions (not JS code)
-    const probeIdx = html.indexOf('class="demo-panel demo-probe"')
-    const searchIdx = html.indexOf('class="demo-panel demo-search"')
     const ecosystemIdx = html.indexOf('class="demo-panel demo-ecosystem"')
+    const searchIdx = html.indexOf('class="demo-panel demo-search"')
+    const probeIdx = html.indexOf('class="demo-panel demo-probe"')
     const flowIdx = html.indexOf('class="demo-panel demo-flow"')
-    assert.ok(probeIdx > 0, 'should have probe section')
-    assert.ok(searchIdx > 0, 'should have search section')
     assert.ok(ecosystemIdx > 0, 'should have ecosystem section')
+    assert.ok(searchIdx > 0, 'should have search section')
+    assert.ok(probeIdx > 0, 'should have probe section')
     assert.ok(flowIdx > 0, 'should have flow section')
-    assert.ok(probeIdx < searchIdx, 'probe should come before search')
-    assert.ok(searchIdx < ecosystemIdx, 'search should come before ecosystem')
-    assert.ok(ecosystemIdx < flowIdx, 'ecosystem should come before flow')
+    assert.ok(ecosystemIdx < searchIdx, 'ecosystem should come before search')
+    assert.ok(searchIdx < probeIdx, 'search should come before probe')
+    assert.ok(probeIdx < flowIdx, 'probe should come before flow')
   })
 })
 

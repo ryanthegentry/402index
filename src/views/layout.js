@@ -15,9 +15,9 @@ export function layout(title, content) {
     <div class="container">
       <a href="/" class="logo"><span>402</span>index</a>
       <nav>
-        <a href="/">Directory</a>
+        <a href="/">Overview</a>
+        <a href="/directory">Directory</a>
         <a href="/about">About</a>
-        <a href="/demo">Demo</a>
         <a href="/api-docs">API</a>
       </nav>
     </div>

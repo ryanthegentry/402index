@@ -18,6 +18,7 @@ describe('layout', () => {
   it('includes navigation links', () => {
     const html = layout('Test', '')
     assert.ok(html.includes('href="/"'))
+    assert.ok(html.includes('href="/directory"'))
     assert.ok(html.includes('href="/about"'))
     assert.ok(html.includes('href="/api-docs"'))
   })
@@ -76,8 +77,8 @@ describe('apiDocsPage', () => {
   })
 })
 
-describe('homePage', () => {
-  it('renders service list with stats', () => {
+describe('homePage (directory page)', () => {
+  it('renders service list', () => {
     const html = homePage({
       services: [{
         id: '1',
@@ -99,8 +100,7 @@ describe('homePage', () => {
     })
 
     assert.ok(html.includes('Test Service'))
-    assert.ok(html.includes('endpoints indexed'))
-    assert.ok(html.includes('payment-verified'))
+    assert.ok(html.includes('services-table'), 'should have services table')
   })
 
   it('renders empty state when no services', () => {
@@ -113,38 +113,21 @@ describe('homePage', () => {
       stats: { verified: 0, totalIndexed: 0, healthy: 0, degraded: 0, down: 0, unknown: 0 },
       categories: [],
     })
-    assert.ok(html.includes('endpoints indexed'))
+    assert.ok(html.includes('No services found'))
   })
 
-  it('renders protocol counter when l402, base, and solana providers are provided', () => {
+  it('does not render stats-bar or protocol-bar (moved to homepage)', () => {
     const html = homePage({
       services: [],
       total: 0,
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 300, solanaProviders: 86, allL402Providers: 24, allBaseProviders: 300, allSolanaProviders: 86 },
+      stats: { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5 },
       categories: [],
     })
-    assert.ok(html.includes('<div class="protocol-bar">'), 'should render protocol bar')
-    assert.ok(html.includes('L402'), 'should show L402 label')
-    assert.ok(html.includes('<strong>24</strong>'), 'should show L402 count')
-    assert.ok(html.includes('protocol-fill-l402'), 'should have fill bar')
-    assert.ok(html.includes('protocol-fill-base'), 'should have Base fill bar')
-    assert.ok(html.includes('protocol-track-multi'), 'should have multi-track bar')
-  })
-
-  it('does NOT render protocol counter when all counts are zero', () => {
-    const html = homePage({
-      services: [],
-      total: 0,
-      limit: 50,
-      offset: 0,
-      filters: {},
-      stats: { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 0, baseProviders: 0, solanaProviders: 0, allL402Providers: 0, allBaseProviders: 0, allSolanaProviders: 0 },
-      categories: [],
-    })
-    assert.ok(!html.includes('<div class="protocol-bar">'), 'should not render protocol bar when all counts are 0')
+    assert.ok(!html.includes('class="stats-bar"'), 'should not have stats-bar')
+    assert.ok(!html.includes('class="protocol-bar"'), 'should not have protocol-bar')
   })
 
   it('escapes HTML in service names', () => {

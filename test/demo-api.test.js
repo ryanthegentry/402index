@@ -25,26 +25,13 @@ async function page(path) {
   }
 }
 
-// ─── GET /demo (page route) ──────────────────────────────────────────────────
+// ─── GET /demo (redirects to /) ──────────────────────────────────────────────
 
 describe('GET /demo', () => {
-  it('returns 200 with HTML content', async () => {
-    const r = await page('/demo')
-    assert.equal(r.status, 200)
-    assert.ok(r.headers['content-type']?.includes('text/html'), 'should return HTML')
-    assert.ok(r.text.includes('<!DOCTYPE html>'), 'should be valid HTML')
-  })
-
-  it('contains all three demo panels', async () => {
-    const r = await page('/demo')
-    assert.ok(r.text.includes('demo-ecosystem'), 'should have ecosystem panel')
-    assert.ok(r.text.includes('demo-search'), 'should have search panel')
-    assert.ok(r.text.includes('demo-flow'), 'should have flow panel')
-  })
-
-  it('includes Demo in navigation', async () => {
-    const r = await page('/demo')
-    assert.ok(r.text.includes('href="/demo"'), 'should have Demo nav link')
+  it('returns 301 redirect to /', async () => {
+    const res = await fetch(`${API}/demo`, { redirect: 'manual' })
+    assert.equal(res.status, 301)
+    assert.ok(res.headers.get('location')?.endsWith('/'), 'should redirect to /')
   })
 })
 

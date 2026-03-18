@@ -592,12 +592,10 @@ describe('homePage — payment_valid filter', () => {
   })
 })
 
-// ─── Protocol bar: chain colors ─────────────────────────────────────────────
+// ─── Protocol bar: removed from directory page (moved to homepage) ──────────
 
 describe('homePage — protocol bar chain colors', () => {
-  const baseStats = { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 10, unknown: 0, allL402Providers: 0, allBaseProviders: 0, allSolanaProviders: 0 }
-
-  it('renders 3-segment bar with L402, Base, and Solana labels', async () => {
+  it('directory page does not render protocol bar (moved to homepage)', async () => {
     const { homePage } = await import('../src/views/home.js')
     const html = homePage({
       services: [],
@@ -605,58 +603,10 @@ describe('homePage — protocol bar chain colors', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { ...baseStats, l402Providers: 5, baseProviders: 100, solanaProviders: 20 },
+      stats: { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 10, unknown: 0 },
       categories: [],
     })
-    assert.ok(html.includes('protocol-fill-l402'))
-    assert.ok(html.includes('protocol-fill-base'))
-    assert.ok(html.includes('protocol-track-multi'))
-    assert.ok(html.includes('protocol-l402'))
-    assert.ok(html.includes('protocol-base'))
-    assert.ok(html.includes('protocol-solana'))
-  })
-
-  it('hides Solana label when zero Solana providers', async () => {
-    const { homePage } = await import('../src/views/home.js')
-    const html = homePage({
-      services: [],
-      total: 0,
-      limit: 50,
-      offset: 0,
-      filters: {},
-      stats: { ...baseStats, l402Providers: 5, baseProviders: 100, solanaProviders: 0 },
-      categories: [],
-    })
-    assert.ok(html.includes('class="protocol-base"'))
-    assert.ok(!html.includes('class="protocol-solana"'))
-  })
-
-  it('hides Base label when zero Base providers', async () => {
-    const { homePage } = await import('../src/views/home.js')
-    const html = homePage({
-      services: [],
-      total: 0,
-      limit: 50,
-      offset: 0,
-      filters: {},
-      stats: { ...baseStats, l402Providers: 5, baseProviders: 0, solanaProviders: 20 },
-      categories: [],
-    })
-    assert.ok(!html.includes('class="protocol-base"'))
-    assert.ok(html.includes('class="protocol-solana"'))
-  })
-
-  it('hides protocol bar when no providers', async () => {
-    const { homePage } = await import('../src/views/home.js')
-    const html = homePage({
-      services: [],
-      total: 0,
-      limit: 50,
-      offset: 0,
-      filters: {},
-      stats: { ...baseStats, l402Providers: 0, baseProviders: 0, solanaProviders: 0 },
-      categories: [],
-    })
-    assert.ok(!html.includes('<div class="protocol-bar">'))
+    assert.ok(!html.includes('<div class="protocol-bar">'), 'protocol bar moved to homepage')
+    assert.ok(!html.includes('class="stats-bar"'), 'stats bar moved to homepage')
   })
 })

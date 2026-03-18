@@ -8,8 +8,9 @@ const sampleStats = {
   totalIndexed: 100, verified: 10, distinctProviders: 5,
   healthy: 80, degraded: 10, down: 5, unknown: 5,
   lastHealthCheck: '2026-03-14',
-  l402: { endpoints: 50, verified: 10, healthy: 10, providers: 5 },
-  x402: { endpoints: 50, verified: 5, healthy: 70, providers: 10 },
+  l402: { endpoints: 50, verified: 10, healthy: 10, providers: 5, allProviders: 10 },
+  x402: { endpoints: 50, verified: 5, healthy: 70, providers: 10, allProviders: 20 },
+  mpp: { endpoints: 10, verified: 3, healthy: 3, providers: 2, allProviders: 5 },
 }
 
 const sampleProbe = {
