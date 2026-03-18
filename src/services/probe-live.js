@@ -125,7 +125,7 @@ export const formatProbeSteps = {
     return { step: 'l402_validation', valid, details, message: msg }
   },
 
-  mppValidation(valid, details) {
+  mppValidation(valid, details, degradeReason) {
     if (valid) {
       const parts = [`${details.method || '?'}/${details.intent || '?'}`]
       if (details.request) {
@@ -146,7 +146,7 @@ export const formatProbeSteps = {
       step: 'mpp_validation',
       valid: false,
       details,
-      message: `MPP challenge incomplete — ${details.degradeReason || 'missing fields'}`,
+      message: `MPP challenge incomplete — ${degradeReason || 'missing fields'}`,
     }
   },
 
@@ -259,7 +259,7 @@ export async function* runProbeSteps(url, db) {
     }
 
     if (detection.protocol === 'MPP') {
-      yield formatProbeSteps.mppValidation(detection.valid, detection.details)
+      yield formatProbeSteps.mppValidation(detection.valid, detection.details, detection.degradeReason)
       if (!detection.valid) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
@@ -306,7 +306,7 @@ export async function* runProbeSteps(url, db) {
               invoice: 'valid',
             })
           } else if (postDetection.protocol === 'MPP') {
-            yield formatProbeSteps.mppValidation(true, postDetection.details)
+            yield formatProbeSteps.mppValidation(true, postDetection.details, null)
           }
         }
       }

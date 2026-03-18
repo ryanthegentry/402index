@@ -201,6 +201,39 @@ describe('detectProtocol — precedence', () => {
     assert.equal(result.protocol, null)
     assert.equal(result.valid, false)
   })
+
+  it('falls through Bearer WWW-Authenticate to detect x402', () => {
+    const result = detectProtocol({
+      wwwAuthenticate: 'Bearer realm="api.example.com"',
+      paymentRequired: validHeaderB64,
+    })
+    assert.equal(result.protocol, 'x402')
+    assert.equal(result.valid, true)
+  })
+
+  it('falls through Basic WWW-Authenticate to detect x402', () => {
+    const result = detectProtocol({
+      wwwAuthenticate: 'Basic realm="api.example.com"',
+      paymentRequired: validHeaderB64,
+    })
+    assert.equal(result.protocol, 'x402')
+  })
+
+  it('non-Payment non-L402 WWW-Authenticate with no x402 returns null', () => {
+    const result = detectProtocol({
+      wwwAuthenticate: 'Digest realm="api.example.com", nonce="abc123"',
+    })
+    assert.equal(result.protocol, null)
+  })
+
+  it('MPP wins over x402 V1 body when both present', () => {
+    const body = JSON.stringify({ x402Version: 1, accepts: validAccepts })
+    const result = detectProtocol({
+      wwwAuthenticate: 'Payment id="x", realm="r", method="tempo", intent="charge", request="eyJ0ZXN0IjoxfQ"',
+      responseBody: body,
+    })
+    assert.equal(result.protocol, 'MPP')
+  })
 })
 
 // ─── rawHeaders output ────────────────────────────────────────────────────────

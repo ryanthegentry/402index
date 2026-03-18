@@ -252,17 +252,23 @@ describe('formatProbeSteps — POST method display', () => {
   })
 
   it('formats MPP challenge validation step (valid)', () => {
-    const step = formatProbeSteps.mppValidation(true, { method: 'tempo', intent: 'charge' })
+    const step = formatProbeSteps.mppValidation(true, { method: 'tempo', intent: 'charge' }, null)
     assert.equal(step.step, 'mpp_validation')
     assert.equal(step.valid, true)
     assert.ok(step.message.includes('tempo/charge'), 'should include method/intent')
   })
 
-  it('formats MPP challenge validation step (invalid)', () => {
-    const step = formatProbeSteps.mppValidation(false, { degradeReason: 'missing required MPP field: intent' })
+  it('formats MPP challenge validation step (invalid) with specific degradeReason', () => {
+    const step = formatProbeSteps.mppValidation(false, {}, 'missing required MPP field: intent')
     assert.equal(step.step, 'mpp_validation')
     assert.equal(step.valid, false)
-    assert.ok(step.message.includes('incomplete'), 'should indicate incomplete')
+    assert.ok(step.message.includes('missing required MPP field: intent'), 'should show specific degradeReason')
+  })
+
+  it('formats MPP challenge validation step (invalid) with fallback message', () => {
+    const step = formatProbeSteps.mppValidation(false, {}, null)
+    assert.equal(step.valid, false)
+    assert.ok(step.message.includes('missing fields'), 'should fall back to generic message')
   })
 
   it('formats MPP validation with decoded price', () => {
