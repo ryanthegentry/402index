@@ -169,6 +169,10 @@ router.get('/health', (req, res) => {
     "SELECT MAX(updated_at) as t FROM services WHERE source LIKE '%l402apps%'"
   ).get()?.t || null
 
+  const lastMppSync = db.prepare(
+    "SELECT MAX(updated_at) as t FROM services WHERE source = 'mpp'"
+  ).get()?.t || null
+
   const lastHealthCheck = db.prepare(
     'SELECT MAX(checked_at) as t FROM health_checks'
   ).get()?.t || null
@@ -194,6 +198,7 @@ router.get('/health', (req, res) => {
     last_bazaar_sync: lastBazaarSync,
     last_satring_sync: lastSatringSync,
     last_l402apps_sync: lastL402AppsSync,
+    last_mpp_sync: lastMppSync,
     last_health_check_run: lastHealthCheck,
   })
 })

@@ -470,6 +470,26 @@ async function checkService(service) {
     }
   }
 
+  // MPP compliance check: validate Payment scheme in WWW-Authenticate
+  if (protocol === 'MPP' && httpResult.httpStatus === 402 && classification.healthStatus === 'healthy') {
+    const wwwAuth = httpResult.wwwAuthenticate || ''
+    if (!wwwAuth.startsWith('Payment ')) {
+      classification.healthStatus = 'degraded'
+      classification.checkStatus = 'degraded'
+    } else {
+      // Validate required fields: id, realm, method, intent, request
+      const hasId = /\bid=/.test(wwwAuth)
+      const hasRealm = /\brealm=/.test(wwwAuth)
+      const hasMethod = /\bmethod=/.test(wwwAuth)
+      const hasIntent = /\bintent=/.test(wwwAuth)
+      const hasRequest = /\brequest=/.test(wwwAuth)
+      if (!(hasId && hasRealm && hasMethod && hasIntent && hasRequest)) {
+        classification.healthStatus = 'degraded'
+        classification.checkStatus = 'degraded'
+      }
+    }
+  }
+
   // L402 http_method auto-detection: retry with POST when GET/HEAD returns 405/400/200
   // Only for L402 endpoints that haven't been manually set to a specific method
   if (protocol === 'L402' && (!http_method || http_method === 'GET') && classification.healthStatus !== 'healthy') {
