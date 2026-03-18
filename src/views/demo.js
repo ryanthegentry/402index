@@ -17,19 +17,87 @@ export function demoPage({ stats, probeSample }) {
   const content = `
   <div class="container demo-page">
     <div class="demo-header">
-      <h1>402 Index Live Demo</h1>
-      <p class="demo-subtitle">The paid API ecosystem — indexed, verified, and searchable by AI agents</p>
+      <h1>402 Index</h1>
+      <p class="demo-subtitle">The paid API directory for AI agents — indexed, verified, and searchable</p>
     </div>
 
-    <!-- ─── Panel 1: Live Endpoint Health Check ─────────────────────── -->
-    <section class="demo-panel demo-probe">
-      <h2>Live Endpoint Health Check</h2>
-      <p class="demo-panel-desc">Paste any API URL to run a real-time health check — see the protocol handshake live</p>
-      <div class="demo-probe-input-row">
-        <input type="text" class="demo-probe-url" id="demo-probe-url" placeholder="https://api.example.com/endpoint" />
-        <button class="demo-healthcheck-btn" id="demo-probe-btn">Check Endpoint Health</button>
+    <!-- ─── Panel 1: Ecosystem Dashboard ──────────────────────────────── -->
+    <section class="demo-panel demo-ecosystem">
+      <h2>Ecosystem Overview</h2>
+
+      <div class="demo-stat-cards">
+        <div class="demo-stat-card">
+          <div class="demo-stat-number">${formatNumber(s.totalIndexed)}</div>
+          <div class="demo-stat-label">Endpoints Indexed</div>
+        </div>
+        <div class="demo-stat-card demo-stat-verified">
+          <div class="demo-stat-number">${formatNumber(s.verified)}</div>
+          <div class="demo-stat-label">Payment-Verified</div>
+        </div>
+        <div class="demo-stat-card">
+          <div class="demo-stat-number">${formatNumber(s.distinctProviders)}</div>
+          <div class="demo-stat-label">Distinct Providers</div>
+        </div>
       </div>
-      <div class="demo-probe-log" id="demo-probe-log"></div>
+
+      <div class="demo-protocol-compare">
+        <div class="demo-protocol-card demo-protocol-l402">
+          <div class="demo-protocol-title"><span class="badge badge-l402">L402</span> Lightning Network</div>
+          <div class="demo-protocol-stats">
+            <div class="demo-protocol-row"><span>Verified</span><strong>${s.l402.verified} / ${formatNumber(s.l402.endpoints)} (${pct(s.l402.verified, s.l402.endpoints)})</strong></div>
+            <div class="demo-protocol-row"><span>Providers</span><strong>${s.l402.providers} / ${s.l402.allProviders} (${pct(s.l402.providers, s.l402.allProviders)})</strong></div>
+            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.l402.healthy}</strong></div>
+          </div>
+          <div class="demo-protocol-note">Decentralized, censorship-resistant, locally verifiable</div>
+        </div>
+        <div class="demo-protocol-card demo-protocol-x402">
+          <div class="demo-protocol-title"><span class="badge badge-x402">x402</span> Base, Solana, etc.</div>
+          <div class="demo-protocol-stats">
+            <div class="demo-protocol-row"><span>Verified</span><strong>${s.x402.verified} / ${formatNumber(s.x402.endpoints)} (${pct(s.x402.verified, s.x402.endpoints)})</strong></div>
+            <div class="demo-protocol-row"><span>Providers</span><strong>${s.x402.providers} / ${s.x402.allProviders} (${pct(s.x402.providers, s.x402.allProviders)})</strong></div>
+            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.x402.healthy}</strong></div>
+          </div>
+          <div class="demo-protocol-note">Centralized facilitator required (4+ available), Base/Solana chains</div>
+        </div>
+        <div class="demo-protocol-card demo-protocol-mpp">
+          <div class="demo-protocol-title"><span class="badge badge-mpp">MPP</span> Stripe / Tempo</div>
+          <div class="demo-protocol-stats">
+            <div class="demo-protocol-row"><span>Verified</span><strong>${s.mpp.verified} / ${formatNumber(s.mpp.endpoints)} (${pct(s.mpp.verified, s.mpp.endpoints)})</strong></div>
+            <div class="demo-protocol-row"><span>Providers</span><strong>${s.mpp.providers} / ${s.mpp.allProviders} (${pct(s.mpp.providers, s.mpp.allProviders)})</strong></div>
+            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.mpp.healthy}</strong></div>
+          </div>
+          <div class="demo-protocol-note">Stripe/Tempo facilitated, session-based settlement</div>
+        </div>
+      </div>
+
+      <div class="demo-health-bars">
+        <h3>Health Breakdown</h3>
+        <div class="demo-health-row">
+          <span class="health-dot health-healthy"></span>
+          <span class="demo-health-label">healthy</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-healthy" style="width: ${s.totalIndexed ? (s.healthy / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.healthy)}</span>
+        </div>
+        <div class="demo-health-row">
+          <span class="health-dot health-degraded"></span>
+          <span class="demo-health-label">degraded</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-degraded" style="width: ${s.totalIndexed ? (s.degraded / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.degraded)}</span>
+        </div>
+        <div class="demo-health-row">
+          <span class="health-dot health-down"></span>
+          <span class="demo-health-label">down</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-down" style="width: ${s.totalIndexed ? (s.down / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.down)}</span>
+        </div>
+        <div class="demo-health-row">
+          <span class="health-dot health-unknown"></span>
+          <span class="demo-health-label">unknown</span>
+          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-unknown" style="width: ${s.totalIndexed ? (s.unknown / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
+          <span class="demo-health-count">${formatNumber(s.unknown)}</span>
+        </div>
+        <div class="demo-last-checked">Last checked: ${escapeHtml(s.lastHealthCheck || 'Never')}</div>
+      </div>
     </section>
 
     <!-- ─── Panel 2: Interactive MCP Search ───────────────────────────── -->
@@ -92,84 +160,26 @@ export function demoPage({ stats, probeSample }) {
       </div>
     </section>
 
-    <!-- ─── Panel 3: Ecosystem Dashboard ──────────────────────────────── -->
-    <section class="demo-panel demo-ecosystem">
-      <h2>Ecosystem Overview</h2>
-
-      <div class="demo-stat-cards">
-        <div class="demo-stat-card">
-          <div class="demo-stat-number">${formatNumber(s.totalIndexed)}</div>
-          <div class="demo-stat-label">Endpoints Indexed</div>
-        </div>
-        <div class="demo-stat-card demo-stat-verified">
-          <div class="demo-stat-number">${formatNumber(s.verified)}</div>
-          <div class="demo-stat-label">Payment-Verified</div>
-        </div>
-        <div class="demo-stat-card">
-          <div class="demo-stat-number">${formatNumber(s.distinctProviders)}</div>
-          <div class="demo-stat-label">Distinct Providers</div>
-        </div>
+    <!-- ─── Panel 3: Live Endpoint Health Check ─────────────────────── -->
+    <section class="demo-panel demo-probe">
+      <h2>Live Endpoint Health Check</h2>
+      <p class="demo-panel-desc">Paste any API URL to run a real-time health check — see the protocol handshake live</p>
+      <div class="demo-probe-input-row">
+        <input type="text" class="demo-probe-url" id="demo-probe-url" placeholder="https://api.example.com/endpoint" />
+        <button class="demo-healthcheck-btn" id="demo-probe-btn">Check Endpoint Health</button>
       </div>
-
-      <div class="demo-protocol-compare">
-        <div class="demo-protocol-card demo-protocol-l402">
-          <div class="demo-protocol-title"><span class="badge badge-l402">L402</span> Lightning Network</div>
-          <div class="demo-protocol-stats">
-            <div class="demo-protocol-row"><span>Verified</span><strong>${s.l402.verified} / ${formatNumber(s.l402.endpoints)} (${pct(s.l402.verified, s.l402.endpoints)})</strong></div>
-            <div class="demo-protocol-row"><span>Providers</span><strong>${s.l402.providers} / ${s.l402.allProviders} (${pct(s.l402.providers, s.l402.allProviders)})</strong></div>
-            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.l402.healthy}</strong></div>
-          </div>
-          <div class="demo-protocol-note">Decentralized, censorship-resistant, no facilitator dependency</div>
-        </div>
-        <div class="demo-protocol-card demo-protocol-x402">
-          <div class="demo-protocol-title"><span class="badge badge-x402">x402</span> Base, Solana, etc.</div>
-          <div class="demo-protocol-stats">
-            <div class="demo-protocol-row"><span>Verified</span><strong>${s.x402.verified} / ${formatNumber(s.x402.endpoints)} (${pct(s.x402.verified, s.x402.endpoints)})</strong></div>
-            <div class="demo-protocol-row"><span>Providers</span><strong>${s.x402.providers} / ${s.x402.allProviders} (${pct(s.x402.providers, s.x402.allProviders)})</strong></div>
-            <div class="demo-protocol-row"><span>Healthy</span><strong>${s.x402.healthy}</strong></div>
-          </div>
-          <div class="demo-protocol-note">Coinbase CDP facilitator, Base/Solana chains</div>
-        </div>
-      </div>
-
-      <div class="demo-health-bars">
-        <h3>Health Breakdown</h3>
-        <div class="demo-health-row">
-          <span class="health-dot health-healthy"></span>
-          <span class="demo-health-label">healthy</span>
-          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-healthy" style="width: ${s.totalIndexed ? (s.healthy / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
-          <span class="demo-health-count">${formatNumber(s.healthy)}</span>
-        </div>
-        <div class="demo-health-row">
-          <span class="health-dot health-degraded"></span>
-          <span class="demo-health-label">degraded</span>
-          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-degraded" style="width: ${s.totalIndexed ? (s.degraded / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
-          <span class="demo-health-count">${formatNumber(s.degraded)}</span>
-        </div>
-        <div class="demo-health-row">
-          <span class="health-dot health-down"></span>
-          <span class="demo-health-label">down</span>
-          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-down" style="width: ${s.totalIndexed ? (s.down / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
-          <span class="demo-health-count">${formatNumber(s.down)}</span>
-        </div>
-        <div class="demo-health-row">
-          <span class="health-dot health-unknown"></span>
-          <span class="demo-health-label">unknown</span>
-          <div class="demo-health-bar"><div class="demo-health-fill demo-fill-unknown" style="width: ${s.totalIndexed ? (s.unknown / s.totalIndexed * 100).toFixed(1) : 0}%"></div></div>
-          <span class="demo-health-count">${formatNumber(s.unknown)}</span>
-        </div>
-        <div class="demo-last-checked">Last checked: ${escapeHtml(s.lastHealthCheck || 'Never')}</div>
-      </div>
+      <div class="demo-probe-log" id="demo-probe-log"></div>
     </section>
 
     <!-- ─── Panel 4: Payment Flow Visualization ───────────────────────── -->
     <section class="demo-panel demo-flow">
       <h2>Payment Flow</h2>
-      <p class="demo-panel-desc">How an agent pays for an L402/x402 API call — step by step</p>
+      <p class="demo-panel-desc">How an agent pays for an API call — step by step</p>
 
       <div class="demo-flow-toggle" id="demo-flow-toggle">
         <button class="demo-toggle-btn demo-toggle-active" data-protocol="L402">L402 (Lightning)</button>
         <button class="demo-toggle-btn" data-protocol="x402">x402 (Base, Solana)</button>
+        <button class="demo-toggle-btn" data-protocol="MPP">MPP (Stripe/Tempo)</button>
       </div>
 
       <div class="demo-flow-steps" id="demo-flow-steps">
@@ -224,6 +234,11 @@ Content-Type: application/json
         </div>
       </div>
     </section>
+
+    <!-- ─── Full Directory Link ────────────────────────────────────────── -->
+    <div style="text-align:center;padding:24px 0">
+      <a href="/directory" style="font-size:16px;font-weight:500">Browse full directory (${formatNumber(s.totalIndexed)} endpoints) &rarr;</a>
+    </div>
   </div>
 
   <script>
@@ -399,6 +414,13 @@ Content-Type: application/json
         payDetail: 'x402 Payment Requirement\\nAsset: USDC\\nChain: Base\\nFacilitator: x402.org',
         retryHeader: 'X-PAYMENT: <base64-encoded-signed-payment>',
       },
+      MPP: {
+        header: probe.flow.protocolHeaders.MPP || 'WWW-Authenticate: Payment id="<session-id>", realm="<provider>", method="tempo", intent="session", request="<base64-payment-details>"',
+        payTitle: 'Agent Pays via Tempo',
+        payDesc: 'Agent pays through Stripe/Tempo facilitated stablecoin escrow',
+        payDetail: 'Tempo Payment Session\\nMethod: tempo\\nIntent: session\\nSettlement: Stablecoin escrow on Tempo chain',
+        retryHeader: 'Authorization: Payment <session-token>',
+      },
     })}
 
     var flowToggle = document.getElementById('demo-flow-toggle')
@@ -501,5 +523,5 @@ Content-Type: application/json
   })()
   </script>`
 
-  return layout('Live Demo', content)
+  return layout('402 Index', content)
 }

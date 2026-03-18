@@ -257,7 +257,7 @@ describe('verifyL402 with POST method', () => {
 // ─── Homepage views: chain breakdown ────────────────────────────────────────
 
 describe('homePage protocol bar — chain breakdown', () => {
-  it('shows L402, Base, and Solana labels', async () => {
+  it('directory page does not render protocol bar (moved to homepage)', async () => {
     const { homePage } = await import('../src/views/home.js')
     const html = homePage({
       services: [],
@@ -265,30 +265,11 @@ describe('homePage protocol bar — chain breakdown', () => {
       limit: 50,
       offset: 0,
       filters: {},
-      stats: { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 350, solanaProviders: 20, allL402Providers: 24, allBaseProviders: 350, allSolanaProviders: 20 },
+      stats: { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5 },
       categories: [],
     })
-    assert.ok(html.includes('L402'), 'should show L402 label')
-    assert.ok(html.includes('class="protocol-base"'), 'should show Base label')
-    assert.ok(html.includes('class="protocol-solana"'), 'should show Solana label')
-    assert.ok(html.includes('protocol-track-multi'), 'should use multi-track bar')
-  })
-
-  it('shows only L402 when no chain data', async () => {
-    const { homePage } = await import('../src/views/home.js')
-    const html = homePage({
-      services: [],
-      total: 0,
-      limit: 50,
-      offset: 0,
-      filters: {},
-      stats: { verified: 100, totalIndexed: 500, healthy: 80, degraded: 10, down: 5, unknown: 5, l402Providers: 24, baseProviders: 0, solanaProviders: 0, allL402Providers: 24, allBaseProviders: 0, allSolanaProviders: 0 },
-      categories: [],
-    })
-    assert.ok(html.includes('L402'), 'should show L402')
-    assert.ok(html.includes('<strong>24</strong>'), 'should show L402 count')
-    assert.ok(!html.includes('class="protocol-base"'), 'should not show Base label')
-    assert.ok(!html.includes('class="protocol-solana"'), 'should not show Solana label')
+    assert.ok(!html.includes('class="protocol-bar"'), 'protocol bar moved to homepage')
+    assert.ok(!html.includes('class="stats-bar"'), 'stats bar moved to homepage')
   })
 
   it('includes sort dropdown', async () => {

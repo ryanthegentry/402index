@@ -29,77 +29,13 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   const prevOffset = Math.max(0, offset - limit)
   const nextOffset = offset + limit
 
-  const l402 = stats.l402Providers || 0
-  const base = stats.baseProviders || 0
-  const solana = stats.solanaProviders || 0
-  const tempo = stats.tempoProviders || 0
-  const totalProviders = l402 + base + solana + tempo
-  const l402Pct = totalProviders > 0 ? Math.round((l402 / totalProviders) * 100) : 0
-  const basePct = totalProviders > 0 ? Math.round((base / totalProviders) * 100) : 0
-  const tempoPct = totalProviders > 0 ? Math.round((tempo / totalProviders) * 100) : 0
-
-  const l402Label = stats.allL402Providers > l402
-    ? `L402 <strong>${l402}</strong><span class="pct-of">/${stats.allL402Providers}</span>`
-    : `L402 <strong>${l402}</strong>`
-  const baseLabel = stats.allBaseProviders > base
-    ? `Base <strong>${base}</strong><span class="pct-of">/${stats.allBaseProviders}</span>`
-    : `Base <strong>${base}</strong>`
-  const solanaLabel = stats.allSolanaProviders > solana
-    ? `Solana <strong>${solana}</strong><span class="pct-of">/${stats.allSolanaProviders}</span>`
-    : `Solana <strong>${solana}</strong>`
-  const tempoLabel = stats.allTempoProviders > tempo
-    ? `Tempo <strong>${tempo}</strong><span class="pct-of">/${stats.allTempoProviders}</span>`
-    : `Tempo <strong>${tempo}</strong>`
-
-  const l402Tooltip = stats.allL402Providers > l402
-    ? `${l402} of ${stats.allL402Providers} L402 providers independently verified — endpoint returns HTTP 402 with valid WWW-Authenticate header (L402/LSAT scheme, macaroon, and Lightning invoice)`
-    : `${l402} L402 providers with verified endpoints`
-  const baseTooltip = stats.allBaseProviders > base
-    ? `${base} of ${stats.allBaseProviders} Base providers independently verified — endpoint returns HTTP 402 with valid PAYMENT-REQUIRED header, known USDC asset, and reachable facilitator`
-    : `${base} Base providers with verified x402 payment requirements`
-  const solanaTooltip = stats.allSolanaProviders > solana
-    ? `${solana} of ${stats.allSolanaProviders} Solana providers independently verified — endpoint returns HTTP 402 with valid PAYMENT-REQUIRED header, known USDC asset, and reachable facilitator`
-    : `${solana} Solana providers with verified x402 payment requirements`
-  const tempoTooltip = stats.allTempoProviders > tempo
-    ? `${tempo} of ${stats.allTempoProviders} Tempo/MPP providers independently verified — endpoint returns HTTP 402 with valid WWW-Authenticate: Payment header (id, realm, method, intent, request)`
-    : `${tempo} Tempo/MPP providers with verified endpoints`
-
-  const protocolBar = totalProviders > 0 ? `
-    <div class="protocol-bar">
-      <div class="container">
-        <span class="protocol-l402" title="${l402Tooltip}">${l402Label}</span>
-        <div class="protocol-track-multi">
-          <div class="protocol-fill-l402" style="width: ${l402Pct}%"></div>
-          <div class="protocol-fill-base" style="width: ${basePct}%"></div>
-          <div class="protocol-fill-tempo" style="width: ${tempoPct}%"></div>
-        </div>
-        ${base > 0 ? `<span class="protocol-base" title="${baseTooltip}">${baseLabel}</span>` : ''}
-        ${solana > 0 ? `<span class="protocol-solana" title="${solanaTooltip}">${solanaLabel}</span>` : ''}
-        ${tempo > 0 ? `<span class="protocol-tempo" title="${tempoTooltip}">${tempoLabel}</span>` : ''}
-      </div>
-    </div>` : ''
-
   return layout('Directory', `
-    <div class="stats-bar">
-      <div class="container">
-        <div class="stats-headline">
-          <span><span class="stat-value">${stats.totalIndexed.toLocaleString()}</span> endpoints indexed</span>
-          <span class="stats-sep">&middot;</span>
-          <span><span class="stat-value stat-verified">${stats.verified.toLocaleString()}</span> payment-verified</span>
-        </div>
-        <div class="stats-detail">
-          <span><span class="stat-value">${stats.distinctServices?.toLocaleString() || '—'}</span> services</span>
-          <span><span class="stat-value">${stats.distinctProviders?.toLocaleString() || '—'}</span> providers</span>
-          <span><span class="stat-value" style="color:var(--green)">${stats.healthy}</span> healthy</span>
-          <span><span class="stat-value" style="color:var(--yellow)">${stats.degraded}</span> degraded</span>
-          <span><span class="stat-value" style="color:var(--red)">${stats.down}</span> down</span>
-        </div>
-      </div>
-    </div>
-    ${protocolBar}
     <div class="container">
+      <div style="padding: 16px 0 8px">
+        <a href="/" style="color:var(--text-muted);font-size:13px">&larr; Back to overview</a>
+      </div>
       <div class="filters">
-        <form method="get" action="/"${hasFilters ? ' class="filters-open"' : ''}>
+        <form method="get" action="/directory"${hasFilters ? ' class="filters-open"' : ''}>
           <select name="protocol" onchange="this.form.submit()">
             <option value="">All protocols</option>
             <option value="x402"${filters.protocol === 'x402' ? ' selected' : ''}>x402</option>
@@ -141,7 +77,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
           <label><input type="checkbox" name="featured" value="true"${filters.featured ? ' checked' : ''} onchange="this.form.submit()"> Featured only</label>
           <label><input type="checkbox" name="payment_valid" value="true"${filters.payment_valid ? ' checked' : ''} onchange="this.form.submit()"> Payment verified</label>
           <button type="submit" class="filter-btn">Filter</button>
-          ${hasFilters ? '<a href="/" class="filter-clear">Clear</a>' : ''}
+          ${hasFilters ? '<a href="/directory" class="filter-clear">Clear</a>' : ''}
         </form>
       </div>
       <div class="table-wrap">
@@ -165,9 +101,9 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
       <div class="pagination">
         <span>Showing ${offset + 1}–${Math.min(offset + limit, total)} of ${total}</span>
         <span>
-          ${offset > 0 ? `<a href="/?${buildQuery(filters, { offset: prevOffset, limit })}">Prev</a>` : ''}
+          ${offset > 0 ? `<a href="/directory?${buildQuery(filters, { offset: prevOffset, limit })}">Prev</a>` : ''}
           Page ${currentPage} of ${totalPages}
-          ${nextOffset < total ? `<a href="/?${buildQuery(filters, { offset: nextOffset, limit })}">Next</a>` : ''}
+          ${nextOffset < total ? `<a href="/directory?${buildQuery(filters, { offset: nextOffset, limit })}">Next</a>` : ''}
         </span>
       </div>
     </div>

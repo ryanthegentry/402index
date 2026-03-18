@@ -7,8 +7,9 @@ export function aboutPage() {
         <h1>What is 402 Index?</h1>
         <p>
           402 Index is a protocol-agnostic directory of paid APIs designed for AI agents.
-          We index services that use <strong>L402</strong> (Lightning Network paywalls) and
-          <strong>x402</strong> (crypto micropayments via Coinbase/Base) protocols.
+          We index services that use <strong>L402</strong> (Lightning Network paywalls),
+          <strong>x402</strong> (crypto micropayments via Base/Solana), and
+          <strong>MPP</strong> (Machine Payments Protocol via Stripe/Tempo).
         </p>
         <p>
           AI agents need to discover, evaluate, and pay for API services autonomously.
@@ -39,6 +40,11 @@ export function aboutPage() {
         </p>
         <p>
           <strong>Well-Known</strong> — Endpoints discovered via providers' <code>/.well-known/l402-services</code> JSON documents.
+        </p>
+        <p>
+          <strong>MPP (Tempo)</strong> — Machine Payments Protocol services from Tempo's aggregation API.
+          These are services that accept Stripe/Tempo machine payments, including major AI platforms
+          like OpenAI, Anthropic, and Google Gemini.
         </p>
         <p>
           <strong>Self-registered</strong> — Endpoints registered programmatically via our <a href="/api-docs">registration API</a>,
@@ -85,6 +91,16 @@ export function aboutPage() {
           scheme, a known asset contract address (e.g., USDC on Base), a valid <code>payTo</code>
           address, and a reachable facilitator URL. If any of these checks fail, the endpoint is
           indexed but not payment-verified.
+        </p>
+
+        <p>
+          For <strong>MPP</strong> endpoints: we send an HTTP request and confirm the service
+          returns <code>402 Payment Required</code> with a valid <code>WWW-Authenticate: Payment</code>
+          header. We parse the challenge for required fields: <code>id</code>, <code>realm</code>,
+          <code>method</code>, and either <code>intent</code> or <code>request</code> (base64-encoded
+          payment details). The <code>method</code> field indicates the payment rail (e.g.,
+          <code>tempo</code>, <code>lightning</code>). If the challenge parses correctly with all
+          required fields present, the endpoint is payment-verified.
         </p>
 
         <h3 id="wellknown">.well-known Discovery</h3>
@@ -138,9 +154,15 @@ export function aboutPage() {
           Lightning Network micropayments.
         </p>
         <p>
-          <strong>3. Register via API.</strong> Agents and developers can register L402 endpoints
-          programmatically. Your endpoint must return HTTP <code>402</code> with a
-          <code>WWW-Authenticate: L402</code> header on unauthenticated requests.
+          <strong>3. Add MPP to your API.</strong> Use the
+          <a href="https://mpp.dev" target="_blank">Machine Payments Protocol</a> to accept
+          Stripe/Tempo payments. Your service will be auto-discovered via the Tempo API
+          and indexed here.
+        </p>
+        <p>
+          <strong>4. Register via API.</strong> Agents and developers can register L402 endpoints
+          programmatically. Your endpoint must return HTTP <code>402</code> with the
+          appropriate payment header for your protocol (L402, x402, or MPP).
           Registrations are verified automatically and reviewed before going live.
         </p>
         <pre>curl -X POST https://402index.io/api/v1/register \\
@@ -156,7 +178,7 @@ export function aboutPage() {
           See the <a href="/api-docs">API docs</a> for the full field reference.
         </p>
         <p>
-          <strong>4. Email us a listing.</strong> Send a YAML file describing your service
+          <strong>5. Email us a listing.</strong> Send a YAML file describing your service
           to <a href="mailto:hello@402index.io">hello@402index.io</a> for manual review.
         </p>
         <pre>name: "My Weather API"
