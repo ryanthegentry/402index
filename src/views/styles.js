@@ -129,6 +129,11 @@ export const styles = `
       white-space: nowrap;
       cursor: pointer;
     }
+    .protocol-tempo {
+      color: #10b981;
+      white-space: nowrap;
+      cursor: pointer;
+    }
     .protocol-track {
       flex: 1;
       height: 6px;
@@ -151,6 +156,10 @@ export const styles = `
     .protocol-fill-base {
       height: 100%;
       background: #0052FF;
+    }
+    .protocol-fill-tempo {
+      height: 100%;
+      background: #10b981;
     }
 
     /* Filters */
@@ -262,6 +271,7 @@ export const styles = `
     .badge-x402 { background: rgba(96,165,250,0.15); color: var(--blue); }
     .badge-l402 { background: rgba(251,146,60,0.15); color: var(--orange); }
     .badge-both { background: rgba(124,138,255,0.15); color: var(--accent); }
+    .badge-mpp { background: rgba(16,185,129,0.15); color: #10b981; }
 
     /* Health dots */
     .health-dot {

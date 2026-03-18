@@ -13,7 +13,7 @@ export function healthDot(status) {
 }
 
 export function protocolBadge(protocol) {
-  const cls = protocol === 'x402' ? 'badge-x402' : protocol === 'L402' ? 'badge-l402' : 'badge-both'
+  const cls = protocol === 'x402' ? 'badge-x402' : protocol === 'L402' ? 'badge-l402' : protocol === 'MPP' ? 'badge-mpp' : 'badge-both'
   return `<span class="badge ${cls}">${protocol}</span>`
 }
 

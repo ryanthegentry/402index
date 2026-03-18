@@ -32,9 +32,11 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   const l402 = stats.l402Providers || 0
   const base = stats.baseProviders || 0
   const solana = stats.solanaProviders || 0
-  const totalProviders = l402 + base + solana
+  const tempo = stats.tempoProviders || 0
+  const totalProviders = l402 + base + solana + tempo
   const l402Pct = totalProviders > 0 ? Math.round((l402 / totalProviders) * 100) : 0
   const basePct = totalProviders > 0 ? Math.round((base / totalProviders) * 100) : 0
+  const tempoPct = totalProviders > 0 ? Math.round((tempo / totalProviders) * 100) : 0
 
   const l402Label = stats.allL402Providers > l402
     ? `L402 <strong>${l402}</strong><span class="pct-of">/${stats.allL402Providers}</span>`
@@ -45,6 +47,9 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   const solanaLabel = stats.allSolanaProviders > solana
     ? `Solana <strong>${solana}</strong><span class="pct-of">/${stats.allSolanaProviders}</span>`
     : `Solana <strong>${solana}</strong>`
+  const tempoLabel = stats.allTempoProviders > tempo
+    ? `Tempo <strong>${tempo}</strong><span class="pct-of">/${stats.allTempoProviders}</span>`
+    : `Tempo <strong>${tempo}</strong>`
 
   const l402Tooltip = stats.allL402Providers > l402
     ? `${l402} of ${stats.allL402Providers} L402 providers independently verified — endpoint returns HTTP 402 with valid WWW-Authenticate header (L402/LSAT scheme, macaroon, and Lightning invoice)`
@@ -55,6 +60,9 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   const solanaTooltip = stats.allSolanaProviders > solana
     ? `${solana} of ${stats.allSolanaProviders} Solana providers independently verified — endpoint returns HTTP 402 with valid PAYMENT-REQUIRED header, known USDC asset, and reachable facilitator`
     : `${solana} Solana providers with verified x402 payment requirements`
+  const tempoTooltip = stats.allTempoProviders > tempo
+    ? `${tempo} of ${stats.allTempoProviders} Tempo/MPP providers independently verified — endpoint returns HTTP 402 with valid WWW-Authenticate: Payment header (id, realm, method, intent, request)`
+    : `${tempo} Tempo/MPP providers with verified endpoints`
 
   const protocolBar = totalProviders > 0 ? `
     <div class="protocol-bar">
@@ -63,9 +71,11 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
         <div class="protocol-track-multi">
           <div class="protocol-fill-l402" style="width: ${l402Pct}%"></div>
           <div class="protocol-fill-base" style="width: ${basePct}%"></div>
+          <div class="protocol-fill-tempo" style="width: ${tempoPct}%"></div>
         </div>
         ${base > 0 ? `<span class="protocol-base" title="${baseTooltip}">${baseLabel}</span>` : ''}
         ${solana > 0 ? `<span class="protocol-solana" title="${solanaTooltip}">${solanaLabel}</span>` : ''}
+        ${tempo > 0 ? `<span class="protocol-tempo" title="${tempoTooltip}">${tempoLabel}</span>` : ''}
       </div>
     </div>` : ''
 
@@ -94,6 +104,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
             <option value="">All protocols</option>
             <option value="x402"${filters.protocol === 'x402' ? ' selected' : ''}>x402</option>
             <option value="L402"${filters.protocol === 'L402' ? ' selected' : ''}>L402</option>
+            <option value="MPP"${filters.protocol === 'MPP' ? ' selected' : ''}>MPP</option>
           </select>
           <select name="category" onchange="this.form.submit()">
             <option value="">All categories</option>
@@ -115,6 +126,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
             <option value="sponge"${filters.source === 'sponge' ? ' selected' : ''}>Sponge</option>
             <option value="well-known"${filters.source === 'well-known' ? ' selected' : ''}>Well-Known</option>
             <option value="discovery"${filters.source === 'discovery' ? ' selected' : ''}>Discovery</option>
+            <option value="mpp"${filters.source === 'mpp' ? ' selected' : ''}>MPP</option>
           </select>
           <select name="sort" onchange="this.form.submit()">
             <option value="">Default sort</option>

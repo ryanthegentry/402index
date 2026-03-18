@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 
 const VALID_EVENTS = new Set(['service.new', 'service.health_changed', 'service.down'])
-const VALID_PROTOCOLS = new Set(['L402', 'x402'])
+const VALID_PROTOCOLS = new Set(['L402', 'x402', 'MPP'])
 const MAX_FAILURES = 10
 
 /**

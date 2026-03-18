@@ -521,6 +521,39 @@ async function checkService(service) {
     }
   }
 
+  // MPP http_method auto-detection: retry with POST when GET/HEAD returns 405/400/200
+  if (protocol === 'MPP' && (!http_method || http_method === 'GET') && classification.healthStatus !== 'healthy') {
+    const shouldTryPost = (
+      classification.checkStatus === 'method_not_allowed' ||  // 405
+      httpResult.httpStatus === 400 ||                         // 400 (often wrong method)
+      httpResult.httpStatus === 200                            // 200 (paywall may only gate POST)
+    )
+
+    if (shouldTryPost) {
+      try {
+        const postResult = await performHttpCheck(url, 'POST')
+        if (postResult.httpStatus === 402) {
+          const wwwAuth = postResult.wwwAuthenticate || ''
+          if (wwwAuth.startsWith('Payment ')) {
+            const hasId = /\bid=/.test(wwwAuth)
+            const hasRealm = /\brealm=/.test(wwwAuth)
+            const hasMethod = /\bmethod=/.test(wwwAuth)
+            const hasIntent = /\bintent=/.test(wwwAuth)
+            const hasRequest = /\brequest=/.test(wwwAuth)
+            if (hasId && hasRealm && hasMethod && hasIntent && hasRequest) {
+              classification.healthStatus = 'healthy'
+              classification.checkStatus = 'healthy'
+              classification.consecutiveFailures = 0
+              persistHttpMethod().run({ id, http_method: 'POST' })
+            }
+          }
+        }
+      } catch {
+        // POST retry failed — keep original classification
+      }
+    }
+  }
+
   // x402 payment requirements validation
   let x402PaymentValid = null
   let x402FacilitatorReachable = null

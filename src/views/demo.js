@@ -43,9 +43,10 @@ export function demoPage({ stats, probeSample }) {
           <div class="demo-filter-group">
             <label>Protocol</label>
             <select id="demo-protocol">
-              <option value="">Both</option>
+              <option value="">All</option>
               <option value="L402">L402</option>
               <option value="x402">x402</option>
+              <option value="MPP">MPP</option>
             </select>
           </div>
           <div class="demo-filter-group">
@@ -285,7 +286,7 @@ Content-Type: application/json
     }
 
     function protocolBadgeHtml(protocol) {
-      const cls = protocol === 'x402' ? 'badge-x402' : protocol === 'L402' ? 'badge-l402' : 'badge-both'
+      const cls = protocol === 'x402' ? 'badge-x402' : protocol === 'L402' ? 'badge-l402' : protocol === 'MPP' ? 'badge-mpp' : 'badge-both'
       return '<span class="badge ' + cls + '">' + protocol + '</span>'
     }
 
