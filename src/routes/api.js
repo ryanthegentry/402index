@@ -491,9 +491,10 @@ const searchServices = () => stmt('searchServices', `
   LIMIT @limit
 `)
 
-const deleteServiceById = () => stmt('deleteServiceById', `
-  DELETE FROM services WHERE id = @id
-`)
+const deleteServiceTxn = db.transaction((id) => {
+  db.prepare('DELETE FROM health_checks WHERE service_id = ?').run(id)
+  return db.prepare('DELETE FROM services WHERE id = ?').run(id)
+})
 
 const approveService = () => stmt('approveService', `
   UPDATE services SET status = 'active', updated_at = datetime('now') WHERE id = @id AND status = 'pending'
@@ -525,11 +526,16 @@ router.get('/admin/search', (req, res) => {
 })
 
 router.delete('/admin/services/:id', (req, res) => {
-  const result = deleteServiceById().run({ id: req.params.id })
-  if (result.changes === 0) {
-    return res.status(404).json({ error: 'No service with that ID' })
+  try {
+    const result = deleteServiceTxn(req.params.id)
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'No service with that ID' })
+    }
+    res.json({ deleted: true, id: req.params.id })
+  } catch (err) {
+    console.error('[admin] Delete failed:', err.message)
+    res.status(500).json({ error: 'Failed to delete service' })
   }
-  res.json({ deleted: true, id: req.params.id })
 })
 
 router.post('/admin/approve/:id', (req, res) => {

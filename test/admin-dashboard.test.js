@@ -312,6 +312,93 @@ describe('DELETE /api/v1/admin/services/:id', () => {
     const data = await res.json()
     assert.equal(data.services.length, 0, 'deleted service should not appear in search')
   })
+
+  it('deletes service that has health_check records (FK constraint)', async () => {
+    const deleteId = seedService({ name: 'AdminTest Delete WithHealth', status: 'active' })
+    // Seed health_check rows referencing this service
+    db.prepare(`
+      INSERT INTO health_checks (service_id, status, http_status, response_time_ms)
+      VALUES (?, 'healthy', 402, 150)
+    `).run(deleteId)
+    db.prepare(`
+      INSERT INTO health_checks (service_id, status, http_status, response_time_ms)
+      VALUES (?, 'down', 500, 3000)
+    `).run(deleteId)
+
+    const res = await adminFetch(`/admin/services/${deleteId}`, { method: 'DELETE' })
+    assert.equal(res.status, 200, 'should succeed even with health_checks rows')
+    const data = await res.json()
+    assert.equal(data.deleted, true)
+
+    // Verify service and health_checks are both gone
+    const svc = db.prepare('SELECT id FROM services WHERE id = ?').get(deleteId)
+    assert.equal(svc, undefined, 'service should be deleted')
+    const checks = db.prepare('SELECT COUNT(*) as c FROM health_checks WHERE service_id = ?').get(deleteId)
+    assert.equal(checks.c, 0, 'health_checks should be cleaned up')
+  })
+
+  it('deleted service no longer appears in public GET /services', async () => {
+    const deleteId = seedService({ name: 'AdminTest DeletePublic UniqueXYZ', status: 'active' })
+    await adminFetch(`/admin/services/${deleteId}`, { method: 'DELETE' })
+    const res = await fetch(`${API}/services?q=AdminTest+DeletePublic+UniqueXYZ`)
+    const data = await res.json()
+    const ids = (data.services || data.data || []).map(s => s.id)
+    assert.ok(!ids.includes(deleteId), 'deleted service should not appear in public API')
+  })
+})
+
+// ─── Limit clamping ─────────────────────────────────────────────────────────
+
+describe('Admin limit clamping', () => {
+  it('GET /admin/recent with limit=0 uses default (returns results)', async () => {
+    const res = await adminFetch('/admin/recent?limit=0')
+    const data = await res.json()
+    assert.ok(data.services.length > 0, 'limit=0 should fall back to default, not return empty')
+  })
+
+  it('GET /admin/recent with limit=999 clamps to 100', async () => {
+    const res = await adminFetch('/admin/recent?limit=999')
+    const data = await res.json()
+    assert.ok(data.services.length <= 100, 'should clamp to max 100')
+  })
+
+  it('GET /admin/search with limit=0 uses default', async () => {
+    const res = await adminFetch('/admin/search?q=test&limit=0')
+    const data = await res.json()
+    assert.ok(data.services.length > 0, 'limit=0 should fall back to default')
+  })
+
+  it('GET /admin/search with limit=999 clamps to 100', async () => {
+    const res = await adminFetch('/admin/search?q=test&limit=999')
+    const data = await res.json()
+    assert.ok(data.services.length <= 100, 'should clamp to max 100')
+  })
+})
+
+// ─── Search special characters ──────────────────────────────────────────────
+
+describe('Admin search special characters', () => {
+  it('search with SQL wildcard % does not crash', async () => {
+    const res = await adminFetch('/admin/search?q=%25')
+    assert.equal(res.status, 200)
+  })
+
+  it('search with SQL wildcard _ does not crash', async () => {
+    const res = await adminFetch('/admin/search?q=_')
+    assert.equal(res.status, 200)
+  })
+
+  it("search with single quote ' does not crash (SQL injection)", async () => {
+    const res = await adminFetch("/admin/search?q='OR+1=1--")
+    assert.equal(res.status, 200)
+    const data = await res.json()
+    assert.ok(Array.isArray(data.services))
+  })
+
+  it('search with unicode does not crash', async () => {
+    const res = await adminFetch('/admin/search?q=%E2%9A%A1')
+    assert.equal(res.status, 200)
+  })
 })
 
 // ─── Regression: existing admin endpoints unchanged ──────────────────────────
