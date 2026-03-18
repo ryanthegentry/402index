@@ -317,21 +317,27 @@ router.post('/register', async (req, res) => {
       }
     }
 
-    // Normalize URL
-    const url = normalizeUrl(body.url)
+    // Probe with the raw submitted URL — preserve original scheme.
+    // normalizeUrl forces http→https which breaks HTTP-only tunnels (e.g. ngrok --scheme http).
+    const probeUrl = body.url.trim()
 
-    // Run L402 verification probe
-    let probe = await verifyL402(url, httpMethod, probeBody)
+    // Run L402 verification probe against the raw URL
+    let probe = await verifyL402(probeUrl, httpMethod, probeBody)
 
     // If probe failed with 400 or 406, try .well-known auto-discovery
     let discoveredConfig = null
     if (!probe.valid && [400, 406].includes(probe.httpStatus)) {
-      discoveredConfig = await discoverProbeConfig(url)
+      discoveredConfig = await discoverProbeConfig(probeUrl)
       if (discoveredConfig) {
-        console.log(`[register] .well-known discovery found config for ${url}: method=${discoveredConfig.method}, body=${discoveredConfig.probeBody.substring(0, 100)}`)
-        probe = await verifyL402(url, discoveredConfig.method, discoveredConfig.probeBody)
+        console.log(`[register] .well-known discovery found config for ${probeUrl}: method=${discoveredConfig.method}, body=${discoveredConfig.probeBody.substring(0, 100)}`)
+        probe = await verifyL402(probeUrl, discoveredConfig.method, discoveredConfig.probeBody)
       }
     }
+
+    // Normalize URL for storage: lowercase hostname, strip trailing slashes,
+    // but preserve the original scheme so health checks probe the correct protocol.
+    // (normalizeUrl forces http→https, which breaks HTTP-only endpoints like ngrok tunnels)
+    const url = normalizeUrl(body.url, { preserveScheme: true })
 
     if (!probe.valid) {
       const response = {

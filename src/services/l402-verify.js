@@ -52,9 +52,13 @@ export async function verifyL402(url, httpMethod = 'GET', probeBody = '{}') {
         method: httpMethod,
         signal: AbortSignal.timeout(TIMEOUT_MS),
         redirect: 'manual',
+        headers: {
+          // Bypass ngrok free-tier interstitial page (harmless for non-ngrok endpoints)
+          'ngrok-skip-browser-warning': 'true',
+        },
       }
       if (httpMethod === 'POST') {
-        fetchOptions.headers = { 'Content-Type': 'application/json' }
+        fetchOptions.headers['Content-Type'] = 'application/json'
         fetchOptions.body = probeBody
       }
       res = await fetch(currentUrl, fetchOptions)
