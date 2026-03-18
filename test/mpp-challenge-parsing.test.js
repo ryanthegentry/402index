@@ -53,6 +53,16 @@ describe('parseMppChallenge', () => {
     const parsed = parseMppChallenge('Payment id="x", realm="r", method="tempo", intent="charge", request="dGVzdA", description="test - with special chars"')
     assert.equal(parsed.description, 'test - with special chars')
   })
+
+  it('handles escaped quotes in description', () => {
+    const parsed = parseMppChallenge('Payment id="x", realm="r", method="tempo", intent="charge", request="dGVzdA", description="say \\"hello\\""')
+    assert.equal(parsed.description, 'say "hello"')
+  })
+
+  it('handles backslash in value', () => {
+    const parsed = parseMppChallenge('Payment id="x", realm="r", method="tempo", intent="charge", request="dGVzdA", description="path\\\\to\\\\file"')
+    assert.equal(parsed.description, 'path\\to\\file')
+  })
 })
 
 describe('decodeMppRequest', () => {

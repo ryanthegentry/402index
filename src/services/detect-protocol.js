@@ -15,8 +15,8 @@ export function parseMppChallenge(wwwAuth) {
   if (!wwwAuth || !wwwAuth.startsWith('Payment ')) return null
 
   const extract = (key) => {
-    const m = wwwAuth.match(new RegExp(`\\b${key}="([^"]*)"`, 'i'))
-    return m ? m[1] : null
+    const m = wwwAuth.match(new RegExp(`\\b${key}="((?:[^"\\\\]|\\\\.)*)"`, 'i'))
+    return m ? m[1].replace(/\\(.)/g, '$1') : null
   }
 
   return {
@@ -37,8 +37,7 @@ export function parseMppChallenge(wwwAuth) {
  */
 export function decodeMppRequest(requestB64) {
   try {
-    const padded = requestB64 + '='.repeat((4 - requestB64.length % 4) % 4)
-    return JSON.parse(Buffer.from(padded, 'base64url').toString())
+    return JSON.parse(Buffer.from(requestB64, 'base64url').toString())
   } catch {
     return null
   }
