@@ -6,7 +6,7 @@ export function adminPage() {
       <div class="admin-content">
         <div id="auth-gate">
           <h1>402index Admin</h1>
-          <p style="color:var(--text-muted);margin:12px 0 24px">Enter your admin secret to review pending registrations.</p>
+          <p style="color:var(--text-muted);margin:12px 0 24px">Enter your admin secret to continue.</p>
           <form id="auth-form" style="display:flex;gap:12px;max-width:480px">
             <input type="password" id="secret-input" placeholder="Enter admin secret"
               style="flex:1;padding:10px 14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;color:var(--text-bright);font-size:14px;font-family:var(--sans)" />
@@ -18,16 +18,82 @@ export function adminPage() {
 
         <div id="dashboard" style="display:none">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
-            <h1>402index Admin <span id="pending-count" style="font-size:16px;color:var(--text-muted);font-weight:400"></span></h1>
+            <h1>402index Admin</h1>
             <button id="logout-btn" style="padding:6px 14px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);cursor:pointer;font-size:13px;font-family:var(--sans)">Logout</button>
           </div>
+
           <div id="toast" style="display:none;position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:6px;font-size:13px;z-index:100"></div>
-          <div id="pending-list"></div>
+
+          <!-- Tab bar -->
+          <div class="tab-bar" role="tablist">
+            <button class="tab active" data-tab="pending" role="tab">Pending <span id="pending-count" class="tab-count"></span></button>
+            <button class="tab" data-tab="recent" role="tab">Recent</button>
+            <button class="tab" data-tab="search" role="tab">Search</button>
+          </div>
+
+          <!-- Pending panel -->
+          <div id="panel-pending" class="tab-panel">
+            <div id="pending-list"></div>
+          </div>
+
+          <!-- Recent panel -->
+          <div id="panel-recent" class="tab-panel" style="display:none">
+            <div id="recent-list"></div>
+          </div>
+
+          <!-- Search panel -->
+          <div id="panel-search" class="tab-panel" style="display:none">
+            <form id="search-form" style="display:flex;gap:10px;margin-bottom:20px">
+              <input type="text" id="search-input" placeholder="Search by name, URL, provider, or category"
+                style="flex:1;padding:10px 14px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;color:var(--text-bright);font-size:14px;font-family:var(--sans)" />
+              <button type="submit"
+                style="padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-family:var(--sans)">Search</button>
+            </form>
+            <div id="search-results">
+              <div class="empty-state" style="padding:40px 20px">Enter a term to search across all endpoints.</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
     <style>
       .admin-content { padding: 32px 0; }
+
+      /* Tab bar */
+      .tab-bar {
+        display: flex;
+        gap: 4px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 24px;
+      }
+      .tab {
+        padding: 8px 18px;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        color: var(--text-muted);
+        font-size: 14px;
+        font-family: var(--sans);
+        font-weight: 500;
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .tab:hover { color: var(--text); }
+      .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+      .tab-count {
+        display: inline-block;
+        background: rgba(124,138,255,0.15);
+        color: var(--accent);
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 10px;
+        margin-left: 4px;
+        font-weight: 600;
+      }
+
+      /* Cards */
       .reg-card {
         background: var(--bg-surface);
         border: 1px solid var(--border);
@@ -78,8 +144,8 @@ export function adminPage() {
       }
       .verify-tag.ok { background: rgba(52,211,153,0.1); color: var(--green); }
       .verify-tag.warn { background: rgba(251,191,36,0.1); color: var(--yellow); }
-      .reg-card-actions { display: flex; gap: 10px; }
-      .btn-approve, .btn-reject {
+      .reg-card-actions { display: flex; gap: 10px; align-items: center; }
+      .btn-approve, .btn-reject, .btn-delete {
         padding: 8px 18px;
         border: none;
         border-radius: 6px;
@@ -92,7 +158,26 @@ export function adminPage() {
       .btn-approve:hover { opacity: 0.85; }
       .btn-reject { background: var(--red); color: #fff; }
       .btn-reject:hover { opacity: 0.85; }
-      .btn-approve:disabled, .btn-reject:disabled { opacity: 0.4; cursor: not-allowed; }
+      .btn-delete { background: transparent; border: 1px solid var(--red); color: var(--red); }
+      .btn-delete:hover { background: var(--red); color: #fff; }
+      .btn-approve:disabled, .btn-reject:disabled, .btn-delete:disabled { opacity: 0.4; cursor: not-allowed; }
+
+      /* Status badge */
+      .status-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+      }
+      .status-badge.active { background: rgba(52,211,153,0.15); color: var(--green); }
+      .status-badge.pending { background: rgba(251,191,36,0.15); color: var(--yellow); }
+      .status-badge.rejected { background: rgba(255,90,90,0.12); color: var(--red); }
+      .status-badge.unknown { background: rgba(124,138,255,0.1); color: var(--text-muted); }
+
       .empty-state {
         text-align: center;
         padding: 60px 20px;
@@ -100,19 +185,20 @@ export function adminPage() {
         font-size: 15px;
       }
     </style>
+
     <script>
-    const API = '/api/v1'
+    var API = '/api/v1'
 
     function getSecret() { return sessionStorage.getItem('admin_secret') }
     function setSecret(s) { sessionStorage.setItem('admin_secret', s) }
     function clearSecret() { sessionStorage.removeItem('admin_secret') }
 
-    async function apiFetch(path, opts = {}) {
-      const secret = getSecret()
-      const res = await fetch(API + path, {
-        ...opts,
-        headers: { ...opts.headers, 'Authorization': 'Bearer ' + secret },
-      })
+    async function apiFetch(path, opts) {
+      opts = opts || {}
+      var secret = getSecret()
+      var res = await fetch(API + path, Object.assign({}, opts, {
+        headers: Object.assign({}, opts.headers || {}, { 'Authorization': 'Bearer ' + secret }),
+      }))
       if (res.status === 401) {
         clearSecret()
         showAuth()
@@ -137,7 +223,7 @@ export function adminPage() {
     }
 
     function toast(msg, ok) {
-      const el = document.getElementById('toast')
+      var el = document.getElementById('toast')
       el.textContent = msg
       el.style.display = ''
       el.style.background = ok ? 'var(--green)' : 'var(--red)'
@@ -150,20 +236,39 @@ export function adminPage() {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
     }
 
-    function renderCard(s) {
+    // ─── Tab switching ──────────────────────────────────────────────────────
+
+    var tabLoaded = { pending: false, recent: false }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(function(t) {
+        t.classList.toggle('active', t.dataset.tab === name)
+      })
+      document.querySelectorAll('.tab-panel').forEach(function(p) {
+        p.style.display = p.id === 'panel-' + name ? '' : 'none'
+      })
+      if (name === 'recent' && !tabLoaded.recent) {
+        loadRecent()
+        tabLoaded.recent = true
+      }
+    }
+
+    document.querySelectorAll('.tab').forEach(function(btn) {
+      btn.addEventListener('click', function() { switchTab(btn.dataset.tab) })
+    })
+
+    // ─── Pending card renderer (approve/reject) ──────────────────────────────
+
+    function renderPendingCard(s) {
       var price = '—'
       if (s.price_usd != null) price = '$' + Number(s.price_usd).toFixed(4)
       else if (s.price_sats != null) price = s.price_sats + ' sats'
-
       var date = s.registered_at ? new Date(s.registered_at + (s.registered_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString() : '—'
-
       return '<div class="reg-card" id="card-' + escHtml(s.id) + '">'
-        + '<div class="reg-card-header">'
-        + '<div>'
+        + '<div class="reg-card-header"><div>'
         + '<div class="reg-card-title">' + escHtml(s.name) + '</div>'
         + '<a class="reg-card-url" href="' + escHtml(s.url) + '" target="_blank" rel="noopener">' + escHtml(s.url) + '</a>'
-        + '</div>'
-        + '</div>'
+        + '</div></div>'
         + '<div class="reg-card-meta">'
         + '<div><strong>Protocol:</strong> ' + escHtml(s.protocol) + '</div>'
         + '<div><strong>Provider:</strong> ' + escHtml(s.provider || '—') + '</div>'
@@ -181,9 +286,47 @@ export function adminPage() {
         + '<div class="reg-card-actions">'
         + '<button class="btn-approve" data-id="' + escHtml(s.id) + '">Approve</button>'
         + '<button class="btn-reject" data-id="' + escHtml(s.id) + '" data-name="' + escHtml(s.name) + '">Reject</button>'
-        + '</div>'
-        + '</div>'
+        + '</div></div>'
     }
+
+    // ─── Manage card renderer (status badge + delete) ────────────────────────
+
+    function renderManageCard(s) {
+      var price = '—'
+      if (s.price_usd != null) price = '$' + Number(s.price_usd).toFixed(4)
+      else if (s.price_sats != null) price = s.price_sats + ' sats'
+      var date = s.registered_at ? new Date(s.registered_at + (s.registered_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString() : '—'
+      var status = s.status || 'unknown'
+      var badgeClass = ['active','pending','rejected'].includes(status) ? status : 'unknown'
+      return '<div class="reg-card" id="card-' + escHtml(s.id) + '">'
+        + '<div class="reg-card-header">'
+        + '<div>'
+        + '<div class="reg-card-title">' + escHtml(s.name) + '</div>'
+        + '<a class="reg-card-url" href="' + escHtml(s.url) + '" target="_blank" rel="noopener">' + escHtml(s.url) + '</a>'
+        + '</div>'
+        + '<span class="status-badge ' + badgeClass + '">' + escHtml(status) + '</span>'
+        + '</div>'
+        + '<div class="reg-card-meta">'
+        + '<div><strong>Protocol:</strong> ' + escHtml(s.protocol) + '</div>'
+        + '<div><strong>Provider:</strong> ' + escHtml(s.provider || '—') + '</div>'
+        + '<div><strong>Category:</strong> ' + escHtml(s.category || '—') + '</div>'
+        + '<div><strong>Price:</strong> ' + price + '</div>'
+        + '<div><strong>Asset:</strong> ' + escHtml(s.payment_asset || '—') + '</div>'
+        + '<div><strong>Network:</strong> ' + escHtml(s.payment_network || '—') + '</div>'
+        + '<div><strong>Contact:</strong> ' + escHtml(s.contact_email || '—') + '</div>'
+        + '<div><strong>Registered:</strong> ' + date + '</div>'
+        + '</div>'
+        + '<div class="reg-card-verify">'
+        + '<span class="verify-tag' + (s.health_status === 'healthy' ? ' ok' : '') + '">'
+        + escHtml(s.health_status || 'unknown') + '</span>'
+        + '<span class="verify-tag' + (s.verified ? ' ok' : '') + '">verified: ' + (s.verified ? 'yes' : 'no') + '</span>'
+        + '</div>'
+        + '<div class="reg-card-actions" style="justify-content:flex-end">'
+        + '<button class="btn-delete" data-id="' + escHtml(s.id) + '" data-name="' + escHtml(s.name) + '">Delete</button>'
+        + '</div></div>'
+    }
+
+    // ─── Load pending ────────────────────────────────────────────────────────
 
     async function loadPending() {
       var res = await apiFetch('/admin/pending')
@@ -191,13 +334,48 @@ export function adminPage() {
       var data = await res.json()
       var list = document.getElementById('pending-list')
       var count = document.getElementById('pending-count')
-      count.textContent = '(' + data.total + ' pending)'
+      count.textContent = data.total
       if (data.services.length === 0) {
         list.innerHTML = '<div class="empty-state">No pending registrations. You are all caught up.</div>'
         return
       }
-      list.innerHTML = data.services.map(renderCard).join('')
+      list.innerHTML = data.services.map(renderPendingCard).join('')
     }
+
+    // ─── Load recent ─────────────────────────────────────────────────────────
+
+    async function loadRecent() {
+      var list = document.getElementById('recent-list')
+      list.innerHTML = '<div class="empty-state">Loading...</div>'
+      var res = await apiFetch('/admin/recent?limit=50')
+      if (!res) return
+      var data = await res.json()
+      if (data.services.length === 0) {
+        list.innerHTML = '<div class="empty-state">No registered services yet.</div>'
+        return
+      }
+      list.innerHTML = data.services.map(renderManageCard).join('')
+    }
+
+    // ─── Search ──────────────────────────────────────────────────────────────
+
+    document.getElementById('search-form').addEventListener('submit', async function(e) {
+      e.preventDefault()
+      var q = document.getElementById('search-input').value.trim()
+      if (!q) return
+      var results = document.getElementById('search-results')
+      results.innerHTML = '<div class="empty-state">Searching...</div>'
+      var res = await apiFetch('/admin/search?q=' + encodeURIComponent(q) + '&limit=50')
+      if (!res) return
+      var data = await res.json()
+      if (data.services.length === 0) {
+        results.innerHTML = '<div class="empty-state">No results for \u201c' + escHtml(q) + '\u201d.</div>'
+        return
+      }
+      results.innerHTML = data.services.map(renderManageCard).join('')
+    })
+
+    // ─── Approve / Reject (pending panel) ───────────────────────────────────
 
     async function approveService(id, btn) {
       btn.disabled = true
@@ -206,7 +384,7 @@ export function adminPage() {
       if (res.ok) {
         document.getElementById('card-' + id).remove()
         toast('Service approved', true)
-        updateCount(-1)
+        updatePendingCount(-1)
       } else {
         var body = await res.json().catch(function() { return {} })
         toast(body.error || 'Approve failed', false)
@@ -215,14 +393,14 @@ export function adminPage() {
     }
 
     async function rejectService(id, name, btn) {
-      if (!confirm('Reject ' + name + '?')) return
+      if (!confirm('Reject \u201c' + name + '\u201d?')) return
       btn.disabled = true
       var res = await apiFetch('/admin/reject/' + id, { method: 'POST' })
       if (!res) return
       if (res.ok) {
         document.getElementById('card-' + id).remove()
         toast('Service rejected', true)
-        updateCount(-1)
+        updatePendingCount(-1)
       } else {
         var body = await res.json().catch(function() { return {} })
         toast(body.error || 'Reject failed', false)
@@ -230,19 +408,50 @@ export function adminPage() {
       }
     }
 
-    function updateCount(delta) {
+    function updatePendingCount(delta) {
       var el = document.getElementById('pending-count')
-      var m = el.textContent.match(/\d+/)
-      var n = m ? parseInt(m[0]) + delta : 0
-      if (n <= 0) {
-        el.textContent = '(0 pending)'
-        document.getElementById('pending-list').innerHTML = '<div class="empty-state">No pending registrations. You are all caught up.</div>'
-      } else {
-        el.textContent = '(' + n + ' pending)'
+      var n = Math.max(0, (parseInt(el.textContent) || 0) + delta)
+      el.textContent = n
+      if (n === 0) {
+        document.getElementById('pending-list').innerHTML =
+          '<div class="empty-state">No pending registrations. You are all caught up.</div>'
       }
     }
 
-    // Auth form submit
+    // ─── Delete (recent + search panels) ────────────────────────────────────
+
+    async function deleteService(id, name, btn) {
+      if (!confirm('Delete \u201c' + name + '\u201d? This cannot be undone.')) return
+      btn.disabled = true
+      var res = await apiFetch('/admin/services/' + id, { method: 'DELETE' })
+      if (!res) return
+      if (res.ok) {
+        var card = document.getElementById('card-' + id)
+        if (card) card.remove()
+        toast('Deleted', true)
+      } else {
+        var body = await res.json().catch(function() { return {} })
+        toast(body.error || 'Delete failed', false)
+        btn.disabled = false
+      }
+    }
+
+    // ─── Event delegation ────────────────────────────────────────────────────
+
+    document.getElementById('dashboard').addEventListener('click', function(e) {
+      var btn = e.target.closest('.btn-approve, .btn-reject, .btn-delete')
+      if (!btn) return
+      if (btn.classList.contains('btn-approve')) {
+        approveService(btn.dataset.id, btn)
+      } else if (btn.classList.contains('btn-reject')) {
+        rejectService(btn.dataset.id, btn.dataset.name, btn)
+      } else if (btn.classList.contains('btn-delete')) {
+        deleteService(btn.dataset.id, btn.dataset.name, btn)
+      }
+    })
+
+    // ─── Auth ────────────────────────────────────────────────────────────────
+
     document.getElementById('auth-form').addEventListener('submit', async function(e) {
       e.preventDefault()
       var secret = document.getElementById('secret-input').value.trim()
@@ -259,19 +468,7 @@ export function adminPage() {
       loadPending()
     })
 
-    // Logout button
     document.getElementById('logout-btn').addEventListener('click', logout)
-
-    // Event delegation for approve/reject buttons
-    document.getElementById('pending-list').addEventListener('click', function(e) {
-      var btn = e.target.closest('.btn-approve, .btn-reject')
-      if (!btn) return
-      if (btn.classList.contains('btn-approve')) {
-        approveService(btn.dataset.id, btn)
-      } else if (btn.classList.contains('btn-reject')) {
-        rejectService(btn.dataset.id, btn.dataset.name, btn)
-      }
-    })
 
     // Auto-login if secret in sessionStorage
     if (getSecret()) {
