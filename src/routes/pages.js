@@ -135,7 +135,8 @@ router.get('/', (req, res) => {
   const stats = {
     totalIndexed,
     verified: verifiedCount,
-    distinctProviders: providerSets.total.size,
+    distinctProviders: allProviderSets.total.size,
+    verifiedProviders: providerSets.total.size,
     ...healthMap,
     lastHealthCheck,
     l402: { endpoints: l402Total, verified: l402Healthy, healthy: l402Healthy, providers: providerSets.L402.size, allProviders: allProviderSets.L402.size },
@@ -143,10 +144,31 @@ router.get('/', (req, res) => {
     mpp: { endpoints: mppTotal, verified: mppVerified, healthy: mppHealthy, providers: providerSets.MPP.size, allProviders: allProviderSets.MPP.size },
   }
 
+  // Featured endpoints for Agent Discovery default view
+  const FEATURED_IDS = [
+    // L402
+    '9918cf04-b69c-4bb5-8095-90aefcc0fdc2', // Mutinynet Faucet
+    'c0184ed2-33d1-44d9-a616-08c52622e838', // L402 Apps: Get APIs Directory
+    '35b96b0c-3109-4833-941e-c9e9960dfc0e', // Sats4AI: Image Generation
+    // x402
+    '8bb3e293-a7da-402d-9fa2-b953ecb882bb', // AgentMail: List all custom domains
+    'e985622f-25f0-49f0-89b4-d86153a1269e', // Fact verification — agentutil.net
+    '17686054-5a0b-469c-af5a-21448a8ac203', // URL metadata extraction — minifetch.com
+    'dcd7a505-3dd5-4b8b-8c42-8a78a7bc4082', // Nansen: Smart money net flow
+    // MPP
+    'd58c64de-45df-4666-926f-e8a66ef61c6b', // Anthropic: Create messages with Claude
+    '4e41d0be-34a3-4547-ab4a-94db04bdf3f3', // OpenAI: Chat completions
+    'a623a0cb-7cc0-45a0-9d4f-0a29c171b2b7', // Stripe Climate: Create a climate contribution
+  ]
+  const placeholders = FEATURED_IDS.map(() => '?').join(',')
+  const featuredServices = db.prepare(
+    `SELECT ${API_COLUMNS} FROM services WHERE id IN (${placeholders}) AND (status = 'active' OR status IS NULL) AND health_status != 'down'`
+  ).all(...FEATURED_IDS)
+
   // Probe sample for flow visualization
   const probeSample = buildProbeSample(db, 'L402')
 
-  res.send(demoPage({ stats, probeSample }))
+  res.send(demoPage({ stats, probeSample, featuredServices }))
 })
 
 // Directory page (formerly /)

@@ -647,6 +647,7 @@ export const styles = `
     }
     .demo-stat-verified .demo-stat-number { color: var(--green); }
     .demo-stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .demo-stat-sub { font-size: 11px; color: var(--green); margin-top: 2px; font-family: var(--mono); }
 
     .demo-protocol-compare {
       display: grid;

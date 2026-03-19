@@ -1,3 +1,5 @@
+import { layout } from '../views/layout.js'
+
 const isProduction = process.env.NODE_ENV === 'production'
 
 /**
@@ -35,14 +37,11 @@ export function errorHandler(err, req, res, _next) {
     })
   }
 
-  // HTML for web routes
-  res.status(status).send(`
-    <!DOCTYPE html>
-    <html><head><title>${status} ${message}</title></head>
-    <body style="font-family:monospace;text-align:center;padding:60px">
-      <h1>${status}</h1>
-      <p>${message}</p>
-      <a href="/">Back to 402 Index</a>
-    </body></html>
-  `)
+  // HTML for web routes — styled 404/500
+  const body = `<div class="container" style="text-align:center;padding:80px 0">
+    <h1 style="font-size:72px;margin:0;font-family:var(--mono)">${status}</h1>
+    <p style="font-size:18px;color:var(--text-muted);margin:16px 0">${message}</p>
+    <a href="/" style="color:var(--blue)">Back to 402 Index</a>
+  </div>`
+  res.status(status).send(layout(`${status} ${message}`, body))
 }
