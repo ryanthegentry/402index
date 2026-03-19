@@ -2,7 +2,7 @@ import { styles } from './styles.js'
 
 export function layout(title, content, meta = {}) {
   const description = meta.description || 'Protocol-agnostic directory of paid APIs (L402, x402, MPP) for AI agents. Indexed, verified, and searchable.'
-  const ogTitle = meta.ogTitle || `${title} — 402 Index`
+  const ogTitle = meta.ogTitle || (title === '402 Index' ? '402 Index' : `${title} — 402 Index`)
   const ogUrl = meta.ogUrl || 'https://402index.io'
   return `<!DOCTYPE html>
 <html lang="en">
@@ -19,7 +19,7 @@ export function layout(title, content, meta = {}) {
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="${ogTitle}">
   <meta name="twitter:description" content="${description}">
-  <title>${title} — 402 Index</title>
+  <title>${title === '402 Index' ? '402 Index' : `${title} — 402 Index`}</title>
   <style>${styles}</style>
 </head>
 <body>
