@@ -27,7 +27,7 @@ if (process.env.NODE_ENV === 'production') {
 // Homepage: 5 min (stats change on health checker cycle)
 app.use(/^\/$/, (req, res, next) => { res.set('Cache-Control', 'public, max-age=300'); next() })
 // Static-ish pages: 1 hour
-app.use(/^\/(about|api-docs|opportunities)$/, (req, res, next) => { res.set('Cache-Control', 'public, max-age=3600'); next() })
+app.use(/^\/(about|api-docs|opportunities|stats)$/, (req, res, next) => { res.set('Cache-Control', 'public, max-age=3600'); next() })
 // API reads: 1 min (not register, probe-live, webhooks, or admin)
 app.use(/^\/api\/v1\/(services|health|categories|opportunities)/, (req, res, next) => { res.set('Cache-Control', 'public, max-age=60'); next() })
 

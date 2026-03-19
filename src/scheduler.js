@@ -7,8 +7,10 @@ import { pollL402Directory } from './aggregators/l402directory.js'
 import { pollMPP } from './aggregators/mpp.js'
 import { runHealthChecks } from './health/checker.js'
 import { classifyServices } from './services/classify.js'
+import { captureSnapshot } from './services/daily-snapshot.js'
 
 let healthCheckRunning = false
+let lastSnapshotDate = null
 
 export function isHealthCheckRunning() {
   return healthCheckRunning
@@ -64,8 +66,21 @@ function runHealthCheckGuarded() {
   if (healthCheckRunning) return
   healthCheckRunning = true
   runHealthChecks()
+    .then(() => runDailySnapshot())
     .catch(err => console.error('[scheduler] Health check failed:', err.message))
     .finally(() => { healthCheckRunning = false })
+}
+
+function runDailySnapshot() {
+  const today = new Date().toISOString().slice(0, 10)
+  if (lastSnapshotDate === today) return
+  try {
+    const result = captureSnapshot()
+    lastSnapshotDate = today
+    console.log(`[scheduler] Daily snapshot captured: ${result.snapshot_date} (${result.total_endpoints} endpoints)`)
+  } catch (err) {
+    console.error('[scheduler] Daily snapshot failed:', err.message)
+  }
 }
 
 /** Call once after the HTTP server is listening. */

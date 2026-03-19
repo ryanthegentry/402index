@@ -392,6 +392,41 @@ try {
   console.warn(`[db] Incremental vacuum note: ${err.message}`)
 }
 
+// ─── Daily Snapshots ────────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS daily_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_date TEXT NOT NULL UNIQUE,
+    total_endpoints INTEGER,
+    verified_endpoints INTEGER,
+    total_providers INTEGER,
+    verified_providers INTEGER,
+    healthy_endpoints INTEGER,
+    degraded_endpoints INTEGER,
+    down_endpoints INTEGER,
+    l402_endpoints INTEGER,
+    l402_verified INTEGER,
+    l402_healthy INTEGER,
+    l402_providers INTEGER,
+    x402_endpoints INTEGER,
+    x402_verified INTEGER,
+    x402_healthy INTEGER,
+    x402_providers INTEGER,
+    mpp_endpoints INTEGER,
+    mpp_verified INTEGER,
+    mpp_healthy INTEGER,
+    mpp_providers INTEGER,
+    avg_reliability_score REAL,
+    median_latency_ms INTEGER,
+    p90_latency_ms INTEGER,
+    categories_json TEXT,
+    top_providers_json TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_daily_snapshots_date ON daily_snapshots(snapshot_date);
+`)
+
 // ─── Query Log ──────────────────────────────────────────────────────────────
 
 db.exec(`

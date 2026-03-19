@@ -10,6 +10,7 @@ import { registerWebhook, deleteWebhook, getWebhook } from '../services/webhooks
 import { emit } from '../services/events.js'
 import { findOpportunities } from '../services/opportunities.js'
 import { discoverProbeConfig } from '../services/wellknown-discovery.js'
+import { getSnapshots } from '../services/daily-snapshot.js'
 
 const router = Router()
 
@@ -201,6 +202,13 @@ router.get('/health', (req, res) => {
     last_mpp_sync: lastMppSync,
     last_health_check_run: lastHealthCheck,
   })
+})
+
+// GET /api/v1/stats/snapshots
+router.get('/stats/snapshots', (req, res) => {
+  const days = Math.min(Math.max(1, parseInt(req.query.days) || 30), 365)
+  const snapshots = getSnapshots(db, days)
+  res.json({ snapshots, count: snapshots.length })
 })
 
 // GET /api/v1/categories
