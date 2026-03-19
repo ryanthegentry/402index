@@ -12,7 +12,7 @@ async function fetchJson(path: string, params?: Record<string, string>) {
       if (v !== undefined && v !== '') url.searchParams.set(k, v)
     }
   }
-  const res = await fetch(url.toString())
+  const res = await fetch(url.toString(), { headers: { 'User-Agent': '402index-mcp/0.1.0' } })
   if (!res.ok) {
     return { error: true, status: res.status, message: `API returned ${res.status}` }
   }
