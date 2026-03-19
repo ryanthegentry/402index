@@ -5,10 +5,14 @@
  *
  * Tests validation logic against a running server.
  * Probe-dependent tests use URLs that predictably fail SSRF or DNS checks.
+ * Macaroon/invoice validation tests use a local mock server via public IPv6.
  */
 
-import { describe, it } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
+import { networkInterfaces } from 'node:os'
+import { randomUUID } from 'node:crypto'
 
 const BASE = process.env.API_BASE || 'http://localhost:3402'
 const API = `${BASE}/api/v1`
@@ -213,5 +217,133 @@ describe('POST /api/v1/register — Content-Type', () => {
     })
     // express.json() rejects non-JSON content types
     assert.ok([400, 415].includes(res.status), `Expected 400 or 415, got ${res.status}`)
+  })
+})
+
+// ─── Macaroon/Invoice Validation (mock L402 server) ─────────────────────────
+//
+// These tests spin up a local HTTP server that returns custom L402 challenges,
+// then register that server's URL against the running 402index server.
+// SSRF protection blocks localhost/private IPs, so we use a public IPv6 address
+// assigned to this machine. Tests skip gracefully if no public IPv6 is available
+// or the 402index server isn't running.
+
+const VALID_MACAROON = 'AgELYmVuY2FybWFu'
+const VALID_INVOICE = 'lnbc1000n1pjtest' + 'a'.repeat(200)
+const SHORT_INVOICE = 'lnbc1234'
+
+/**
+ * Find a global (non-private) IPv6 address on this machine that passes SSRF checks.
+ * Returns the address string or null if none found.
+ */
+function findPublicIpv6() {
+  const nets = networkInterfaces()
+  for (const addrs of Object.values(nets)) {
+    for (const net of addrs) {
+      if (net.internal || net.family !== 'IPv6') continue
+      const lower = net.address.toLowerCase()
+      if (lower === '::1') continue
+      if (lower.startsWith('fe80:')) continue
+      if (lower.startsWith('fd') || lower.startsWith('fc')) continue
+      return net.address
+    }
+  }
+  return null
+}
+
+/**
+ * Start a mock HTTP server that responds with a specific WWW-Authenticate header.
+ * Binds to :: (all interfaces) so it's reachable via public IPv6.
+ */
+function startMockL402Server(wwwAuthenticateValue) {
+  return new Promise((resolve, reject) => {
+    const server = createServer((req, res) => {
+      res.writeHead(402, { 'WWW-Authenticate': wwwAuthenticateValue })
+      res.end()
+    })
+    server.listen(0, '::', () => {
+      const port = server.address().port
+      resolve({ server, port })
+    })
+    server.on('error', reject)
+  })
+}
+
+function closeMockServer(server) {
+  return new Promise(resolve => server.close(resolve))
+}
+
+describe('POST /api/v1/register — Macaroon/Invoice Validation', () => {
+  const ipv6 = findPublicIpv6()
+  let serverAvailable = false
+
+  before(async () => {
+    if (!ipv6) return
+    // Check if 402index server is reachable
+    try {
+      const res = await fetch(`${BASE}/api/v1/services`, {
+        signal: AbortSignal.timeout(3000),
+      })
+      serverAvailable = res.ok
+    } catch {
+      serverAvailable = false
+    }
+  })
+
+  it('endpoint returns 402 + L402 with invalid macaroon → 422', async (t) => {
+    if (!ipv6 || !serverAvailable) return t.skip('requires public IPv6 + running 402index server')
+
+    const wwwAuth = `L402 token="probe", invoice="${VALID_INVOICE}"`
+    const { server, port } = await startMockL402Server(wwwAuth)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({ url, name: 'Invalid Macaroon Test', protocol: 'L402' })
+      assert.equal(r.status, 422, `expected 422, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.equal(r.body.error, 'L402 verification failed')
+      assert.ok(
+        r.body.detail.includes('macaroon') || r.body.detail.includes('token'),
+        `detail should mention macaroon/token: ${r.body.detail}`
+      )
+      assert.equal(r.body.probe.hasMacaroon, false)
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('endpoint returns 402 + L402 with valid macaroon but short invoice → 422', async (t) => {
+    if (!ipv6 || !serverAvailable) return t.skip('requires public IPv6 + running 402index server')
+
+    const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${SHORT_INVOICE}"`
+    const { server, port } = await startMockL402Server(wwwAuth)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({ url, name: 'Short Invoice Test', protocol: 'L402' })
+      assert.equal(r.status, 422, `expected 422, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.equal(r.body.error, 'L402 verification failed')
+      assert.ok(
+        r.body.detail.includes('invoice') || r.body.detail.includes('short'),
+        `detail should mention invoice: ${r.body.detail}`
+      )
+      assert.equal(r.body.probe.hasInvoice, false, 'hasInvoice must be false for short invoice (Gap 3)')
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('endpoint returns 402 + L402 with valid macaroon and valid invoice → 201 (pending)', async (t) => {
+    if (!ipv6 || !serverAvailable) return t.skip('requires public IPv6 + running 402index server')
+
+    const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${VALID_INVOICE}"`
+    const { server, port } = await startMockL402Server(wwwAuth)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({ url, name: 'Valid L402 Test', protocol: 'L402' })
+      assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.equal(r.body.service.status, 'pending')
+      assert.equal(r.body.verification.hasMacaroon, true)
+      assert.equal(r.body.verification.hasInvoice, true)
+    } finally {
+      await closeMockServer(server)
+    }
   })
 })
