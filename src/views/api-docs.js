@@ -291,9 +291,47 @@ export function apiDocsPage() {
         <p><em>402 Index is the first service listed in its own directory — the CSV export endpoint is L402-gated, so we eat our own dog food.</em></p>
 
         <div class="info-callout">
-          <h3>MCP Server — Available</h3>
-          <p>An MCP server is available for direct integration with Claude, GPT, and other AI assistants.
-          See the <code>mcp-server/</code> directory for setup instructions.</p>
+          <h3>MCP Server</h3>
+          <p>Query the 402 Index directory directly from Claude, GPT, Cursor, or any MCP-compatible AI assistant.</p>
+
+          <h4>Quick Start</h4>
+          <div class="example-block">npx @402index/mcp-server</div>
+
+          <h4>Claude Desktop</h4>
+          <p>Add to <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>:</p>
+          <div class="example-block">{
+  "mcpServers": {
+    "402index": {
+      "command": "npx",
+      "args": ["@402index/mcp-server"]
+    }
+  }
+}</div>
+
+          <h4>Claude Code</h4>
+          <div class="example-block">claude mcp add 402index -- npx @402index/mcp-server</div>
+
+          <h4>Cursor</h4>
+          <p>Add to <code>.cursor/mcp.json</code>:</p>
+          <div class="example-block">{
+  "mcpServers": {
+    "402index": {
+      "command": "npx",
+      "args": ["@402index/mcp-server"]
+    }
+  }
+}</div>
+
+          <h4>Available Tools</h4>
+          <table class="params-table">
+            <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>search_services</code></td><td>Search/filter paid APIs by protocol, category, health, price</td></tr>
+              <tr><td><code>get_service_detail</code></td><td>Full details + health check history for a service</td></tr>
+              <tr><td><code>list_categories</code></td><td>All categories with endpoint counts</td></tr>
+              <tr><td><code>get_directory_stats</code></td><td>Ecosystem health, totals, sync timestamps</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

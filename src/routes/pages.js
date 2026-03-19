@@ -13,6 +13,7 @@ import { opportunitiesPage } from '../views/opportunities.js'
 import { findOpportunities } from '../services/opportunities.js'
 import { layout } from '../views/layout.js'
 import { statsPage } from '../views/stats.js'
+import { statsSimplePage } from '../views/stats-simple.js'
 import { getScoreboardData, getLatencyData, getCategoryGapData } from '../services/daily-snapshot.js'
 
 const router = Router()
@@ -177,8 +178,15 @@ router.get('/', (req, res) => {
   res.send(demoPage({ stats, probeSample, featuredServices }))
 })
 
-// Stats page
+// Stats page (simplified — latency table + gap map only)
 router.get('/stats', (req, res) => {
+  const latency = getLatencyData(db)
+  const categoryGap = getCategoryGapData(db)
+  res.send(statsSimplePage({ latency, categoryGap }))
+})
+
+// Stats dev page (full scoreboard + latency + gap map — hidden, not in nav)
+router.get('/stats-dev', (req, res) => {
   const scoreboard = getScoreboardData(db)
   const latency = getLatencyData(db)
   const categoryGap = getCategoryGapData(db)

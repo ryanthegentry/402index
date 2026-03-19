@@ -1187,3 +1187,214 @@ describe('backfill script — historical data', () => {
     assert.ok(content.includes("'2026-03-19'"), 'Should include Mar 19')
   })
 })
+
+// ─── Tests: Simplified Stats Page ──────────────────────────────────────────
+
+describe('statsSimplePage', () => {
+  const testData = {
+    latency: {
+      buckets: [],
+      median: 200,
+      under500: 80,
+      fastestProtocol: 'x402',
+      fastestMedian: 170,
+      protocolSummary: {
+        L402: { median: 400, p90: 800, under500: 50 },
+        x402: { median: 170, p90: 200, under500: 100 },
+        MPP: { median: 300, p90: 350, under500: 100 },
+      },
+    },
+    categoryGap: {
+      grid: [{ category: 'ai', L402: 5, x402: 100, MPP: 3, total: 108 }],
+      opportunities: [{ category: 'ai', protocol: 'MPP', count: 3 }],
+    },
+  }
+
+  it('contains "How Fast Is the Paid API Economy?"', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(html.includes('How Fast Is the Paid API Economy'))
+  })
+
+  it('contains "What\'s Missing?"', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(html.includes("What&#x27;s Missing") || html.includes("What's Missing"))
+  })
+
+  it('does NOT contain "Which Paid APIs Work the Best?"', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(!html.includes('Which Paid APIs Work the Best'), 'Simplified page should NOT have scoreboard')
+  })
+
+  it('does NOT contain <canvas> element', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(!html.includes('<canvas'), 'Should not include canvas')
+  })
+
+  it('does NOT contain "By Provider" or "By Endpoint" toggle', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(!html.includes('By Provider'), 'Should NOT have provider toggle')
+    assert.ok(!html.includes('By Endpoint'), 'Should NOT have endpoint toggle')
+  })
+
+  it('does NOT contain "scoreboard" in any class or ID', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(!html.includes('scoreboard'), 'Should not contain scoreboard')
+  })
+
+  it('contains per-protocol latency table with correct headers', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(html.includes('Protocol'), 'Should have Protocol header')
+    assert.ok(html.includes('Median Latency'), 'Should have Median Latency header')
+    assert.ok(html.includes('p90 Latency'), 'Should have p90 Latency header')
+    assert.ok(html.includes('% Under 500ms'), 'Should have % Under 500ms header')
+  })
+
+  it('renders latency data for all three protocols', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(html.includes('400ms'), 'Should have L402 median')
+    assert.ok(html.includes('170ms'), 'Should have x402 median')
+    assert.ok(html.includes('300ms'), 'Should have MPP median')
+  })
+
+  it('contains the category gap map grid', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(html.includes('stats-gap-table'), 'Should include gap map table')
+    assert.ok(html.includes('gap-category'), 'Should have category cells')
+  })
+
+  it('has no <script> tags (pure server-rendered)', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(!html.includes('<script'), 'Should have no script tags')
+  })
+
+  it('has correct meta tags', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(html.includes('<title>Stats — 402 Index</title>'))
+    assert.ok(html.includes('402index.io/stats'))
+  })
+
+  it('contains the latency note', async () => {
+    const { statsSimplePage } = await import('../src/views/stats-simple.js')
+    const html = statsSimplePage(testData)
+    assert.ok(html.includes('healthy endpoints'), 'Should mention healthy endpoints')
+  })
+})
+
+// ─── Tests: Stats-dev page preserves full page ─────────────────────────────
+
+describe('statsPage (for /stats-dev) — preserved full page', () => {
+  it('contains "Which Paid APIs Work the Best?"', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage({
+      scoreboard: { providers: [], endpoints: [] },
+      latency: { buckets: [], median: null, under500: 0, fastestProtocol: null, fastestMedian: null, protocolSummary: { L402: { median: null, p90: null, under500: 0 }, x402: { median: null, p90: null, under500: 0 }, MPP: { median: null, p90: null, under500: 0 } } },
+      categoryGap: { grid: [], opportunities: [] },
+    })
+    assert.ok(html.includes('Which Paid APIs Work the Best'), 'Full stats page should have scoreboard')
+  })
+
+  it('contains By Provider and By Endpoint toggles', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage({
+      scoreboard: { providers: [], endpoints: [] },
+      latency: { buckets: [], median: null, under500: 0, fastestProtocol: null, fastestMedian: null, protocolSummary: { L402: { median: null, p90: null, under500: 0 }, x402: { median: null, p90: null, under500: 0 }, MPP: { median: null, p90: null, under500: 0 } } },
+      categoryGap: { grid: [], opportunities: [] },
+    })
+    assert.ok(html.includes('By Provider'))
+    assert.ok(html.includes('By Endpoint'))
+  })
+})
+
+// ─── Tests: /stats-dev NOT in nav bar ──────────────────────────────────────
+
+describe('layout — nav bar does NOT include /stats-dev', () => {
+  it('nav includes /stats but not /stats-dev', async () => {
+    const { layout } = await import('../src/views/layout.js')
+    const html = layout('Test', '<div>content</div>')
+    assert.ok(html.includes('href="/stats"'), 'Should include /stats link')
+    assert.ok(!html.includes('href="/stats-dev"'), 'Should NOT include /stats-dev link')
+  })
+})
+
+// ─── Tests: API Docs — MCP Server Section ──────────────────────────────────
+
+describe('apiDocsPage — MCP server section', () => {
+  it('contains npx install command', async () => {
+    const { apiDocsPage } = await import('../src/views/api-docs.js')
+    const html = apiDocsPage()
+    assert.ok(html.includes('npx @402index/mcp-server'), 'Should show npx command')
+  })
+
+  it('contains Claude Desktop config JSON', async () => {
+    const { apiDocsPage } = await import('../src/views/api-docs.js')
+    const html = apiDocsPage()
+    assert.ok(html.includes('claude_desktop_config.json'), 'Should reference Claude Desktop config path')
+    assert.ok(html.includes('"402index"'), 'Should show server name in config')
+  })
+
+  it('contains Claude Code setup command', async () => {
+    const { apiDocsPage } = await import('../src/views/api-docs.js')
+    const html = apiDocsPage()
+    assert.ok(html.includes('claude mcp add 402index'), 'Should show Claude Code setup command')
+  })
+
+  it('contains Cursor config', async () => {
+    const { apiDocsPage } = await import('../src/views/api-docs.js')
+    const html = apiDocsPage()
+    assert.ok(html.includes('.cursor/mcp.json'), 'Should reference Cursor config path')
+  })
+
+  it('contains all 4 tools in the table', async () => {
+    const { apiDocsPage } = await import('../src/views/api-docs.js')
+    const html = apiDocsPage()
+    assert.ok(html.includes('search_services'))
+    assert.ok(html.includes('get_service_detail'))
+    assert.ok(html.includes('list_categories'))
+    assert.ok(html.includes('get_directory_stats'))
+  })
+})
+
+// ─── Tests: MCP Server — Protocol & Source Enums ───────────────────────────
+
+describe('MCP server — updated enums', () => {
+  it('protocol enum includes MPP', async () => {
+    const fs = await import('fs')
+    const content = fs.readFileSync(join(__dirname, '..', 'mcp-server', 'src', 'index.ts'), 'utf-8')
+    assert.ok(content.includes("'MPP'"), 'Should include MPP in protocol enum')
+    assert.ok(content.includes("'L402'"), 'Should use uppercase L402')
+  })
+
+  it('source enum includes all sources', async () => {
+    const fs = await import('fs')
+    const content = fs.readFileSync(join(__dirname, '..', 'mcp-server', 'src', 'index.ts'), 'utf-8')
+    assert.ok(content.includes("'mpp'"), 'Should include mpp source')
+    assert.ok(content.includes("'l402apps'"), 'Should include l402apps source')
+    assert.ok(content.includes("'sponge'"), 'Should include sponge source')
+    assert.ok(content.includes("'l402directory'"), 'Should include l402directory source')
+    assert.ok(content.includes("'self-registered'"), 'Should include self-registered source')
+  })
+
+  it('dist/index.js exists after build', async () => {
+    const fs = await import('fs')
+    const distPath = join(__dirname, '..', 'mcp-server', 'dist', 'index.js')
+    assert.ok(fs.existsSync(distPath), 'dist/index.js should exist')
+  })
+
+  it('dist/index.js has updated protocol enum', async () => {
+    const fs = await import('fs')
+    const content = fs.readFileSync(join(__dirname, '..', 'mcp-server', 'dist', 'index.js'), 'utf-8')
+    assert.ok(content.includes("'MPP'"), 'Built JS should include MPP')
+    assert.ok(content.includes("'L402'"), 'Built JS should use uppercase L402')
+  })
+})

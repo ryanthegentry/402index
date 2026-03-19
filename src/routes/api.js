@@ -214,22 +214,34 @@ router.get('/stats/snapshots', (req, res) => {
 // GET /api/v1/categories
 router.get('/categories', (req, res) => {
   const rows = db.prepare(
-    "SELECT category, COUNT(*) as count FROM services WHERE category IS NOT NULL AND (status = 'active' OR status IS NULL) GROUP BY category ORDER BY count DESC"
+    `SELECT category, protocol, COUNT(*) as count
+     FROM services
+     WHERE (status = 'active' OR status IS NULL)
+       AND category IS NOT NULL
+       AND is_template = 0 AND is_demo = 0
+     GROUP BY category, protocol
+     ORDER BY count DESC`
   ).all()
 
-  // Build tree: { "crypto": { count: 100, subcategories: { "nft": 13, "defi": 45 } } }
+  // Build tree: { "crypto": { L402: 5, x402: 200, MPP: 10, total: 215, subcategories: { "defi": {...} } } }
   const tree = {}
-  for (const { category, count } of rows) {
-    const parts = category.split('/')
+  for (const row of rows) {
+    const parts = row.category.split('/')
     const top = parts[0]
-    if (!tree[top]) tree[top] = { count: 0, subcategories: {} }
-    tree[top].count += count
-    if (parts.length > 1) {
-      tree[top].subcategories[parts.slice(1).join('/')] = count
+    const sub = parts.length > 1 ? parts.slice(1).join('/') : null
+
+    if (!tree[top]) tree[top] = { L402: 0, x402: 0, MPP: 0, total: 0, subcategories: {} }
+    tree[top][row.protocol] = (tree[top][row.protocol] || 0) + row.count
+    tree[top].total += row.count
+
+    if (sub) {
+      if (!tree[top].subcategories[sub]) tree[top].subcategories[sub] = { L402: 0, x402: 0, MPP: 0, total: 0 }
+      tree[top].subcategories[sub][row.protocol] = (tree[top].subcategories[sub][row.protocol] || 0) + row.count
+      tree[top].subcategories[sub].total += row.count
     }
   }
 
-  res.json({ categories: tree, total: rows.length })
+  res.json({ categories: tree })
 })
 
 // Lazy-initialized prepared statements for registration
