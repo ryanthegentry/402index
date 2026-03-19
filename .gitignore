@@ -6,7 +6,7 @@ node_modules/
 .env.*.local
 docs/bazaar-sample.json
 mcp-server/node_modules/
-mcp-server/dist/
+mcp-server/dist/*.tsbuildinfo
 .desloppify/
 claude
 scorecard.png

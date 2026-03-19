@@ -29,10 +29,10 @@ server.tool(
   'search_services',
   'Search and filter paid API services in the 402 Index directory. Returns services with health status, pricing, and protocol info.',
   {
-    protocol: z.enum(['l402', 'x402']).optional().describe('Filter by payment protocol'),
+    protocol: z.enum(['L402', 'x402', 'MPP']).optional().describe('Filter by payment protocol'),
     category: z.string().optional().describe('Filter by category (prefix match — "crypto" matches "crypto/nft")'),
     health: z.enum(['healthy', 'degraded', 'down', 'unknown']).optional().describe('Filter by health status'),
-    source: z.enum(['bazaar', 'satring', 'exclusive']).optional().describe('Filter by source'),
+    source: z.enum(['bazaar', 'satring', 'l402apps', 'sponge', 'l402directory', 'mpp', 'discovery', 'self-registered']).optional().describe('Filter by source'),
     featured: z.boolean().optional().describe('Only featured services'),
     q: z.string().optional().describe('Search by name or description'),
     max_price_usd: z.number().optional().describe('Maximum price in USD'),
