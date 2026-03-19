@@ -39,7 +39,7 @@ export function validateProbeUrl(url) {
  */
 export function buildProbeConfig(db, url) {
   const row = db.prepare(
-    "SELECT protocol, http_method, probe_body, consecutive_failures, latency_p50_ms FROM services WHERE url = ? AND (status = 'active' OR status IS NULL) LIMIT 1"
+    "SELECT protocol, http_method, probe_body, consecutive_failures, latency_p50_ms FROM services WHERE url = ? LIMIT 1"
   ).get(url)
 
   if (!row) {

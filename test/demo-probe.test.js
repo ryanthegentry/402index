@@ -201,12 +201,36 @@ describe('buildProbeConfig', () => {
     assert.equal(config.historicalP50, 500)
   })
 
-  it('only matches active services (not pending/rejected)', () => {
+  it('returns stored config for pending services', () => {
     const db = createTestDb()
-    db.prepare(`INSERT INTO services (id, name, url, protocol, status) VALUES ('s1', 'Pending API', 'https://pending.example.com/api', 'L402', 'pending')`).run()
+    db.prepare(`INSERT INTO services (id, name, url, protocol, status, http_method, probe_body) VALUES ('s1', 'Pending API', 'https://pending.example.com/api', 'L402', 'pending', 'POST', '{"text":"hello"}')`).run()
 
     const config = buildProbeConfig(db, 'https://pending.example.com/api')
-    assert.equal(config.protocol, null, 'should not match pending service')
+    assert.equal(config.protocol, 'L402', 'should match pending service')
+    assert.equal(config.httpMethod, 'POST')
+    assert.equal(config.probeBody, '{"text":"hello"}')
+  })
+
+  it('returns stored config for rejected services', () => {
+    const db = createTestDb()
+    db.prepare(`INSERT INTO services (id, name, url, protocol, status, http_method) VALUES ('s1', 'Rejected API', 'https://rejected.example.com/api', 'L402', 'rejected', 'POST')`).run()
+
+    const config = buildProbeConfig(db, 'https://rejected.example.com/api')
+    assert.equal(config.protocol, 'L402', 'should match rejected service')
+    assert.equal(config.httpMethod, 'POST')
+  })
+})
+
+// ─── Regression guard: health checker filter ─────────────────────────────────
+
+describe('health checker service filter (regression guard)', () => {
+  it('background health checker SQL still filters by active/null status', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../src/health/checker.js', import.meta.url), 'utf8')
+    assert.ok(
+      source.includes("status = 'active' OR status IS NULL"),
+      'checker.js getServices() must filter by active/null status — do not remove this filter'
+    )
   })
 })
 
