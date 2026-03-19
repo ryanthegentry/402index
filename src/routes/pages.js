@@ -12,6 +12,8 @@ import { feedXml } from '../views/feed.js'
 import { opportunitiesPage } from '../views/opportunities.js'
 import { findOpportunities } from '../services/opportunities.js'
 import { layout } from '../views/layout.js'
+import { statsPage } from '../views/stats.js'
+import { getScoreboardData, getLatencyData, getCategoryGapData } from '../services/daily-snapshot.js'
 
 const router = Router()
 
@@ -146,9 +148,9 @@ router.get('/', (req, res) => {
 
   // Featured endpoints for Agent Discovery default view
   const FEATURED_IDS = [
-    // L402 — 3 endpoints
-    'a63c1e77-cab0-4740-8d82-5a6fe451794f', // L402 Apps: Get APIs Directory (healthy, reliability 95)
+    // L402 — 3 endpoints (Mutinynet first to showcase Lightning)
     'c2323cdb-8d35-44e1-a093-209beec8afa9', // Mutinynet Faucet (healthy, reliability 95)
+    'a63c1e77-cab0-4740-8d82-5a6fe451794f', // L402 Apps: Get APIs Directory (healthy, reliability 95)
     '831e8bac-0197-426c-b826-500384f23673', // Sats4AI: File Conversion (healthy, reliability 95)
     // x402 — 4 endpoints
     '6a46b58c-8829-4e1b-adaa-fd4333f48bcf', // AgentMail: Create a draft email (healthy, reliability 95)
@@ -165,10 +167,22 @@ router.get('/', (req, res) => {
     `SELECT ${API_COLUMNS} FROM services WHERE id IN (${placeholders}) AND (status = 'active' OR status IS NULL) AND health_status != 'down'`
   ).all(...FEATURED_IDS)
 
+  // Preserve FEATURED_IDS order (SQL WHERE IN doesn't guarantee order)
+  const idOrder = new Map(FEATURED_IDS.map((id, i) => [id, i]))
+  featuredServices.sort((a, b) => (idOrder.get(a.id) ?? 999) - (idOrder.get(b.id) ?? 999))
+
   // Probe sample for flow visualization
   const probeSample = buildProbeSample(db, 'L402')
 
   res.send(demoPage({ stats, probeSample, featuredServices }))
+})
+
+// Stats page
+router.get('/stats', (req, res) => {
+  const scoreboard = getScoreboardData(db)
+  const latency = getLatencyData(db)
+  const categoryGap = getCategoryGapData(db)
+  res.send(statsPage({ scoreboard, latency, categoryGap }))
 })
 
 // Directory page (formerly /)
