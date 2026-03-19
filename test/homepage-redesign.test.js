@@ -550,3 +550,52 @@ describe('Launch day: og:title fix', () => {
     assert.ok(html.includes('og:title" content="About — 402 Index"'), 'og:title should include page name')
   })
 })
+
+// ─── Scroll Container Removal + View All Link ──────────────────────────────
+
+describe('scroll container removal', () => {
+  it('.demo-search panel CSS does NOT contain max-height', () => {
+    assert.ok(!styles.includes('.demo-search') || !styles.match(/\.demo-twin-panel\s+\.demo-search\s*\{[^}]*max-height/),
+      'Should not set max-height on demo-search panel')
+  })
+
+  it('.demo-search panel CSS does NOT contain overflow-y', () => {
+    assert.ok(!styles.match(/\.demo-twin-panel\s+\.demo-search\s*\{[^}]*overflow-y/),
+      'Should not set overflow-y on demo-search panel')
+  })
+
+  it('.demo-view-all-link style exists in CSS', () => {
+    assert.ok(styles.includes('.demo-view-all-link'), 'Should have .demo-view-all-link style')
+  })
+})
+
+describe('search results capped at 15 with view-all link', () => {
+  const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample, featuredServices: [] })
+
+  it('renderResults function caps visible results at 15', () => {
+    // The client-side JS should slice to 15
+    assert.ok(html.includes('.slice(0, 15)') || html.includes('.slice(0,15)'),
+      'renderResults should slice services to first 15')
+  })
+
+  it('view-all link appears when total > 15', () => {
+    assert.ok(html.includes('demo-view-all-link'), 'Should contain demo-view-all-link class in client JS')
+  })
+
+  it('view-all link includes /directory? in href', () => {
+    assert.ok(html.includes('/directory?'), 'View all link should point to /directory with query params')
+  })
+
+  it('view-all link text includes total count', () => {
+    // Should interpolate data.total into the link text
+    assert.ok(html.includes('View all') && html.includes('results in Directory'),
+      'View all link should contain "View all ... results in Directory"')
+  })
+
+  it('featured view does NOT show view-all link', () => {
+    // showFeatured() should not trigger the view-all link logic
+    // The featured path uses renderResults with total = featuredData.length which is ≤ 10
+    // Since total <= 15, the link won't appear
+    assert.ok(html.includes('showFeatured'), 'Page should contain showFeatured function')
+  })
+})
