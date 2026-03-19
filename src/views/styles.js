@@ -706,9 +706,9 @@ export const styles = `
       gap: 24px;
       align-items: start;
     }
+    .demo-twin-panel .demo-search,
     .demo-twin-panel .demo-probe {
-      position: sticky;
-      top: 24px;
+      min-width: 0;
     }
     @media (max-width: 1023px) {
       .demo-twin-panel {
@@ -907,8 +907,7 @@ export const styles = `
       padding: 12px 16px;
       font-family: var(--mono);
       font-size: 12px;
-      max-height: 300px;
-      overflow-y: auto;
+      overflow-x: hidden;
       min-height: 0;
     }
     .demo-probe-log:empty { display: none; }
@@ -916,6 +915,8 @@ export const styles = `
       padding: 3px 0;
       color: var(--text);
       line-height: 1.6;
+      overflow-wrap: break-word;
+      word-break: break-all;
     }
     .demo-probe-icon { color: var(--text-muted); margin-right: 4px; }
     .demo-probe-step-response { color: var(--yellow); }
@@ -927,6 +928,8 @@ export const styles = `
       font-size: 11px;
       padding-left: 20px;
       word-break: break-all;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
     }
 
     /* Panel 3: Flow */
@@ -1095,6 +1098,7 @@ export const styles = `
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
+      table-layout: fixed;
     }
     .stats-table th {
       text-align: left;
@@ -1162,9 +1166,70 @@ export const styles = `
       color: var(--text-muted);
       margin-top: 4px;
     }
-    .stats-chart-container {
+    .stats-table-container {
+      overflow-x: hidden;
+    }
+    .stats-table .endpoint-name {
+      max-width: 400px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .stats-table .provider-name {
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Latency comparison bars */
+    .latency-bars {
+      margin: 16px 0 24px;
+    }
+    .latency-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .latency-bar-label {
+      width: 60px;
+      flex-shrink: 0;
+    }
+    .latency-bar {
       position: relative;
-      height: 300px;
+      height: 24px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      flex: 1;
+      min-width: 0;
+    }
+    .latency-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+    }
+    .latency-fill-l402 { background: rgba(247, 147, 26, 0.7); }
+    .latency-fill-x402 { background: rgba(0, 82, 255, 0.7); }
+    .latency-fill-mpp { background: rgba(16, 185, 129, 0.7); }
+    .latency-p90-mark {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      background: var(--text-muted);
+      opacity: 0.6;
+    }
+    .latency-bar-stats {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    @media (max-width: 768px) {
+      .latency-bar-row { flex-wrap: wrap; gap: 6px; }
+      .latency-bar-stats { font-size: 10px; width: 100%; padding-left: 72px; }
     }
 
     /* Gap map */

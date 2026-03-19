@@ -2,6 +2,24 @@ import { layout } from './layout.js'
 import { escapeHtml } from './helpers.js'
 
 export function statsPage({ scoreboard, latency, categoryGap }) {
+  // Pre-compute latency bar HTML
+  const protos = ['L402', 'x402', 'MPP']
+  const maxP90 = Math.max(...protos.map(p => latency.protocolSummary[p]?.p90 || 0))
+  const latencyBarsHtml = maxP90 > 0 ? `<div class="latency-bars">${protos.map(proto => {
+    const s = latency.protocolSummary[proto]
+    if (!s || s.median == null) return ''
+    const medianPct = (s.median / maxP90 * 100).toFixed(1)
+    const p90Pct = (s.p90 / maxP90 * 100).toFixed(1)
+    return `<div class="latency-bar-row">
+      <span class="latency-bar-label"><span class="badge badge-${proto.toLowerCase()}">${escapeHtml(proto)}</span></span>
+      <div class="latency-bar">
+        <div class="latency-bar-fill latency-fill-${proto.toLowerCase()}" style="width:${medianPct}%"></div>
+        <div class="latency-p90-mark" style="left:${p90Pct}%"></div>
+      </div>
+      <span class="latency-bar-stats">${s.median}ms median &middot; ${s.p90}ms p90 &middot; ${s.under500}% &lt; 500ms</span>
+    </div>`
+  }).join('')}</div>` : ''
+
   const content = `
   <div class="container stats-page">
     <div class="stats-header">
@@ -25,7 +43,7 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
           <option value="MPP">MPP</option>
         </select>
       </div>
-      <div class="table-wrap">
+      <div class="stats-table-container">
         <table class="stats-table" id="scoreboard-table">
           <thead id="scoreboard-thead"></thead>
           <tbody id="scoreboard-tbody"></tbody>
@@ -41,10 +59,8 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
         ${latency.fastestProtocol ? `<div class="stats-callout"><span class="stats-callout-value">${escapeHtml(latency.fastestProtocol)}</span><span class="stats-callout-label">Fastest protocol (${latency.fastestMedian}ms median)</span></div>` : ''}
         ${latency.under500 > 0 ? `<div class="stats-callout"><span class="stats-callout-value">${latency.under500}%</span><span class="stats-callout-label">Respond under 500ms</span></div>` : ''}
       </div>
-      <div class="stats-chart-container">
-        <canvas id="latency-chart" height="300"></canvas>
-      </div>
-      <p class="stats-chart-note">Note: x402 endpoints dominate the histogram due to volume (~12,000+ vs ~200 each for L402 and MPP). See the per-protocol summary table below for normalized comparisons.</p>
+      ${latencyBarsHtml}
+      <p class="stats-chart-note">Latency measured across healthy endpoints only. L402: ~200 endpoints, x402: ~12,000, MPP: ~200.</p>
       <div class="table-wrap" style="margin-top:24px">
         <table class="stats-table stats-table-compact">
           <thead><tr><th>Protocol</th><th>Median Latency</th><th>p90 Latency</th><th>% Under 500ms</th></tr></thead>
@@ -112,7 +128,6 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script>
   (function() {
     // ─── Scoreboard ─────────────────────────────────────────────────────
@@ -155,7 +170,8 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
         if (currentProtocol) {
           filtered = providerData.filter(function(p) { return p.protocols.indexOf(currentProtocol) !== -1 })
         }
-        tbody.innerHTML = filtered.map(function(p, i) {
+        var display = filtered.slice(0, 25)
+        tbody.innerHTML = display.map(function(p, i) {
           return '<tr>' +
             '<td class="rank">' + (i + 1) + '</td>' +
             '<td class="provider-name">' + escapeH(p.provider) + '</td>' +
@@ -167,13 +183,17 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
             '<td>' + (p.avg_latency != null ? p.avg_latency + 'ms' : '—') + '</td>' +
             '</tr>'
         }).join('')
+        if (filtered.length > 25) {
+          tbody.innerHTML += '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);font-size:12px;padding:12px;">Showing 25 of ' + filtered.length + ' providers</td></tr>'
+        }
       } else {
         thead.innerHTML = '<tr><th>#</th><th>Name</th><th>Provider</th><th>Protocol</th><th>Reliability</th><th></th><th>Latency</th><th>Health</th><th>Price</th></tr>'
         var filtered = endpointData
         if (currentProtocol) {
           filtered = endpointData.filter(function(e) { return e.protocol === currentProtocol })
         }
-        tbody.innerHTML = filtered.map(function(e, i) {
+        var display = filtered.slice(0, 25)
+        tbody.innerHTML = display.map(function(e, i) {
           var provider = '—'
           try { provider = new URL(e.url).hostname } catch(ex) {}
           var price = '—'
@@ -191,6 +211,9 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
             '<td>' + price + '</td>' +
             '</tr>'
         }).join('')
+        if (filtered.length > 25) {
+          tbody.innerHTML += '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);font-size:12px;padding:12px;">Showing 25 of ' + filtered.length + ' endpoints</td></tr>'
+        }
       }
     }
 
@@ -209,63 +232,6 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
     })
 
     renderScoreboard()
-
-    // ─── Latency Chart ──────────────────────────────────────────────────
-    var latencyData = ${JSON.stringify(latency.buckets)}
-    var ctx = document.getElementById('latency-chart')
-    if (ctx && typeof Chart !== 'undefined') {
-      new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: latencyData.map(function(b) { return b.label }),
-          datasets: [
-            {
-              label: 'L402',
-              data: latencyData.map(function(b) { return b.L402 }),
-              backgroundColor: 'rgba(247, 147, 26, 0.8)',
-              borderColor: '#F7931A',
-              borderWidth: 1,
-            },
-            {
-              label: 'x402',
-              data: latencyData.map(function(b) { return b.x402 }),
-              backgroundColor: 'rgba(0, 82, 255, 0.8)',
-              borderColor: '#0052FF',
-              borderWidth: 1,
-            },
-            {
-              label: 'MPP',
-              data: latencyData.map(function(b) { return b.MPP }),
-              backgroundColor: 'rgba(16, 185, 129, 0.8)',
-              borderColor: '#10b981',
-              borderWidth: 1,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              labels: { color: '#c9cdd6', font: { family: "'SF Mono', monospace" } }
-            }
-          },
-          scales: {
-            x: {
-              stacked: true,
-              ticks: { color: '#6b7080' },
-              grid: { color: 'rgba(42,45,55,0.5)' }
-            },
-            y: {
-              stacked: true,
-              ticks: { color: '#6b7080' },
-              grid: { color: 'rgba(42,45,55,0.5)' },
-              title: { display: true, text: 'Endpoints', color: '#6b7080' }
-            }
-          }
-        }
-      })
-    }
   })()
   </script>`
 
