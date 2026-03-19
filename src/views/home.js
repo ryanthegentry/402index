@@ -72,7 +72,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
             <option value="price"${filters.sort === 'price' ? ' selected' : ''}>Price</option>
             <option value="name"${filters.sort === 'name' ? ' selected' : ''}>Name</option>
           </select>
-          <input type="text" name="q" placeholder="Search name or description..." value="${escapeHtml(filters.q || '')}">
+          <input type="text" name="q" placeholder="Search name, description, or URL..." value="${escapeHtml(filters.q || '')}">
           <button type="button" class="filter-toggle" onclick="this.form.classList.toggle('filters-open')">Filters ▾</button>
           <label><input type="checkbox" name="featured" value="true"${filters.featured ? ' checked' : ''} onchange="this.form.submit()"> Featured only</label>
           <label><input type="checkbox" name="payment_valid" value="true"${filters.payment_valid ? ' checked' : ''} onchange="this.form.submit()"> Payment verified</label>

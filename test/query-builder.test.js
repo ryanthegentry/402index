@@ -80,10 +80,31 @@ describe('buildServiceQuery', () => {
     assert.equal(result.params.max_price_usd, 0.01)
   })
 
-  it('builds q filter as LIKE', () => {
+  it('builds q filter as LIKE across name, description, and url', () => {
     const result = buildServiceQuery({ q: 'weather' })
     assert.ok(result.where.includes('name LIKE @q'))
+    assert.ok(result.where.includes('description LIKE @q'))
+    assert.ok(result.where.includes('url LIKE @q'))
     assert.equal(result.params.q, '%weather%')
+  })
+
+  it('q filter matches URL patterns (domain search)', () => {
+    const result = buildServiceQuery({ q: 'sats4ai.com' })
+    assert.ok(result.where.includes('url LIKE @q'), 'WHERE should include url LIKE')
+    assert.equal(result.params.q, '%sats4ai.com%')
+  })
+
+  it('q filter matches URL path fragments', () => {
+    const result = buildServiceQuery({ q: '/api/l402/' })
+    assert.ok(result.where.includes('url LIKE @q'), 'WHERE should include url LIKE')
+    assert.equal(result.params.q, '%/api/l402/%')
+  })
+
+  it('q filter uses OR across all three fields', () => {
+    const result = buildServiceQuery({ q: 'lightningenable' })
+    // Should be a single OR group matching name, description, and url
+    assert.ok(result.where.includes('name LIKE @q OR description LIKE @q OR url LIKE @q'),
+      'WHERE should OR across name, description, and url')
   })
 
   it('builds featured filter for "true" and "1"', () => {

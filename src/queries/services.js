@@ -19,7 +19,7 @@ const DEFAULT_ORDER = `ORDER BY
  * @param {string} [opts.category]
  * @param {string} [opts.health]
  * @param {string} [opts.source]
- * @param {string} [opts.q] - Full-text search across name and description
+ * @param {string} [opts.q] - Full-text search across name, description, and url
  * @param {string} [opts.featured] - 'true' or '1' to filter featured only
  * @param {string} [opts.max_price_usd] - Maximum price in USD (ignored if not a valid number)
  * @param {string} [opts.payment_asset]
@@ -86,7 +86,7 @@ export function buildServiceQuery(opts = {}) {
     params.payment_asset = payment_asset
   }
   if (q) {
-    conditions.push("(name LIKE @q OR description LIKE @q)")
+    conditions.push("(name LIKE @q OR description LIKE @q OR url LIKE @q)")
     params.q = `%${q}%`
   }
   if (featured === 'true' || featured === '1') {

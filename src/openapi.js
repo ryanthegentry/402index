@@ -22,7 +22,7 @@ export const openapiSpec = {
           { name: 'category', in: 'query', schema: { type: 'string' }, description: 'Filter by category (prefix match — "crypto" matches "crypto/nft")' },
           { name: 'health', in: 'query', schema: { type: 'string', enum: ['healthy', 'degraded', 'down', 'unknown'] }, description: 'Filter by health status' },
           { name: 'source', in: 'query', schema: { type: 'string', enum: ['bazaar', 'satring', 'l402apps', 'sponge', 'l402directory', 'mpp', 'discovery', 'self-registered'] }, description: 'Filter by data source' },
-          { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Full-text search by name or description' },
+          { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Full-text search by name, description, or URL' },
           { name: 'featured', in: 'query', schema: { type: 'boolean' }, description: 'Only return featured services' },
           { name: 'sort', in: 'query', schema: { type: 'string', enum: ['name', 'price', 'latency', 'uptime', 'reliability'] }, description: 'Sort field' },
           { name: 'order', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] }, description: 'Sort order' },
