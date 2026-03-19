@@ -17,6 +17,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.use(helmet({ contentSecurityPolicy: false }))
+app.use(express.static('public'))
 
 // Trust proxy in production (Railway, Fly.io)
 if (process.env.NODE_ENV === 'production') {

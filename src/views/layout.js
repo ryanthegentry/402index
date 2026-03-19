@@ -18,9 +18,13 @@ export function layout(title, content, meta = {}) {
   <meta property="og:type" content="website">
   <meta property="og:title" content="${ogTitle}">
   <meta property="og:description" content="${description}">
+  <meta property="og:image" content="https://402index.io/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:image" content="https://402index.io/og-image.png" />
+  <meta name="twitter:card" content="summary_large_image" />
   <meta property="og:url" content="${ogUrl}">
   <meta property="og:site_name" content="402 Index">
-  <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="${ogTitle}">
   <meta name="twitter:description" content="${description}">${googleVerification}${canonicalTag}${jsonLdTag}${plausibleScript}
   <title>${title === '402 Index' ? '402 Index' : `${title} — 402 Index`}</title>
