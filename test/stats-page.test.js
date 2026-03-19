@@ -728,15 +728,15 @@ describe('statsPage — latency chart note', () => {
     assert.ok(html.includes('stats-chart-note'), 'Should contain stats-chart-note class')
   })
 
-  it('note mentions x402 volume disparity', async () => {
+  it('note mentions healthy endpoints and endpoint counts', async () => {
     const { statsPage } = await import('../src/views/stats.js')
     const html = statsPage({
       scoreboard: { providers: [], endpoints: [] },
       latency: { buckets: [], median: 200, under500: 80, fastestProtocol: 'x402', fastestMedian: 170, protocolSummary: { L402: { median: 400, p90: 800, under500: 50 }, x402: { median: 170, p90: 200, under500: 100 }, MPP: { median: 300, p90: 350, under500: 100 } } },
       categoryGap: { grid: [], opportunities: [] },
     })
+    assert.ok(html.includes('healthy endpoints'), 'Note should mention healthy endpoints')
     assert.ok(html.includes('x402'), 'Note should mention x402')
-    assert.ok(html.includes('per-protocol summary'), 'Note should reference per-protocol summary table')
   })
 })
 
@@ -797,7 +797,7 @@ describe('statsPage', () => {
     assert.ok(html.includes('ai/llm'))
   })
 
-  it('includes Chart.js CDN script', async () => {
+  it('does NOT include Chart.js CDN script (replaced with CSS bars)', async () => {
     const { statsPage } = await import('../src/views/stats.js')
     const html = statsPage({
       scoreboard: { providers: [], endpoints: [] },
@@ -805,7 +805,7 @@ describe('statsPage', () => {
       categoryGap: { grid: [], opportunities: [] },
     })
 
-    assert.ok(html.includes('cdn.jsdelivr.net/npm/chart.js'))
+    assert.ok(!html.includes('cdn.jsdelivr.net/npm/chart.js'), 'Chart.js should be removed')
   })
 
   it('renders correct meta tags', async () => {
@@ -864,6 +864,310 @@ describe('featured endpoint ordering', () => {
 })
 
 // ─── Tests: Backfill Script ─────────────────────────────────────────────────
+
+// ─── Tests: Fix 1 — Per-Protocol Balancing ─────────────────────────────────
+
+describe('getScoreboardData — per-protocol balancing', () => {
+  let db
+
+  before(() => {
+    db = createTestDb()
+    const insert = db.prepare(`
+      INSERT INTO services (id, name, url, protocol, source, category, health_status, reliability_score, latency_p50_ms, price_sats, price_usd, x402_payment_valid, is_template, is_demo)
+      VALUES (@id, @name, @url, @protocol, @source, @category, @health_status, @reliability_score, @latency_p50_ms, @price_sats, @price_usd, @x402_payment_valid, @is_template, @is_demo)
+    `)
+    const base = { source: 'bazaar', category: 'data', health_status: 'healthy', latency_p50_ms: 200, price_sats: null, price_usd: 0.01, x402_payment_valid: 1, is_template: 0, is_demo: 0 }
+
+    // 50 x402 endpoints with reliability 100 — would overwhelm L402/MPP with old LIMIT 100
+    for (let i = 0; i < 50; i++) {
+      insert.run({ ...base, id: `x402-bal-${i}`, name: `X402 Balanced ${i}`, url: `https://x402-balanced-${i}.example.com/api`, protocol: 'x402', reliability_score: 100 })
+    }
+
+    // 5 L402 endpoints on 2 providers (to pass ≥2 filter)
+    for (let i = 0; i < 3; i++) {
+      insert.run({ ...base, id: `l402-bal-a${i}`, name: `L402 ProvA ${i}`, url: `https://l402-prova.example.com/svc${i}`, protocol: 'L402', reliability_score: 95, x402_payment_valid: null, price_sats: 10 })
+    }
+    for (let i = 0; i < 2; i++) {
+      insert.run({ ...base, id: `l402-bal-b${i}`, name: `L402 ProvB ${i}`, url: `https://l402-provb.example.com/svc${i}`, protocol: 'L402', reliability_score: 90, x402_payment_valid: null, price_sats: 20 })
+    }
+
+    // 5 MPP endpoints on 2 providers
+    for (let i = 0; i < 3; i++) {
+      insert.run({ ...base, id: `mpp-bal-a${i}`, name: `MPP ProvA ${i}`, url: `https://mpp-prova.example.com/svc${i}`, protocol: 'MPP', reliability_score: 88, x402_payment_valid: null })
+    }
+    for (let i = 0; i < 2; i++) {
+      insert.run({ ...base, id: `mpp-bal-b${i}`, name: `MPP ProvB ${i}`, url: `https://mpp-provb.example.com/svc${i}`, protocol: 'MPP', reliability_score: 85, x402_payment_valid: null })
+    }
+  })
+
+  after(() => db.close())
+
+  it('endpoints include all three protocols when data exists for each', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { endpoints } = getScoreboardData(db)
+    const protocols = new Set(endpoints.map(e => e.protocol))
+    assert.ok(protocols.has('x402'), 'Should include x402 endpoints')
+    assert.ok(protocols.has('L402'), 'Should include L402 endpoints')
+    assert.ok(protocols.has('MPP'), 'Should include MPP endpoints')
+  })
+
+  it('total endpoints ≤ 105 (35 per protocol)', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { endpoints } = getScoreboardData(db)
+    assert.ok(endpoints.length <= 105, `Expected ≤105 endpoints, got ${endpoints.length}`)
+  })
+
+  it('provider filter for L402 returns results', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { providers } = getScoreboardData(db)
+    const l402Providers = providers.filter(p => p.protocols.includes('L402'))
+    assert.ok(l402Providers.length > 0, 'L402 protocol filter should show providers')
+  })
+
+  it('provider filter for MPP returns results', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { providers } = getScoreboardData(db)
+    const mppProviders = providers.filter(p => p.protocols.includes('MPP'))
+    assert.ok(mppProviders.length > 0, 'MPP protocol filter should show providers')
+  })
+})
+
+// ─── Tests: Fix 2 — Endpoint View Capping ──────────────────────────────────
+
+describe('statsPage — endpoint view 25-row cap', () => {
+  it('client-side JS includes 25-row slicing logic', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage({
+      scoreboard: { providers: [], endpoints: [] },
+      latency: { buckets: [], median: null, under500: 0, fastestProtocol: null, fastestMedian: null, protocolSummary: { L402: { median: null, p90: null, under500: 0 }, x402: { median: null, p90: null, under500: 0 }, MPP: { median: null, p90: null, under500: 0 } } },
+      categoryGap: { grid: [], opportunities: [] },
+    })
+    assert.ok(html.includes('.slice(0, 25)'), 'Should cap display to 25 rows')
+  })
+
+  it('client-side JS includes "Showing" overflow message', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage({
+      scoreboard: { providers: [], endpoints: [] },
+      latency: { buckets: [], median: null, under500: 0, fastestProtocol: null, fastestMedian: null, protocolSummary: { L402: { median: null, p90: null, under500: 0 }, x402: { median: null, p90: null, under500: 0 }, MPP: { median: null, p90: null, under500: 0 } } },
+      categoryGap: { grid: [], opportunities: [] },
+    })
+    assert.ok(html.includes('Showing 25 of'), 'Should show overflow message when > 25 rows')
+  })
+
+  it('scoreboard table uses stats-table-container wrapper', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage({
+      scoreboard: { providers: [], endpoints: [] },
+      latency: { buckets: [], median: null, under500: 0, fastestProtocol: null, fastestMedian: null, protocolSummary: { L402: { median: null, p90: null, under500: 0 }, x402: { median: null, p90: null, under500: 0 }, MPP: { median: null, p90: null, under500: 0 } } },
+      categoryGap: { grid: [], opportunities: [] },
+    })
+    assert.ok(html.includes('stats-table-container'), 'Should use stats-table-container wrapper')
+  })
+})
+
+// ─── Tests: Fix 3 — No Chart.js, CSS Latency Bars ─────────────────────────
+
+describe('statsPage — CSS latency bars (no Chart.js)', () => {
+  const testData = {
+    scoreboard: { providers: [], endpoints: [] },
+    latency: {
+      buckets: [],
+      median: 200,
+      under500: 80,
+      fastestProtocol: 'x402',
+      fastestMedian: 170,
+      protocolSummary: {
+        L402: { median: 400, p90: 800, under500: 50 },
+        x402: { median: 170, p90: 200, under500: 100 },
+        MPP: { median: 300, p90: 350, under500: 100 },
+      },
+    },
+    categoryGap: { grid: [], opportunities: [] },
+  }
+
+  it('does NOT include <canvas> element', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage(testData)
+    assert.ok(!html.includes('<canvas'), 'Should not include canvas element')
+  })
+
+  it('renders per-protocol latency bars', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage(testData)
+    assert.ok(html.includes('latency-bar-row'), 'Should include latency bar rows')
+    assert.ok(html.includes('latency-bar-fill'), 'Should include latency bar fills')
+  })
+
+  it('renders bars for each protocol with data', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage(testData)
+    assert.ok(html.includes('latency-fill-l402'), 'Should render L402 bar')
+    assert.ok(html.includes('latency-fill-x402'), 'Should render x402 bar')
+    assert.ok(html.includes('latency-fill-mpp'), 'Should render MPP bar')
+  })
+
+  it('x402 bar is shortest (lowest median)', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage(testData)
+    // x402 median 170, maxP90 800 → medianPct = 21.2%
+    // L402 median 400, maxP90 800 → medianPct = 50.0%
+    const x402Match = html.match(/latency-fill-x402" style="width:([0-9.]+)%"/)
+    const l402Match = html.match(/latency-fill-l402" style="width:([0-9.]+)%"/)
+    assert.ok(x402Match && l402Match)
+    assert.ok(parseFloat(x402Match[1]) < parseFloat(l402Match[1]), 'x402 bar should be shorter than L402')
+  })
+
+  it('still renders stats callout cards', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage(testData)
+    assert.ok(html.includes('stats-callout'), 'Should include stat callout cards')
+    assert.ok(html.includes('200ms'), 'Should include median value')
+  })
+
+  it('keeps per-protocol summary table', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage(testData)
+    assert.ok(html.includes('stats-table-compact'), 'Should keep per-protocol summary table')
+  })
+})
+
+// ─── Tests: Fix 4 — Category Synonym Merge (real-time-data → data) ────────
+
+describe('getCategoryGapData — real-time-data synonym merge', () => {
+  let db
+
+  before(() => {
+    db = createTestDb()
+    const insert = db.prepare(`
+      INSERT INTO services (id, name, url, protocol, source, category, health_status, reliability_score, latency_p50_ms, price_sats, price_usd, x402_payment_valid, is_template, is_demo)
+      VALUES (@id, @name, @url, @protocol, @source, @category, @health_status, @reliability_score, @latency_p50_ms, @price_sats, @price_usd, @x402_payment_valid, @is_template, @is_demo)
+    `)
+    const base = { source: 'bazaar', health_status: 'healthy', reliability_score: 90, latency_p50_ms: 200, price_sats: null, price_usd: 0.01, x402_payment_valid: 1, is_template: 0, is_demo: 0 }
+
+    // "data" category — 13 x402 endpoints
+    for (let i = 0; i < 13; i++) {
+      insert.run({ ...base, id: `syn-data-${i}`, name: `Data ${i}`, url: `https://syn-data${i}.example.com/api`, protocol: 'x402', category: 'data' })
+    }
+
+    // "real-time-data" — 10 L402 + 8 x402
+    for (let i = 0; i < 10; i++) {
+      insert.run({ ...base, id: `syn-rtd-l-${i}`, name: `RTD L402 ${i}`, url: `https://syn-rtd-l${i}.example.com/api`, protocol: 'L402', category: 'real-time-data', x402_payment_valid: null, price_sats: 10 })
+    }
+    for (let i = 0; i < 8; i++) {
+      insert.run({ ...base, id: `syn-rtd-x-${i}`, name: `RTD x402 ${i}`, url: `https://syn-rtd-x${i}.example.com/api`, protocol: 'x402', category: 'real-time-data' })
+    }
+  })
+
+  after(() => db.close())
+
+  it('"real-time-data" does not appear as a separate row', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { grid } = getCategoryGapData(db)
+    const rtd = grid.find(r => r.category === 'real-time-data')
+    assert.equal(rtd, undefined, '"real-time-data" should be merged into "data"')
+  })
+
+  it('"data" row includes combined counts', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { grid } = getCategoryGapData(db)
+    const dataRow = grid.find(r => r.category === 'data')
+    assert.ok(dataRow, '"data" row should exist')
+    assert.equal(dataRow.x402, 21, 'x402 count: data(13) + real-time-data(8) = 21')
+    assert.equal(dataRow.L402, 10, 'L402 count from real-time-data = 10')
+    assert.equal(dataRow.total, 31, 'total = 31')
+  })
+})
+
+// ─── Tests: Fix 5 — Probe Log Overflow Fix ─────────────────────────────────
+
+describe('styles — probe log overflow fix', () => {
+  it('.demo-probe-log has no max-height', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    const match = styles.match(/\.demo-probe-log\s*\{([^}]+)\}/)
+    assert.ok(match, '.demo-probe-log rule should exist')
+    assert.ok(!match[1].includes('max-height'), '.demo-probe-log should NOT have max-height')
+  })
+
+  it('.demo-probe-log has no overflow-y', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    const match = styles.match(/\.demo-probe-log\s*\{([^}]+)\}/)
+    assert.ok(match)
+    assert.ok(!match[1].includes('overflow-y'), '.demo-probe-log should NOT have overflow-y')
+  })
+
+  it('.demo-probe-log has overflow-x: hidden', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    const match = styles.match(/\.demo-probe-log\s*\{([^}]+)\}/)
+    assert.ok(match)
+    assert.ok(match[1].includes('overflow-x: hidden'), '.demo-probe-log should have overflow-x: hidden')
+  })
+
+  it('.demo-twin-panel .demo-probe has no position: sticky', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    const match = styles.match(/\.demo-twin-panel \.demo-probe\s*\{([^}]+)\}/)
+    assert.ok(match, '.demo-twin-panel .demo-probe rule should exist')
+    assert.ok(!match[1].includes('position'), 'Should NOT have position: sticky')
+  })
+
+  it('twin panel children have min-width: 0', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    assert.ok(styles.includes('.demo-twin-panel .demo-search'), 'Should style .demo-search child')
+    assert.ok(styles.includes('min-width: 0'), 'Should have min-width: 0 for grid children')
+  })
+
+  it('.demo-probe-step has word wrapping', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    const match = styles.match(/\.demo-probe-step\s*\{([^}]+)\}/)
+    assert.ok(match)
+    assert.ok(match[1].includes('overflow-wrap'), '.demo-probe-step should have overflow-wrap')
+    assert.ok(match[1].includes('word-break'), '.demo-probe-step should have word-break')
+  })
+
+  it('.demo-probe-header-detail has aggressive word wrapping', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    const match = styles.match(/\.demo-probe-header-detail\s*\{([^}]+)\}/)
+    assert.ok(match)
+    assert.ok(match[1].includes('overflow-wrap: anywhere'), 'Should have overflow-wrap: anywhere')
+    assert.ok(match[1].includes('white-space: pre-wrap'), 'Should have white-space: pre-wrap')
+  })
+})
+
+// ─── Tests: Latency Bar CSS ────────────────────────────────────────────────
+
+describe('styles — latency bar CSS', () => {
+  it('includes latency-bar-row styling', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    assert.ok(styles.includes('.latency-bar-row'), 'Should include .latency-bar-row')
+    assert.ok(styles.includes('.latency-bar-fill'), 'Should include .latency-bar-fill')
+    assert.ok(styles.includes('.latency-p90-mark'), 'Should include .latency-p90-mark')
+  })
+
+  it('includes per-protocol fill colors', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    assert.ok(styles.includes('.latency-fill-l402'), 'Should include L402 fill color')
+    assert.ok(styles.includes('.latency-fill-x402'), 'Should include x402 fill color')
+    assert.ok(styles.includes('.latency-fill-mpp'), 'Should include MPP fill color')
+  })
+})
+
+// ─── Tests: Stats Table Overflow CSS ───────────────────────────────────────
+
+describe('styles — stats table overflow fix', () => {
+  it('.stats-table-container has overflow-x: hidden', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    const match = styles.match(/\.stats-table-container\s*\{([^}]+)\}/)
+    assert.ok(match, '.stats-table-container should exist')
+    assert.ok(match[1].includes('overflow-x: hidden'), 'Should have overflow-x: hidden')
+  })
+
+  it('.stats-table has table-layout: fixed', async () => {
+    const { styles } = await import('../src/views/styles.js')
+    const match = styles.match(/\.stats-table\s*\{([^}]+)\}/)
+    assert.ok(match)
+    assert.ok(match[1].includes('table-layout: fixed'), 'Should have table-layout: fixed')
+  })
+})
 
 describe('backfill script — historical data', () => {
   it('script file exists and is valid ES module', async () => {

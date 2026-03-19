@@ -185,16 +185,21 @@ export function getScoreboardData(database = db) {
     return 0.0
   }
 
-  // Endpoint-level data
-  const endpoints = database.prepare(
-    `SELECT id, name, url, protocol, reliability_score, latency_p50_ms, health_status, price_sats, price_usd
-     FROM services
-     WHERE ${ACTIVE_FILTER}
-       AND is_template = 0 AND is_demo = 0
-       AND reliability_score IS NOT NULL
-     ORDER BY reliability_score DESC
-     LIMIT 100`
-  ).all()
+  // Endpoint-level data — per-protocol queries to ensure balanced representation
+  const endpoints = []
+  for (const proto of ['L402', 'x402', 'MPP']) {
+    const rows = database.prepare(
+      `SELECT id, name, url, protocol, reliability_score, latency_p50_ms, health_status, price_sats, price_usd
+       FROM services
+       WHERE ${ACTIVE_FILTER}
+         AND is_template = 0 AND is_demo = 0
+         AND reliability_score IS NOT NULL
+         AND protocol = ?
+       ORDER BY reliability_score DESC
+       LIMIT 35`
+    ).all(proto)
+    endpoints.push(...rows)
+  }
 
   // Add effective_score to each endpoint and re-sort
   for (const ep of endpoints) {
@@ -332,9 +337,13 @@ export function getCategoryGapData(database = db) {
   ).all()
 
   // Consolidate subcategories: "crypto/defi" → "crypto", "ai/llm" → "ai"
+  const CATEGORY_SYNONYMS = {
+    'real-time-data': 'data',
+  }
   const categoryMap = new Map()
   for (const row of rows) {
-    const parentCategory = row.category.split('/')[0]
+    let parentCategory = row.category.split('/')[0]
+    parentCategory = CATEGORY_SYNONYMS[parentCategory] || parentCategory
     if (!categoryMap.has(parentCategory)) {
       categoryMap.set(parentCategory, { category: parentCategory, L402: 0, x402: 0, MPP: 0, total: 0 })
     }
