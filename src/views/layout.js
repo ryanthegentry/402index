@@ -4,6 +4,10 @@ export function layout(title, content, meta = {}) {
   const description = meta.description || 'Protocol-agnostic directory of paid APIs (L402, x402, MPP) for AI agents. Indexed, verified, and searchable.'
   const ogTitle = meta.ogTitle || (title === '402 Index' ? '402 Index' : `${title} — 402 Index`)
   const ogUrl = meta.ogUrl || 'https://402index.io'
+  const canonicalTag = meta.canonical ? `\n  <link rel="canonical" href="https://402index.io${meta.canonical}" />` : ''
+  const jsonLdTag = meta.jsonLd ? `\n  <script type="application/ld+json">${JSON.stringify(meta.jsonLd)}</script>` : ''
+  const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ? `\n  <meta name="google-site-verification" content="${process.env.GOOGLE_SITE_VERIFICATION}" />` : ''
+  const plausibleScript = process.env.PLAUSIBLE_DOMAIN ? `\n  <script defer data-domain="${process.env.PLAUSIBLE_DOMAIN}" src="https://plausible.io/js/script.js"></script>` : ''
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18,7 +22,7 @@ export function layout(title, content, meta = {}) {
   <meta property="og:site_name" content="402 Index">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="${ogTitle}">
-  <meta name="twitter:description" content="${description}">
+  <meta name="twitter:description" content="${description}">${googleVerification}${canonicalTag}${jsonLdTag}${plausibleScript}
   <title>${title === '402 Index' ? '402 Index' : `${title} — 402 Index`}</title>
   <style>${styles}</style>
 </head>

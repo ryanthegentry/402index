@@ -15,6 +15,22 @@ export function detailPage(service) {
   const inputSchema = formatSchema(service.input_schema)
   const outputSchema = formatSchema(service.output_schema)
 
+  let providerName = service.provider
+  if (!providerName) {
+    try { providerName = new URL(service.url).hostname } catch { providerName = 'Unknown' }
+  }
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebAPI',
+    name: service.name,
+    url: service.url,
+    description: service.description || `${service.protocol} paid API endpoint`,
+    provider: { '@type': 'Organization', name: providerName },
+  }
+
+  const metaDesc = `${service.protocol} paid API endpoint. Health: ${service.health_status || 'unknown'}. ${service.description || ''}`.slice(0, 160)
+
   return layout(escapeHtml(service.name), `
     <div class="container">
       <div class="detail-header">
@@ -144,5 +160,10 @@ export function detailPage(service) {
       </div>
       ` : ''}
     </div>
-  `)
+  `, {
+    description: metaDesc,
+    canonical: `/service/${service.id}`,
+    jsonLd,
+    ogUrl: `https://402index.io/service/${service.id}`,
+  })
 }

@@ -600,6 +600,84 @@ router.post('/admin/reject/:id', (req, res) => {
   res.json({ message: 'Service rejected', id: req.params.id })
 })
 
+// ─── Admin Traffic Dashboard ──────────────────────────────────────────────
+
+router.get('/admin/traffic', (req, res) => {
+  const today = db.prepare(
+    `SELECT COUNT(*) as c FROM query_log WHERE timestamp > date('now')`
+  ).get().c
+
+  const week = db.prepare(
+    `SELECT COUNT(*) as c FROM query_log WHERE timestamp > datetime('now', '-7 days')`
+  ).get().c
+
+  const uniqueAgentsToday = db.prepare(
+    `SELECT COUNT(DISTINCT user_agent) as c FROM query_log WHERE timestamp > date('now')`
+  ).get().c
+
+  const mcpToday = db.prepare(
+    `SELECT COUNT(*) as c FROM query_log WHERE timestamp > date('now') AND user_agent LIKE '%402index-mcp%'`
+  ).get().c
+
+  const hourly = db.prepare(
+    `SELECT strftime('%Y-%m-%d %H:00', timestamp) as hour,
+            COUNT(*) as total,
+            SUM(CASE WHEN user_agent LIKE '%402index-mcp%' THEN 1 ELSE 0 END) as mcp_count
+     FROM query_log
+     WHERE timestamp > datetime('now', '-24 hours')
+     GROUP BY hour
+     ORDER BY hour`
+  ).all()
+
+  const topSearches = db.prepare(
+    `SELECT query_text, COUNT(*) as count
+     FROM query_log
+     WHERE query_text IS NOT NULL AND query_text != ''
+       AND timestamp > datetime('now', '-7 days')
+     GROUP BY query_text
+     ORDER BY count DESC
+     LIMIT 20`
+  ).all()
+
+  const topAgents = db.prepare(
+    `SELECT user_agent, COUNT(*) as count
+     FROM query_log
+     WHERE timestamp > datetime('now', '-7 days')
+     GROUP BY user_agent
+     ORDER BY count DESC
+     LIMIT 15`
+  ).all()
+
+  const zeroResults = db.prepare(
+    `SELECT query_text, filters, COUNT(*) as count
+     FROM query_log
+     WHERE result_count = 0
+       AND query_text IS NOT NULL AND query_text != ''
+       AND timestamp > datetime('now', '-7 days')
+     GROUP BY query_text
+     ORDER BY count DESC
+     LIMIT 10`
+  ).all()
+
+  const mcpSummary = db.prepare(
+    `SELECT COUNT(*) as total,
+            COUNT(DISTINCT date(timestamp)) as activeDays,
+            MIN(timestamp) as firstSeen,
+            MAX(timestamp) as lastSeen
+     FROM query_log
+     WHERE user_agent LIKE '%402index-mcp%'`
+  ).get()
+
+  res.json({
+    summary: { today, week, uniqueAgentsToday, mcpToday },
+    hourly,
+    topSearches,
+    topAgents,
+    zeroResults,
+    mcpSummary,
+  })
+})
+
 router.post('/admin/vacuum', (req, res) => {
   try {
     const before = db.pragma('page_count', { simple: true }) * db.pragma('page_size', { simple: true })

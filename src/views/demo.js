@@ -10,7 +10,7 @@ function pct(part, total) {
   return Math.round((part / total) * 100) + '%'
 }
 
-export function demoPage({ stats, probeSample, featuredServices = [] }) {
+export function demoPage({ stats, probeSample, featuredServices = [], meta = {} }) {
   const s = stats
   const probe = probeSample
 
@@ -565,5 +565,5 @@ Content-Type: application/json
   })()
   </script>`
 
-  return layout('402 Index', content)
+  return layout('402 Index', content, meta)
 }
