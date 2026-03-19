@@ -18,6 +18,61 @@ import { getScoreboardData, getLatencyData, getCategoryGapData } from '../servic
 
 const router = Router()
 
+// robots.txt
+router.get('/robots.txt', (req, res) => {
+  res.set('Content-Type', 'text/plain')
+  res.set('Cache-Control', 'public, max-age=86400')
+  res.send(`User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /stats-dev
+
+Sitemap: https://402index.io/sitemap.xml
+
+# AI agent discovery
+# See https://402index.io/llms.txt for machine-readable directory info
+# See https://402index.io/api/v1/openapi.json for OpenAPI spec
+`)
+})
+
+// sitemap.xml — dynamic from database
+router.get('/sitemap.xml', (req, res) => {
+  const staticPages = [
+    { loc: 'https://402index.io/', priority: '1.0' },
+    { loc: 'https://402index.io/stats', priority: '1.0' },
+    { loc: 'https://402index.io/directory', priority: '1.0' },
+    { loc: 'https://402index.io/about', priority: '0.8' },
+    { loc: 'https://402index.io/api-docs', priority: '0.8' },
+  ]
+
+  const services = db.prepare(
+    `SELECT id, updated_at FROM services
+     WHERE (status = 'active' OR status IS NULL)
+       AND is_template = 0 AND is_demo = 0
+     ORDER BY updated_at DESC
+     LIMIT 1000`
+  ).all()
+
+  const urls = staticPages.map(p =>
+    `  <url><loc>${p.loc}</loc><changefreq>daily</changefreq><priority>${p.priority}</priority></url>`
+  )
+
+  for (const svc of services) {
+    const lastmod = svc.updated_at ? `<lastmod>${svc.updated_at.split(' ')[0]}</lastmod>` : ''
+    urls.push(`  <url><loc>https://402index.io/service/${svc.id}</loc>${lastmod}<changefreq>daily</changefreq><priority>0.6</priority></url>`)
+  }
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join('\n')}
+</urlset>`
+
+  res.set('Content-Type', 'application/xml')
+  res.set('Cache-Control', 'public, max-age=3600')
+  res.send(xml)
+})
+
 // RSS feed — public, no auth, no rate limit
 router.get('/feed.xml', (req, res) => {
   const { protocol, health, type } = req.query
@@ -177,7 +232,19 @@ router.get('/', (req, res) => {
   // Probe sample for flow visualization
   const probeSample = buildProbeSample(db, 'L402')
 
-  res.send(demoPage({ stats, probeSample, featuredServices }))
+  res.send(demoPage({ stats, probeSample, featuredServices, meta: {
+    canonical: '/',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: '402 Index',
+      url: 'https://402index.io',
+      description: 'Protocol-agnostic directory of paid APIs (L402, x402, MPP) for AI agents. Indexed, verified, and searchable.',
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'Web',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    },
+  } }))
 })
 
 // Stats page (simplified — latency table + gap map only)

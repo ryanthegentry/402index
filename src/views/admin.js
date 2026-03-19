@@ -29,6 +29,7 @@ export function adminPage() {
             <button class="tab active" data-tab="pending" role="tab">Pending <span id="pending-count" class="tab-count"></span></button>
             <button class="tab" data-tab="recent" role="tab">Recent</button>
             <button class="tab" data-tab="search" role="tab">Search</button>
+            <button class="tab" data-tab="traffic" role="tab">Traffic</button>
           </div>
 
           <!-- Pending panel -->
@@ -51,6 +52,13 @@ export function adminPage() {
             </form>
             <div id="search-results">
               <div class="empty-state" style="padding:40px 20px">Enter a term to search across all endpoints.</div>
+            </div>
+          </div>
+
+          <!-- Traffic panel -->
+          <div id="panel-traffic" class="tab-panel" style="display:none">
+            <div id="traffic-content">
+              <div class="empty-state">Loading traffic data...</div>
             </div>
           </div>
         </div>
@@ -184,6 +192,83 @@ export function adminPage() {
         color: var(--text-muted);
         font-size: 15px;
       }
+
+      /* Traffic dashboard */
+      .traffic-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .traffic-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+      }
+      .traffic-card-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text-bright);
+      }
+      .traffic-card-label {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-top: 4px;
+      }
+      .traffic-bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 120px;
+        padding: 0;
+      }
+      .traffic-bar-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100%;
+        justify-content: flex-end;
+      }
+      .traffic-bar {
+        width: 100%;
+        background: var(--accent);
+        border-radius: 2px 2px 0 0;
+        min-height: 2px;
+        position: relative;
+      }
+      .traffic-bar-mcp {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--green);
+        border-radius: 0 0 0 0;
+      }
+      .traffic-bar-label {
+        font-size: 9px;
+        color: var(--text-muted);
+        margin-top: 4px;
+        white-space: nowrap;
+      }
+      .admin-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .admin-table th {
+        text-align: left;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+      .admin-table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        color: var(--text);
+      }
     </style>
 
     <script>
@@ -238,7 +323,7 @@ export function adminPage() {
 
     // ─── Tab switching ──────────────────────────────────────────────────────
 
-    var tabLoaded = { pending: false, recent: false }
+    var tabLoaded = { pending: false, recent: false, traffic: false }
 
     function switchTab(name) {
       document.querySelectorAll('.tab').forEach(function(t) {
@@ -250,6 +335,10 @@ export function adminPage() {
       if (name === 'recent' && !tabLoaded.recent) {
         loadRecent()
         tabLoaded.recent = true
+      }
+      if (name === 'traffic' && !tabLoaded.traffic) {
+        loadTraffic()
+        tabLoaded.traffic = true
       }
     }
 
@@ -449,6 +538,109 @@ export function adminPage() {
         deleteService(btn.dataset.id, btn.dataset.name, btn)
       }
     })
+
+    // ─── Traffic ───────────────────────────────────────────────────────────
+
+    function classifyAgent(ua) {
+      if (!ua) return 'API'
+      if (ua.includes('402index-mcp')) return 'MCP'
+      if (ua.includes('bot') || ua.includes('crawler') || ua.includes('Bot')) return 'Bot'
+      if (ua.includes('Mozilla')) return 'Browser'
+      return 'API'
+    }
+
+    function agentBadge(type) {
+      var colors = { MCP: 'var(--green)', Browser: 'var(--accent)', Bot: 'var(--yellow)', API: 'var(--text-muted)' }
+      return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:rgba(124,138,255,0.1);color:' + (colors[type] || 'var(--text-muted)') + '">' + type + '</span>'
+    }
+
+    async function loadTraffic() {
+      var el = document.getElementById('traffic-content')
+      el.innerHTML = '<div class="empty-state">Loading traffic data...</div>'
+      var res = await apiFetch('/admin/traffic')
+      if (!res) return
+      if (!res.ok) {
+        el.innerHTML = '<div class="empty-state">Failed to load traffic data.</div>'
+        return
+      }
+      var d = await res.json()
+      var html = ''
+
+      // Summary cards
+      html += '<div class="traffic-cards">'
+      html += '<div class="traffic-card"><div class="traffic-card-value">' + (d.summary.today || 0) + '</div><div class="traffic-card-label">Queries today</div></div>'
+      html += '<div class="traffic-card"><div class="traffic-card-value">' + (d.summary.week || 0) + '</div><div class="traffic-card-label">Queries (7 days)</div></div>'
+      html += '<div class="traffic-card"><div class="traffic-card-value">' + (d.summary.uniqueAgentsToday || 0) + '</div><div class="traffic-card-label">Unique agents today</div></div>'
+      html += '<div class="traffic-card"><div class="traffic-card-value">' + (d.summary.mcpToday || 0) + '</div><div class="traffic-card-label">MCP queries today</div></div>'
+      html += '</div>'
+
+      // Queries per hour (CSS bar chart)
+      if (d.hourly && d.hourly.length > 0) {
+        var maxH = Math.max.apply(null, d.hourly.map(function(h) { return h.total })) || 1
+        html += '<h3 style="margin:24px 0 12px">Queries Per Hour (24h)</h3>'
+        html += '<div class="traffic-bars">'
+        for (var i = 0; i < d.hourly.length; i++) {
+          var h = d.hourly[i]
+          var pct = Math.round((h.total / maxH) * 100)
+          var mcpPct = h.total > 0 ? Math.round((h.mcp_count / h.total) * 100) : 0
+          var label = h.hour.split(' ')[1] || h.hour
+          html += '<div class="traffic-bar-col" title="' + h.hour + ': ' + h.total + ' total, ' + h.mcp_count + ' MCP">'
+          html += '<div class="traffic-bar" style="height:' + pct + '%">'
+          if (mcpPct > 0) html += '<div class="traffic-bar-mcp" style="height:' + mcpPct + '%"></div>'
+          html += '</div>'
+          html += '<div class="traffic-bar-label">' + label + '</div>'
+          html += '</div>'
+        }
+        html += '</div>'
+        html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px"><span style="display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:2px;margin-right:4px"></span>Browser/API <span style="display:inline-block;width:8px;height:8px;background:var(--green);border-radius:2px;margin:0 4px 0 12px"></span>MCP</div>'
+      }
+
+      // MCP summary
+      if (d.mcpSummary) {
+        var m = d.mcpSummary
+        html += '<h3 style="margin:24px 0 12px">MCP Server Traffic</h3>'
+        html += '<div class="traffic-card" style="max-width:480px"><div class="traffic-card-label">'
+        html += m.total + ' total queries &middot; ' + m.activeDays + ' active days'
+        if (m.firstSeen) html += ' &middot; First seen: ' + m.firstSeen.split('T')[0]
+        if (m.lastSeen) html += ' &middot; Last: ' + m.lastSeen.split('T')[0]
+        html += '</div></div>'
+      }
+
+      // Top search terms
+      if (d.topSearches && d.topSearches.length > 0) {
+        html += '<h3 style="margin:24px 0 12px">Top Search Terms (7 days)</h3>'
+        html += '<table class="admin-table"><thead><tr><th>Search Term</th><th>Count</th></tr></thead><tbody>'
+        for (var j = 0; j < d.topSearches.length; j++) {
+          html += '<tr><td>' + escHtml(d.topSearches[j].query_text) + '</td><td>' + d.topSearches[j].count + '</td></tr>'
+        }
+        html += '</tbody></table>'
+      }
+
+      // Top user-agents
+      if (d.topAgents && d.topAgents.length > 0) {
+        html += '<h3 style="margin:24px 0 12px">Top User-Agents (7 days)</h3>'
+        html += '<table class="admin-table"><thead><tr><th>User-Agent</th><th>Count</th><th>Type</th></tr></thead><tbody>'
+        for (var k = 0; k < d.topAgents.length; k++) {
+          var a = d.topAgents[k]
+          html += '<tr><td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.user_agent || '(empty)') + '</td><td>' + a.count + '</td><td>' + agentBadge(classifyAgent(a.user_agent)) + '</td></tr>'
+        }
+        html += '</tbody></table>'
+      }
+
+      // Zero-result searches
+      if (d.zeroResults && d.zeroResults.length > 0) {
+        html += '<h3 style="margin:24px 0 12px">Zero-Result Searches (7 days)</h3>'
+        html += '<p style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Unmet demand — what people search for but don\'t find.</p>'
+        html += '<table class="admin-table"><thead><tr><th>Search Term</th><th>Filters</th><th>Count</th></tr></thead><tbody>'
+        for (var z = 0; z < d.zeroResults.length; z++) {
+          var zr = d.zeroResults[z]
+          html += '<tr><td>' + escHtml(zr.query_text) + '</td><td style="font-size:12px;color:var(--text-muted)">' + escHtml(zr.filters || '—') + '</td><td>' + zr.count + '</td></tr>'
+        }
+        html += '</tbody></table>'
+      }
+
+      el.innerHTML = html || '<div class="empty-state">No traffic data yet.</div>'
+    }
 
     // ─── Auth ────────────────────────────────────────────────────────────────
 
