@@ -8,6 +8,14 @@ export function apiDocsPage() {
         <h1>402 Index API</h1>
         <p class="docs-subtitle">Programmatic access to the paid API directory. Free tier available, L402 payments for higher limits.</p>
 
+        <div class="api-machine-readable">
+          <h4>Machine-Readable API Docs</h4>
+          <p>
+            <a href="/api/v1/openapi.json">OpenAPI 3.1 Spec (JSON)</a> &middot;
+            <a href="/api/v1/docs.md">API Docs (Markdown)</a>
+          </p>
+        </div>
+
         <h2>Base URL</h2>
         <div class="base-url">https://402index.io/api/v1</div>
 

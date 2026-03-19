@@ -11,8 +11,22 @@ import { emit } from '../services/events.js'
 import { findOpportunities } from '../services/opportunities.js'
 import { discoverProbeConfig } from '../services/wellknown-discovery.js'
 import { getSnapshots } from '../services/daily-snapshot.js'
+import { openapiSpec, generateMarkdownDocs } from '../openapi.js'
 
 const router = Router()
+
+// ─── OpenAPI Spec + Markdown Docs ───────────────────────────────────────────
+
+router.get('/openapi.json', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=86400')
+  res.json(openapiSpec)
+})
+
+const markdownDocs = generateMarkdownDocs(openapiSpec)
+router.get('/docs.md', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=86400')
+  res.type('text/markdown').send(markdownDocs)
+})
 
 router.get('/services', (req, res) => {
   const startTime = Date.now()
