@@ -706,10 +706,6 @@ export const styles = `
       gap: 24px;
       align-items: start;
     }
-    .demo-twin-panel .demo-search {
-      max-height: 80vh;
-      overflow-y: auto;
-    }
     .demo-twin-panel .demo-probe {
       position: sticky;
       top: 24px;
@@ -717,9 +713,6 @@ export const styles = `
     @media (max-width: 1023px) {
       .demo-twin-panel {
         grid-template-columns: 1fr;
-      }
-      .demo-twin-panel .demo-search {
-        max-height: none;
       }
       .demo-twin-panel .demo-probe {
         position: static;
@@ -861,6 +854,15 @@ export const styles = `
       text-decoration: none;
     }
     .demo-view-details-btn:hover { background: var(--accent); color: var(--bg); text-decoration: none; }
+    .demo-view-all-link {
+      display: block;
+      text-align: center;
+      padding: 16px 0;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .demo-view-all-link:hover { text-decoration: underline; }
 
     /* Live Probe Section */
     .demo-probe-section { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px; }

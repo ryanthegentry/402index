@@ -317,8 +317,9 @@ Content-Type: application/json
         return
       }
 
+      var visible = data.services.slice(0, 15)
       let html = '<div class="demo-results-header">' + data.total + ' services found</div>'
-      for (const svc of data.services) {
+      for (const svc of visible) {
         html += '<div class="demo-result-card" data-id="' + escapeHtmlClient(svc.id) + '">'
         html += '<div class="demo-result-summary">'
         html += '<div class="demo-result-name">' + escapeHtmlClient(svc.name) + '</div>'
@@ -341,6 +342,20 @@ Content-Type: application/json
         html += '</div>'
         html += '</div>'
       }
+      if (data.total > 15) {
+        var params = []
+        var q = document.getElementById('demo-q').value.trim()
+        if (q) params.push('q=' + encodeURIComponent(q))
+        var proto = document.getElementById('demo-protocol').value
+        if (proto) params.push('protocol=' + encodeURIComponent(proto))
+        var health = document.getElementById('demo-health').value
+        if (health) params.push('health=' + encodeURIComponent(health))
+        var cat = document.getElementById('demo-category').value
+        if (cat) params.push('category=' + encodeURIComponent(cat))
+        var href = '/directory?' + params.join('&')
+        html += '<a href="' + escapeHtmlClient(href) + '" class="demo-view-all-link">View all ' + data.total + ' results in Directory &rarr;</a>'
+      }
+
       resultsContainer.innerHTML = html
 
       // Click to expand/collapse
