@@ -320,13 +320,14 @@ describe('getScoreboardData', () => {
     assert.equal(nansen.healthy_pct, 100) // all 3 healthy
   })
 
-  it('returns endpoint-level data sorted by reliability', async () => {
+  it('returns endpoint-level data sorted by effective_score', async () => {
     const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
     const { endpoints } = getScoreboardData(db)
 
     assert.ok(endpoints.length > 0)
     for (let i = 1; i < endpoints.length; i++) {
-      assert.ok(endpoints[i].reliability_score <= endpoints[i - 1].reliability_score)
+      assert.ok(endpoints[i].effective_score <= endpoints[i - 1].effective_score,
+        `endpoint ${endpoints[i].id} (${endpoints[i].effective_score}) should not rank above ${endpoints[i - 1].id} (${endpoints[i - 1].effective_score})`)
     }
   })
 
@@ -413,13 +414,12 @@ describe('getCategoryGapData', () => {
 
   after(() => db.close())
 
-  it('returns grid with one row per category', async () => {
+  it('returns grid with no duplicate categories', async () => {
     const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
     const { grid } = getCategoryGapData(db)
 
-    assert.ok(grid.length > 0)
+    // Seed data has small categories (<10 each) so grid may be empty after threshold filter
     const categories = grid.map(r => r.category)
-    // No duplicates
     assert.equal(categories.length, new Set(categories).size)
   })
 
@@ -436,12 +436,12 @@ describe('getCategoryGapData', () => {
     }
   })
 
-  it('filters out categories with fewer than 3 total endpoints', async () => {
+  it('filters out categories with fewer than 10 total endpoints', async () => {
     const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
     const { grid } = getCategoryGapData(db)
 
     for (const row of grid) {
-      assert.ok(row.total >= 3, `Category "${row.category}" has ${row.total} < 3`)
+      assert.ok(row.total >= 10, `Category "${row.category}" has ${row.total} < 10`)
     }
   })
 
@@ -469,6 +469,274 @@ describe('getCategoryGapData', () => {
       // Only n1,n2,n3 are healthy x402 in data (t1 excluded as template)
       assert.equal(dataRow.x402, 3)
     }
+  })
+})
+
+// ─── Tests: Scoreboard Effective Score Ranking ──────────────────────────────
+
+describe('getScoreboardData — effective score ranking', () => {
+  let db
+
+  before(() => {
+    db = createTestDb()
+    const insert = db.prepare(`
+      INSERT INTO services (id, name, url, protocol, source, category, health_status, reliability_score, latency_p50_ms, price_sats, price_usd, x402_payment_valid, is_template, is_demo)
+      VALUES (@id, @name, @url, @protocol, @source, @category, @health_status, @reliability_score, @latency_p50_ms, @price_sats, @price_usd, @x402_payment_valid, @is_template, @is_demo)
+    `)
+
+    // Provider "degraded-high.example.com" — 2 endpoints, all degraded, reliability 100
+    insert.run({ id: 'dh1', name: 'DegHigh 1', url: 'https://degraded-high.example.com/a', protocol: 'x402', source: 'bazaar', category: 'data', health_status: 'degraded', reliability_score: 100, latency_p50_ms: 100, price_sats: null, price_usd: 0.01, x402_payment_valid: 1, is_template: 0, is_demo: 0 })
+    insert.run({ id: 'dh2', name: 'DegHigh 2', url: 'https://degraded-high.example.com/b', protocol: 'x402', source: 'bazaar', category: 'data', health_status: 'degraded', reliability_score: 100, latency_p50_ms: 120, price_sats: null, price_usd: 0.01, x402_payment_valid: 1, is_template: 0, is_demo: 0 })
+
+    // Provider "healthy-med.example.com" — 2 endpoints, all healthy, reliability 90
+    insert.run({ id: 'hm1', name: 'HealthMed 1', url: 'https://healthy-med.example.com/a', protocol: 'x402', source: 'bazaar', category: 'data', health_status: 'healthy', reliability_score: 90, latency_p50_ms: 200, price_sats: null, price_usd: 0.01, x402_payment_valid: 1, is_template: 0, is_demo: 0 })
+    insert.run({ id: 'hm2', name: 'HealthMed 2', url: 'https://healthy-med.example.com/b', protocol: 'x402', source: 'bazaar', category: 'data', health_status: 'healthy', reliability_score: 90, latency_p50_ms: 210, price_sats: null, price_usd: 0.01, x402_payment_valid: 1, is_template: 0, is_demo: 0 })
+
+    // Provider "mixed.example.com" — 2 endpoints, 1 healthy (reliability 100) + 1 degraded (reliability 100)
+    insert.run({ id: 'mx1', name: 'Mixed 1', url: 'https://mixed.example.com/a', protocol: 'L402', source: 'satring', category: 'ai', health_status: 'healthy', reliability_score: 100, latency_p50_ms: 150, price_sats: 10, price_usd: null, x402_payment_valid: null, is_template: 0, is_demo: 0 })
+    insert.run({ id: 'mx2', name: 'Mixed 2', url: 'https://mixed.example.com/b', protocol: 'L402', source: 'satring', category: 'ai', health_status: 'degraded', reliability_score: 100, latency_p50_ms: 300, price_sats: 20, price_usd: null, x402_payment_valid: null, is_template: 0, is_demo: 0 })
+
+    // Provider "down.example.com" — 2 endpoints, both down, reliability 95
+    insert.run({ id: 'dn1', name: 'Down 1', url: 'https://down.example.com/a', protocol: 'x402', source: 'bazaar', category: 'data', health_status: 'down', reliability_score: 95, latency_p50_ms: 500, price_sats: null, price_usd: 0.05, x402_payment_valid: 0, is_template: 0, is_demo: 0 })
+    insert.run({ id: 'dn2', name: 'Down 2', url: 'https://down.example.com/b', protocol: 'x402', source: 'bazaar', category: 'data', health_status: 'down', reliability_score: 95, latency_p50_ms: 600, price_sats: null, price_usd: 0.05, x402_payment_valid: 0, is_template: 0, is_demo: 0 })
+  })
+
+  after(() => db.close())
+
+  it('all-healthy provider: effective_score equals reliability_score', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { providers } = getScoreboardData(db)
+    const hm = providers.find(p => p.provider === 'healthy-med.example.com')
+    assert.ok(hm)
+    assert.equal(hm.avg_effective, 90)
+  })
+
+  it('all-degraded provider: effective_score = reliability * 0.5', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { providers } = getScoreboardData(db)
+    const dh = providers.find(p => p.provider === 'degraded-high.example.com')
+    assert.ok(dh)
+    assert.equal(dh.avg_effective, 50) // 100 * 0.5
+  })
+
+  it('mixed healthy+degraded: effective is weighted average', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { providers } = getScoreboardData(db)
+    const mx = providers.find(p => p.provider === 'mixed.example.com')
+    assert.ok(mx)
+    // (100*1.0 + 100*0.5) / 2 = 75
+    assert.equal(mx.avg_effective, 75)
+  })
+
+  it('healthy provider at 90 ranks ABOVE degraded provider at 100', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { providers } = getScoreboardData(db)
+    const hmIdx = providers.findIndex(p => p.provider === 'healthy-med.example.com')
+    const dhIdx = providers.findIndex(p => p.provider === 'degraded-high.example.com')
+    assert.ok(hmIdx >= 0 && dhIdx >= 0)
+    assert.ok(hmIdx < dhIdx, `healthy-med (rank ${hmIdx}) should be above degraded-high (rank ${dhIdx})`)
+  })
+
+  it('down endpoints contribute 0 to effective score', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { providers } = getScoreboardData(db)
+    const dn = providers.find(p => p.provider === 'down.example.com')
+    assert.ok(dn)
+    assert.equal(dn.avg_effective, 0) // 95 * 0.0 = 0
+  })
+
+  it('endpoint-level: healthy at 80 ranks above degraded at 100', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { endpoints } = getScoreboardData(db)
+    // hm1 (healthy, reliability 90) should appear before dh1 (degraded, reliability 100)
+    const hm1Idx = endpoints.findIndex(e => e.id === 'hm1')
+    const dh1Idx = endpoints.findIndex(e => e.id === 'dh1')
+    assert.ok(hm1Idx >= 0 && dh1Idx >= 0)
+    assert.ok(hm1Idx < dh1Idx, `healthy hm1 (rank ${hm1Idx}) should be above degraded dh1 (rank ${dh1Idx})`)
+  })
+
+  it('sort order matches effective_score descending', async () => {
+    const { getScoreboardData } = await import('../src/services/daily-snapshot.js')
+    const { providers } = getScoreboardData(db)
+    for (let i = 1; i < providers.length; i++) {
+      assert.ok(providers[i].avg_effective <= providers[i - 1].avg_effective,
+        `Provider ${providers[i].provider} (${providers[i].avg_effective}) should not rank above ${providers[i - 1].provider} (${providers[i - 1].avg_effective})`)
+    }
+  })
+})
+
+// ─── Tests: Category Gap Map Polish ─────────────────────────────────────────
+
+describe('getCategoryGapData — polish', () => {
+  let db
+
+  before(() => {
+    db = createTestDb()
+    const insert = db.prepare(`
+      INSERT INTO services (id, name, url, protocol, source, category, health_status, reliability_score, latency_p50_ms, price_sats, price_usd, x402_payment_valid, is_template, is_demo)
+      VALUES (@id, @name, @url, @protocol, @source, @category, @health_status, @reliability_score, @latency_p50_ms, @price_sats, @price_usd, @x402_payment_valid, @is_template, @is_demo)
+    `)
+    const base = { source: 'bazaar', health_status: 'healthy', reliability_score: 90, latency_p50_ms: 200, price_sats: null, price_usd: 0.01, x402_payment_valid: 1, is_template: 0, is_demo: 0 }
+
+    // Uncategorized — 15 endpoints (should be filtered out)
+    for (let i = 0; i < 15; i++) {
+      insert.run({ ...base, id: `unc-${i}`, name: `Uncat ${i}`, url: `https://unc${i}.example.com/api`, protocol: 'x402', category: 'uncategorized' })
+    }
+
+    // crypto/defi — 12 x402 endpoints
+    for (let i = 0; i < 12; i++) {
+      insert.run({ ...base, id: `cd-${i}`, name: `CryptoDefi ${i}`, url: `https://cryptodefi${i}.example.com/api`, protocol: 'x402', category: 'crypto/defi' })
+    }
+
+    // crypto/wallet — 8 x402 endpoints
+    for (let i = 0; i < 8; i++) {
+      insert.run({ ...base, id: `cw-${i}`, name: `CryptoWallet ${i}`, url: `https://cryptowallet${i}.example.com/api`, protocol: 'x402', category: 'crypto/wallet' })
+    }
+
+    // crypto/nft — 5 x402 endpoints
+    for (let i = 0; i < 5; i++) {
+      insert.run({ ...base, id: `cn-${i}`, name: `CryptoNft ${i}`, url: `https://cryptonft${i}.example.com/api`, protocol: 'x402', category: 'crypto/nft' })
+    }
+
+    // ai/llm — 6 endpoints (3 L402, 3 MPP)
+    for (let i = 0; i < 3; i++) {
+      insert.run({ ...base, id: `al-${i}`, name: `AiLlm L402 ${i}`, url: `https://aillm-l402-${i}.example.com/api`, protocol: 'L402', category: 'ai/llm', x402_payment_valid: null, price_sats: 10 })
+    }
+    for (let i = 0; i < 3; i++) {
+      insert.run({ ...base, id: `am-${i}`, name: `AiLlm MPP ${i}`, url: `https://aillm-mpp-${i}.example.com/api`, protocol: 'MPP', category: 'ai/llm', x402_payment_valid: null })
+    }
+
+    // ai/images — 5 MPP endpoints
+    for (let i = 0; i < 5; i++) {
+      insert.run({ ...base, id: `ai-${i}`, name: `AiImg ${i}`, url: `https://aiimg${i}.example.com/api`, protocol: 'MPP', category: 'ai/images', x402_payment_valid: null })
+    }
+
+    // tools/search — 4 endpoints (below threshold of 10 after consolidation? only if alone)
+    for (let i = 0; i < 4; i++) {
+      insert.run({ ...base, id: `ts-${i}`, name: `ToolSearch ${i}`, url: `https://toolsearch${i}.example.com/api`, protocol: 'x402', category: 'tools/search' })
+    }
+
+    // tools/convert — 7 endpoints
+    for (let i = 0; i < 7; i++) {
+      insert.run({ ...base, id: `tc-${i}`, name: `ToolConvert ${i}`, url: `https://toolconvert${i}.example.com/api`, protocol: 'x402', category: 'tools/convert' })
+    }
+
+    // small-cat — 9 endpoints (below threshold)
+    for (let i = 0; i < 9; i++) {
+      insert.run({ ...base, id: `sm-${i}`, name: `Small ${i}`, url: `https://small${i}.example.com/api`, protocol: 'x402', category: 'small-cat' })
+    }
+
+    // exact-10 — exactly 10 endpoints (at boundary, should be included)
+    for (let i = 0; i < 10; i++) {
+      insert.run({ ...base, id: `e10-${i}`, name: `Exact10 ${i}`, url: `https://exact10-${i}.example.com/api`, protocol: 'x402', category: 'exact-10' })
+    }
+  })
+
+  after(() => db.close())
+
+  it('"uncategorized" never appears in grid results', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { grid } = getCategoryGapData(db)
+    const uncat = grid.find(r => r.category === 'uncategorized')
+    assert.equal(uncat, undefined)
+  })
+
+  it('"crypto/defi" and "crypto/wallet" merge into "crypto"', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { grid } = getCategoryGapData(db)
+    const cryptoDefi = grid.find(r => r.category === 'crypto/defi')
+    const cryptoWallet = grid.find(r => r.category === 'crypto/wallet')
+    assert.equal(cryptoDefi, undefined, 'crypto/defi should not appear as separate row')
+    assert.equal(cryptoWallet, undefined, 'crypto/wallet should not appear as separate row')
+    const crypto = grid.find(r => r.category === 'crypto')
+    assert.ok(crypto, 'consolidated "crypto" row should exist')
+  })
+
+  it('consolidated counts are correct (sum of subcategory counts)', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { grid } = getCategoryGapData(db)
+    const crypto = grid.find(r => r.category === 'crypto')
+    assert.ok(crypto)
+    // 12 (defi) + 8 (wallet) + 5 (nft) = 25 x402
+    assert.equal(crypto.x402, 25)
+    assert.equal(crypto.total, 25)
+  })
+
+  it('"ai/llm" merges into "ai" with "ai/images"', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { grid } = getCategoryGapData(db)
+    const aiLlm = grid.find(r => r.category === 'ai/llm')
+    assert.equal(aiLlm, undefined, 'ai/llm should not appear as separate row')
+    const ai = grid.find(r => r.category === 'ai')
+    assert.ok(ai, 'consolidated "ai" row should exist')
+    // ai/llm: 3 L402 + 3 MPP; ai/images: 5 MPP
+    assert.equal(ai.L402, 3)
+    assert.equal(ai.MPP, 8) // 3 + 5
+    assert.equal(ai.total, 11)
+  })
+
+  it('"tools/search" merges into "tools"', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { grid } = getCategoryGapData(db)
+    const toolsSearch = grid.find(r => r.category === 'tools/search')
+    assert.equal(toolsSearch, undefined, 'tools/search should not appear as separate row')
+    const tools = grid.find(r => r.category === 'tools')
+    assert.ok(tools, 'consolidated "tools" row should exist')
+    // 4 (search) + 7 (convert) = 11 x402
+    assert.equal(tools.x402, 11)
+  })
+
+  it('categories with <10 total endpoints are excluded', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { grid } = getCategoryGapData(db)
+    const small = grid.find(r => r.category === 'small-cat')
+    assert.equal(small, undefined, 'small-cat (9 endpoints) should be excluded')
+  })
+
+  it('category with exactly 10 endpoints is included', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { grid } = getCategoryGapData(db)
+    const exact = grid.find(r => r.category === 'exact-10')
+    assert.ok(exact, 'exact-10 (10 endpoints) should be included')
+  })
+
+  it('opportunity callouts only for categories where one protocol has ≥20', async () => {
+    const { getCategoryGapData } = await import('../src/services/daily-snapshot.js')
+    const { opportunities } = getCategoryGapData(db)
+    for (const opp of opportunities) {
+      // Find the category in grid
+      const { grid } = getCategoryGapData(db)
+      const cat = grid.find(r => r.category === opp.category)
+      assert.ok(cat, `Opportunity category "${opp.category}" should exist in grid`)
+      // At least one protocol should have ≥20 in this category
+      const maxProto = Math.max(cat.L402, cat.x402, cat.MPP)
+      assert.ok(maxProto >= 20, `Opportunity for "${opp.category}" requires at least one protocol with ≥20, got max ${maxProto}`)
+    }
+  })
+})
+
+// ─── Tests: Latency Chart Note ──────────────────────────────────────────────
+
+describe('statsPage — latency chart note', () => {
+  it('contains stats-chart-note element', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage({
+      scoreboard: { providers: [], endpoints: [] },
+      latency: { buckets: [], median: 200, under500: 80, fastestProtocol: 'x402', fastestMedian: 170, protocolSummary: { L402: { median: 400, p90: 800, under500: 50 }, x402: { median: 170, p90: 200, under500: 100 }, MPP: { median: 300, p90: 350, under500: 100 } } },
+      categoryGap: { grid: [], opportunities: [] },
+    })
+    assert.ok(html.includes('stats-chart-note'), 'Should contain stats-chart-note class')
+  })
+
+  it('note mentions x402 volume disparity', async () => {
+    const { statsPage } = await import('../src/views/stats.js')
+    const html = statsPage({
+      scoreboard: { providers: [], endpoints: [] },
+      latency: { buckets: [], median: 200, under500: 80, fastestProtocol: 'x402', fastestMedian: 170, protocolSummary: { L402: { median: 400, p90: 800, under500: 50 }, x402: { median: 170, p90: 200, under500: 100 }, MPP: { median: 300, p90: 350, under500: 100 } } },
+      categoryGap: { grid: [], opportunities: [] },
+    })
+    assert.ok(html.includes('x402'), 'Note should mention x402')
+    assert.ok(html.includes('per-protocol summary'), 'Note should reference per-protocol summary table')
   })
 })
 
