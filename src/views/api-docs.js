@@ -37,7 +37,7 @@ export function apiDocsPage() {
               <tr><td>health</td><td>string</td><td>Filter by health: <code>healthy</code>, <code>degraded</code>, <code>down</code>, <code>unknown</code></td></tr>
               <tr><td>source</td><td>string</td><td>Filter by source: <code>bazaar</code>, <code>satring</code>, <code>l402apps</code>, <code>sponge</code>, <code>well-known</code>, <code>exclusive</code>, <code>self-registered</code>, <code>discovery</code></td></tr>
               <tr><td>featured</td><td>boolean</td><td>Only featured services: <code>true</code></td></tr>
-              <tr><td>q</td><td>string</td><td>Search by name or description</td></tr>
+              <tr><td>q</td><td>string</td><td>Search by name, description, or URL</td></tr>
               <tr><td>max_price_usd</td><td>number</td><td>Maximum price in USD</td></tr>
               <tr><td>payment_asset</td><td>string</td><td>Filter by payment asset (e.g. <code>BTC</code>, <code>USDC</code>)</td></tr>
               <tr><td>payment_valid</td><td>boolean</td><td>Only x402 services with verified payment requirements: <code>true</code></td></tr>

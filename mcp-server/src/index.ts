@@ -34,7 +34,7 @@ server.tool(
     health: z.enum(['healthy', 'degraded', 'down', 'unknown']).optional().describe('Filter by health status'),
     source: z.enum(['bazaar', 'satring', 'l402apps', 'sponge', 'l402directory', 'mpp', 'discovery', 'self-registered']).optional().describe('Filter by source'),
     featured: z.boolean().optional().describe('Only featured services'),
-    q: z.string().optional().describe('Search by name or description'),
+    q: z.string().optional().describe('Search by name, description, or URL'),
     max_price_usd: z.number().optional().describe('Maximum price in USD'),
     sort: z.enum(['name', 'price', 'latency', 'uptime']).optional().describe('Sort field'),
     order: z.enum(['asc', 'desc']).optional().describe('Sort order'),
