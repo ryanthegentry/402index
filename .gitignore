@@ -1,6 +1,9 @@
 data/
 node_modules/
 *.db
+.env
+.env.local
+.env.*.local
 docs/bazaar-sample.json
 mcp-server/node_modules/
 mcp-server/dist/
