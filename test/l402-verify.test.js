@@ -373,6 +373,7 @@ describe('verifyL402', () => {
     })
     const result = await verifyL402('https://example.com/api')
     assert.equal(result.valid, false)
+    assert.equal(result.hasInvoice, false, 'hasInvoice must be false when invoice has valid prefix but is too short')
     assert.ok(result.error.includes('short') || result.error.includes('chars'), 'error should mention length issue')
   })
 
@@ -383,6 +384,7 @@ describe('verifyL402', () => {
     })
     const result = await verifyL402('https://example.com/api')
     assert.equal(result.valid, false)
+    assert.equal(result.hasInvoice, false, 'hasInvoice must be false when invoice has wrong prefix')
     assert.ok(result.error.includes('prefix') || result.error.includes('lnbc'), 'error should mention BOLT11 prefix')
   })
 
@@ -393,6 +395,16 @@ describe('verifyL402', () => {
     const result = await verifyL402('https://example.com/api')
     assert.equal(result.valid, false)
     assert.ok(result.error.includes('"probe"'), 'error should contain the quoted token value')
+  })
+
+  it('hasInvoice is true only when invoice is fully valid', async () => {
+    global.fetch = async () => mockResponse(402, {
+      'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+    })
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, true)
+    assert.equal(result.hasInvoice, true)
+    assert.equal(result.hasMacaroon, true)
   })
 
   it('returns valid=true with token= field when token is valid base64', async () => {

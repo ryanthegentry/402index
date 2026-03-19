@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { formatProbeSteps, validateProbeUrl, buildProbeConfig } from '../src/services/probe-live.js'
 import Database from 'better-sqlite3'
 
@@ -221,16 +222,97 @@ describe('buildProbeConfig', () => {
   })
 })
 
-// ─── Regression guard: health checker filter ─────────────────────────────────
+// ─── Regression guard: health checker filter (behavioral) ─────────────────────
+//
+// Tests the actual getServices SQL query against a real SQLite DB rather than
+// string-matching source code. Resilient to whitespace, parameterization, or
+// query builder changes — only the behavior matters.
 
 describe('health checker service filter (regression guard)', () => {
-  it('background health checker SQL still filters by active/null status', async () => {
-    const fs = await import('node:fs')
-    const source = fs.readFileSync(new URL('../src/health/checker.js', import.meta.url), 'utf8')
-    assert.ok(
-      source.includes("status = 'active' OR status IS NULL"),
-      'checker.js getServices() must filter by active/null status — do not remove this filter'
+  // Extract the getServices SQL from checker.js source (one-time, cached)
+  let getServicesSql
+  function loadGetServicesSql() {
+    if (getServicesSql) return getServicesSql
+    const source = readFileSync(
+      new URL('../src/health/checker.js', import.meta.url), 'utf8'
     )
+    // Match the getServices SQL between double quotes (the SQL uses single quotes internally)
+    const match = source.match(/getServices.*?"(SELECT[^"]*FROM\s+services\s+WHERE[^"]*)"/)
+
+    if (!match) throw new Error('Could not extract getServices SQL from checker.js')
+    getServicesSql = match[1].replace(/\s+/g, ' ').trim()
+    return getServicesSql
+  }
+
+  function createCheckerTestDb() {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE services (
+        id TEXT PRIMARY KEY,
+        url TEXT NOT NULL,
+        protocol TEXT NOT NULL DEFAULT 'L402',
+        http_method TEXT DEFAULT 'GET',
+        probe_body TEXT,
+        latency_p50_ms INTEGER,
+        consecutive_failures INTEGER DEFAULT 0,
+        registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+        x402_payment_valid INTEGER,
+        status TEXT DEFAULT 'active'
+      )
+    `)
+    return db
+  }
+
+  function insertService(db, id, status) {
+    db.prepare(
+      `INSERT INTO services (id, url, protocol, status) VALUES (?, ?, 'L402', ?)`
+    ).run(id, `https://${id}.example.com/api`, status)
+  }
+
+  it('returns active services', () => {
+    const db = createCheckerTestDb()
+    insertService(db, 'active1', 'active')
+    const rows = db.prepare(loadGetServicesSql()).all()
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].id, 'active1')
+  })
+
+  it('returns NULL-status services', () => {
+    const db = createCheckerTestDb()
+    insertService(db, 'null1', null)
+    const rows = db.prepare(loadGetServicesSql()).all()
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].id, 'null1')
+  })
+
+  it('excludes pending services', () => {
+    const db = createCheckerTestDb()
+    insertService(db, 'pending1', 'pending')
+    const rows = db.prepare(loadGetServicesSql()).all()
+    assert.equal(rows.length, 0)
+  })
+
+  it('excludes rejected services', () => {
+    const db = createCheckerTestDb()
+    insertService(db, 'rejected1', 'rejected')
+    const rows = db.prepare(loadGetServicesSql()).all()
+    assert.equal(rows.length, 0)
+  })
+
+  it('returns only active/null when mixed statuses exist', () => {
+    const db = createCheckerTestDb()
+    insertService(db, 'a1', 'active')
+    insertService(db, 'a2', 'active')
+    insertService(db, 'n1', null)
+    insertService(db, 'p1', 'pending')
+    insertService(db, 'r1', 'rejected')
+    const rows = db.prepare(loadGetServicesSql()).all()
+    assert.equal(rows.length, 3, 'should return exactly 3 services (2 active + 1 null)')
+    const ids = rows.map(r => r.id).sort()
+    assert.deepEqual(ids, ['a1', 'a2', 'n1'])
+    // status column is not in SELECT — verify by confirming excluded IDs are absent
+    assert.ok(!ids.includes('p1'), 'pending service must not be returned')
+    assert.ok(!ids.includes('r1'), 'rejected service must not be returned')
   })
 })
 

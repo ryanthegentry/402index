@@ -114,9 +114,9 @@ export async function verifyL402(url, httpMethod = 'GET', probeBody = '{}') {
     }
 
     const hasMacaroon = isValidMacaroon(macaroon)
-    const hasInvoice = !!invoice && /^ln(bc|tb|bcrt)/i.test(invoice)
     const invoiceValid = isValidInvoice(invoice)
-    const invoiceLengthOk = !!invoice && invoice.length >= 100
+    const hasInvoice = invoiceValid
+    const invoiceLengthOk = invoiceValid
 
     // Gate on macaroon + invoice validity (aligned with detectProtocol)
     if (!hasMacaroon || !invoiceValid) {
