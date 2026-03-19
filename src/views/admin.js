@@ -630,7 +630,7 @@ export function adminPage() {
       // Zero-result searches
       if (d.zeroResults && d.zeroResults.length > 0) {
         html += '<h3 style="margin:24px 0 12px">Zero-Result Searches (7 days)</h3>'
-        html += '<p style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Unmet demand — what people search for but don\u0027t find.</p>'
+        html += '<p style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Unmet demand — what people search for but do not find.</p>'
         html += '<table class="admin-table"><thead><tr><th>Search Term</th><th>Filters</th><th>Count</th></tr></thead><tbody>'
         for (var z = 0; z < d.zeroResults.length; z++) {
           var zr = d.zeroResults[z]
