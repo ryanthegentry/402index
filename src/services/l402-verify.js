@@ -118,15 +118,41 @@ export async function verifyL402(url, httpMethod = 'GET', probeBody = '{}') {
     const invoiceValid = isValidInvoice(invoice)
     const invoiceLengthOk = !!invoice && invoice.length >= 100
 
+    // Gate on macaroon + invoice validity (aligned with detectProtocol)
+    if (!hasMacaroon || !invoiceValid) {
+      const reasons = []
+      if (!hasMacaroon) {
+        reasons.push(`Invalid macaroon/token: got "${(macaroon || '').substring(0, 50)}" (${macaroon ? macaroon.length : 0} chars). Must be base64-encoded, minimum 10 characters.`)
+      }
+      if (!invoiceValid) {
+        if (!invoice) {
+          reasons.push('Invoice is missing from WWW-Authenticate header.')
+        } else if (!/^ln(bc|tb|bcrt)/i.test(invoice)) {
+          reasons.push(`Invalid invoice prefix: got "${invoice.substring(0, 30)}". Must start with lnbc, lntb, or lnbcrt.`)
+        } else if (invoice.length < 100) {
+          reasons.push(`Invoice too short: got ${invoice.length} chars. BOLT11 invoices must be at least 100 characters.`)
+        } else {
+          reasons.push('Invalid invoice format: contains non-alphanumeric characters.')
+        }
+      }
+      return fail(reasons.join(' '), {
+        httpStatus,
+        hasWwwAuthenticate: true,
+        scheme,
+        hasMacaroon,
+        hasInvoice,
+      })
+    }
+
     return {
       valid: true,
       httpStatus,
       hasWwwAuthenticate: true,
       scheme,
-      hasMacaroon,
-      hasInvoice,
-      invoiceValid,
-      invoiceLengthOk,
+      hasMacaroon: true,
+      hasInvoice: true,
+      invoiceValid: true,
+      invoiceLengthOk: true,
     }
   }
 

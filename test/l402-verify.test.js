@@ -189,7 +189,7 @@ describe('verifyL402', () => {
 
   it('returns valid for LSAT scheme', async () => {
     global.fetch = async () => mockResponse(402, {
-      'www-authenticate': 'LSAT macaroon="dGVzdA==", invoice="lntb500n1ptestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+      'www-authenticate': 'LSAT macaroon="dGVzdF9tYWNhcm9vbg==", invoice="lntb500n1ptestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
     })
     const result = await verifyL402('https://example.com/api')
     assert.equal(result.valid, true)
@@ -255,24 +255,24 @@ describe('verifyL402', () => {
     assert.ok(result.error.includes('private') || result.error.includes('blocked'))
   })
 
-  it('returns valid=true with hasMacaroon=false when macaroon is missing', async () => {
+  it('returns valid=false when macaroon is missing', async () => {
     global.fetch = async () => mockResponse(402, {
       'www-authenticate': 'L402 invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
     })
     const result = await verifyL402('https://example.com/api')
-    assert.equal(result.valid, true)
+    assert.equal(result.valid, false)
     assert.equal(result.hasMacaroon, false)
-    assert.equal(result.hasInvoice, true)
+    assert.ok(result.error.includes('macaroon'), 'error should mention macaroon')
   })
 
-  it('returns valid=true with hasInvoice=false when invoice is missing', async () => {
+  it('returns valid=false when invoice is missing', async () => {
     global.fetch = async () => mockResponse(402, {
       'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu"',
     })
     const result = await verifyL402('https://example.com/api')
-    assert.equal(result.valid, true)
+    assert.equal(result.valid, false)
     assert.equal(result.hasInvoice, false)
-    assert.equal(result.hasMacaroon, true)
+    assert.ok(result.error.includes('Invoice') || result.error.includes('invoice'), 'error should mention invoice')
   })
 
   it('follows a 307 redirect to a 402 endpoint', async () => {
@@ -354,5 +354,54 @@ describe('verifyL402', () => {
     const result = await verifyL402('https://example.com/api', 'POST')
     assert.equal(result.valid, true)
     assert.equal(capturedBody, '{}')
+  })
+
+  it('returns valid=false when macaroon is invalid (too short, e.g. "probe")', async () => {
+    global.fetch = async () => mockResponse(402, {
+      'www-authenticate': 'L402 token="probe", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+    })
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, false)
+    assert.equal(result.hasMacaroon, false)
+    assert.ok(result.error.includes('probe'), 'error should include actual token value for debugging')
+    assert.ok(result.error.includes('5'), 'error should include token length')
+  })
+
+  it('returns valid=false when invoice is too short', async () => {
+    global.fetch = async () => mockResponse(402, {
+      'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1234"',
+    })
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('short') || result.error.includes('chars'), 'error should mention length issue')
+  })
+
+  it('returns valid=false when invoice has wrong prefix', async () => {
+    const badInvoice = 'bc1' + 'a'.repeat(200)
+    global.fetch = async () => mockResponse(402, {
+      'www-authenticate': `L402 macaroon="AgELYmVuY2FybWFu", invoice="${badInvoice}"`,
+    })
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('prefix') || result.error.includes('lnbc'), 'error should mention BOLT11 prefix')
+  })
+
+  it('error includes actual macaroon value for provider debugging', async () => {
+    global.fetch = async () => mockResponse(402, {
+      'www-authenticate': 'L402 token="probe", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+    })
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, false)
+    assert.ok(result.error.includes('"probe"'), 'error should contain the quoted token value')
+  })
+
+  it('returns valid=true with token= field when token is valid base64', async () => {
+    global.fetch = async () => mockResponse(402, {
+      'www-authenticate': 'L402 token="MDAxM2xvY2F0aW9uIDMwLzE3", invoice="lnbc1000n1pjtestaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+    })
+    const result = await verifyL402('https://example.com/api')
+    assert.equal(result.valid, true)
+    assert.equal(result.hasMacaroon, true)
+    assert.equal(result.hasInvoice, true)
   })
 })
