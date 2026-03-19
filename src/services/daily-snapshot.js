@@ -178,6 +178,13 @@ export function getSnapshots(database = db, days = 30) {
  * Query data for the reliability scoreboard (provider-level and endpoint-level).
  */
 export function getScoreboardData(database = db) {
+  // Health multiplier: healthy endpoints contribute full score, degraded half, down/unknown zero
+  function healthMultiplier(status) {
+    if (status === 'healthy') return 1.0
+    if (status === 'degraded') return 0.5
+    return 0.0
+  }
+
   // Endpoint-level data
   const endpoints = database.prepare(
     `SELECT id, name, url, protocol, reliability_score, latency_p50_ms, health_status, price_sats, price_usd
@@ -189,17 +196,24 @@ export function getScoreboardData(database = db) {
      LIMIT 100`
   ).all()
 
+  // Add effective_score to each endpoint and re-sort
+  for (const ep of endpoints) {
+    ep.effective_score = Math.round(ep.reliability_score * healthMultiplier(ep.health_status) * 10) / 10
+  }
+  endpoints.sort((a, b) => b.effective_score - a.effective_score)
+
   // Build provider-level aggregation in JS
   const providerMap = new Map()
   for (const svc of endpoints) {
     let host
     try { host = new URL(svc.url).hostname } catch { continue }
     if (!providerMap.has(host)) {
-      providerMap.set(host, { provider: host, protocols: new Set(), scores: [], latencies: [], healthyCount: 0, totalCount: 0 })
+      providerMap.set(host, { provider: host, protocols: new Set(), scores: [], effectiveScores: [], latencies: [], healthyCount: 0, totalCount: 0 })
     }
     const p = providerMap.get(host)
     p.protocols.add(svc.protocol)
     p.scores.push(svc.reliability_score)
+    p.effectiveScores.push(svc.effective_score)
     if (svc.latency_p50_ms != null) p.latencies.push(svc.latency_p50_ms)
     if (svc.health_status === 'healthy') p.healthyCount++
     p.totalCount++
@@ -211,11 +225,12 @@ export function getScoreboardData(database = db) {
       provider: p.provider,
       protocols: [...p.protocols],
       avg_reliability: Math.round((p.scores.reduce((a, b) => a + b, 0) / p.scores.length) * 10) / 10,
+      avg_effective: Math.round((p.effectiveScores.reduce((a, b) => a + b, 0) / p.effectiveScores.length) * 10) / 10,
       endpoints: p.totalCount,
       healthy_pct: Math.round((p.healthyCount / p.totalCount) * 100),
       avg_latency: p.latencies.length > 0 ? Math.round(p.latencies.reduce((a, b) => a + b, 0) / p.latencies.length) : null,
     }))
-    .sort((a, b) => b.avg_reliability - a.avg_reliability)
+    .sort((a, b) => b.avg_effective - a.avg_effective)
     .slice(0, 50)
 
   return { providers, endpoints }
@@ -310,35 +325,39 @@ export function getCategoryGapData(database = db) {
      WHERE ${ACTIVE_FILTER}
        AND health_status = 'healthy'
        AND category IS NOT NULL
+       AND category != 'uncategorized'
        AND is_template = 0 AND is_demo = 0
      GROUP BY category, protocol
      ORDER BY count DESC`
   ).all()
 
-  // Pivot into grid
+  // Consolidate subcategories: "crypto/defi" → "crypto", "ai/llm" → "ai"
   const categoryMap = new Map()
   for (const row of rows) {
-    if (!categoryMap.has(row.category)) {
-      categoryMap.set(row.category, { category: row.category, L402: 0, x402: 0, MPP: 0, total: 0 })
+    const parentCategory = row.category.split('/')[0]
+    if (!categoryMap.has(parentCategory)) {
+      categoryMap.set(parentCategory, { category: parentCategory, L402: 0, x402: 0, MPP: 0, total: 0 })
     }
-    const entry = categoryMap.get(row.category)
+    const entry = categoryMap.get(parentCategory)
     if (entry[row.protocol] !== undefined) entry[row.protocol] += row.count
     entry.total += row.count
   }
 
-  // Filter: min 3 total healthy endpoints
+  // Filter: min 10 total healthy endpoints
   const grid = [...categoryMap.values()]
-    .filter(c => c.total >= 3)
+    .filter(c => c.total >= 10)
     .sort((a, b) => b.total - a.total)
 
-  // Find opportunity gaps (zero or very few endpoints)
+  // Find opportunity gaps — only for categories where at least one protocol has ≥20
   const opportunities = []
   const protocols = ['L402', 'x402', 'MPP']
   for (const cat of grid) {
+    const maxProto = Math.max(cat.L402, cat.x402, cat.MPP)
+    if (maxProto < 20) continue
     for (const proto of protocols) {
       if (cat[proto] === 0) {
         opportunities.push({ category: cat.category, protocol: proto, count: 0 })
-      } else if (cat[proto] <= 2 && cat.total >= 10) {
+      } else if (cat[proto] <= 2) {
         opportunities.push({ category: cat.category, protocol: proto, count: cat[proto] })
       }
     }

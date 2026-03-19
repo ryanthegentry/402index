@@ -44,6 +44,7 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
       <div class="stats-chart-container">
         <canvas id="latency-chart" height="300"></canvas>
       </div>
+      <p class="stats-chart-note">Note: x402 endpoints dominate the histogram due to volume (~12,000+ vs ~200 each for L402 and MPP). See the per-protocol summary table below for normalized comparisons.</p>
       <div class="table-wrap" style="margin-top:24px">
         <table class="stats-table stats-table-compact">
           <thead><tr><th>Protocol</th><th>Median Latency</th><th>p90 Latency</th><th>% Under 500ms</th></tr></thead>
