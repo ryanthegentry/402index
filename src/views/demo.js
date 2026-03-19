@@ -10,7 +10,7 @@ function pct(part, total) {
   return Math.round((part / total) * 100) + '%'
 }
 
-export function demoPage({ stats, probeSample }) {
+export function demoPage({ stats, probeSample, featuredServices = [] }) {
   const s = stats
   const probe = probeSample
 
@@ -37,6 +37,7 @@ export function demoPage({ stats, probeSample }) {
         <div class="demo-stat-card">
           <div class="demo-stat-number">${formatNumber(s.distinctProviders)}</div>
           <div class="demo-stat-label">Distinct Providers</div>
+          <div class="demo-stat-sub">${formatNumber(s.verifiedProviders)} Verified</div>
         </div>
       </div>
 
@@ -379,11 +380,11 @@ Content-Type: application/json
       debounceTimer = setTimeout(doSearch, 300)
     }
 
-    searchInput.addEventListener('input', debouncedSearch)
-    protocolSelect.addEventListener('change', doSearch)
-    healthSelect.addEventListener('change', doSearch)
-    categorySelect.addEventListener('change', doSearch)
-    sortSelect.addEventListener('change', doSearch)
+    searchInput.addEventListener('input', function() { showingFeatured = false; debouncedSearch() })
+    protocolSelect.addEventListener('change', function() { showingFeatured = false; doSearch() })
+    healthSelect.addEventListener('change', function() { showingFeatured = false; doSearch() })
+    categorySelect.addEventListener('change', function() { showingFeatured = false; doSearch() })
+    sortSelect.addEventListener('change', function() { showingFeatured = false; doSearch() })
 
     // Copy MCP query
     copyBtn.addEventListener('click', function(e) {
@@ -394,8 +395,32 @@ Content-Type: application/json
       })
     })
 
-    // Initial search
-    doSearch()
+    // Initial view: show curated featured endpoints (server-rendered data)
+    var featuredData = ${JSON.stringify(featuredServices)}
+    var showingFeatured = true
+
+    function showFeatured() {
+      if (featuredData.length > 0) {
+        renderResults({ services: featuredData, total: featuredData.length })
+        var header = resultsContainer.querySelector('.demo-results-header')
+        if (header) header.textContent = 'Featured endpoints across L402, x402, and MPP'
+      } else {
+        // Fallback: fetch healthy endpoints if no featured data
+        fetch('/api/v1/services?health=healthy&sort=reliability&limit=10')
+          .then(function(r) { return r.json() })
+          .then(function(data) { renderResults(data) })
+          .catch(function() {})
+      }
+    }
+
+    function switchToLiveSearch() {
+      if (showingFeatured) {
+        showingFeatured = false
+        doSearch()
+      }
+    }
+
+    showFeatured()
 
     // ─── Flow Protocol Toggle ──────────────────────────────────────────
 

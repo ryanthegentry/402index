@@ -1,7 +1,7 @@
 {
   "name": "402index",
   "version": "0.1.0",
-  "description": "Protocol-agnostic directory of paid APIs (L402 + x402) for AI agents",
+  "description": "Protocol-agnostic directory of paid APIs (L402 + x402 + MPP) for AI agents",
   "type": "module",
   "main": "src/server.js",
   "scripts": {

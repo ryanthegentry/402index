@@ -23,6 +23,14 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1)
 }
 
+// ─── Cache-Control Headers ───────────────────────────────────────────────────
+// Homepage: 5 min (stats change on health checker cycle)
+app.use(/^\/$/, (req, res, next) => { res.set('Cache-Control', 'public, max-age=300'); next() })
+// Static-ish pages: 1 hour
+app.use(/^\/(about|api-docs|opportunities)$/, (req, res, next) => { res.set('Cache-Control', 'public, max-age=3600'); next() })
+// API reads: 1 min (not register, probe-live, webhooks, or admin)
+app.use(/^\/api\/v1\/(services|health|categories|opportunities)/, (req, res, next) => { res.set('Cache-Control', 'public, max-age=60'); next() })
+
 // Registration endpoint: JSON body parsing + IP-based rate limit (10/hour)
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,

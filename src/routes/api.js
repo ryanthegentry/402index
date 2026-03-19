@@ -136,9 +136,9 @@ router.get('/health', (req, res) => {
   // Distinct services (by hostname) and providers — computed in JS since SQLite
   // lacks a reliable URL hostname extractor. Hostname = provider key.
   const allServices = db.prepare(`SELECT url, protocol, is_template, is_demo FROM services ${ACTIVE_FILTER}`).all()
-  const hostnameSets = { total: new Set(), L402: new Set(), x402: new Set() }
-  const rawProviders = { total: new Set(), L402: new Set(), x402: new Set() }
-  const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set() }
+  const hostnameSets = { total: new Set(), L402: new Set(), x402: new Set(), MPP: new Set() }
+  const rawProviders = { total: new Set(), L402: new Set(), x402: new Set(), MPP: new Set() }
+  const filteredProviders = { total: new Set(), L402: new Set(), x402: new Set(), MPP: new Set() }
 
   for (const svc of allServices) {
     const host = extractHostname(svc.url)
