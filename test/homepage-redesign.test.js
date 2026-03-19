@@ -13,7 +13,8 @@ import { buildProbeSample } from '../src/routes/pages.js'
 const sampleStats = {
   totalIndexed: 14250,
   verified: 900,
-  distinctProviders: 169,
+  distinctProviders: 558,
+  verifiedProviders: 185,
   healthy: 11899,
   degraded: 1938,
   down: 411,
@@ -393,5 +394,159 @@ describe('Change 6: Mobile optimization', () => {
 
   it('desktop protocol cards use 3-column grid', () => {
     assert.ok(styles.includes('repeat(3, 1fr)'), 'desktop should have 3-column grid')
+  })
+})
+
+// ─── Launch day: 4 stat cards ─────────────────────────────────────────────
+
+describe('Launch day: 4 stat cards', () => {
+  const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+
+  it('renders 4 demo-stat-card elements', () => {
+    const matches = html.match(/demo-stat-card/g)
+    // 4 cards × class usage = at least 4 matches (some have demo-stat-verified too)
+    assert.ok(matches.length >= 4, `expected at least 4 stat cards, got ${matches.length}`)
+  })
+
+  it('shows Providers Indexed card with all-providers number', () => {
+    assert.ok(html.includes('Providers Indexed'), 'should have Providers Indexed label')
+    assert.ok(html.includes('558'), 'should show all-providers count')
+  })
+
+  it('shows Providers Verified card with verified-providers number', () => {
+    assert.ok(html.includes('Providers Verified'), 'should have Providers Verified label')
+    assert.ok(html.includes('185'), 'should show verified-providers count')
+  })
+
+  it('does not have demo-stat-sub element', () => {
+    assert.ok(!html.includes('demo-stat-sub'), 'should not have subtitle element')
+  })
+
+  it('stat cards grid uses 4 columns', () => {
+    assert.ok(styles.includes('repeat(4, 1fr)'), 'should have 4-column grid for stat cards')
+  })
+
+  it('stat cards collapse to 2 columns on mobile', () => {
+    assert.ok(styles.includes('.demo-stat-cards { grid-template-columns: repeat(2, 1fr)'), 'mobile should use 2-column grid')
+  })
+})
+
+// ─── Launch day: Featured endpoints ───────────────────────────────────────
+
+describe('Launch day: Featured endpoints', () => {
+  it('FEATURED_IDS array is exported from pages route and has 10 entries', async () => {
+    // Read the source file directly to verify
+    const { readFileSync } = await import('node:fs')
+    const source = readFileSync(new URL('../src/routes/pages.js', import.meta.url), 'utf8')
+    const idMatches = source.match(/FEATURED_IDS\s*=\s*\[([\s\S]*?)\]/)?.[1]
+    assert.ok(idMatches, 'should have FEATURED_IDS array')
+    const ids = idMatches.match(/['"]([\w-]+)['"]/g)
+    assert.equal(ids.length, 10, `expected 10 featured IDs, got ${ids.length}`)
+  })
+
+  it('FEATURED_IDS contains production IDs (spot check)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const source = readFileSync(new URL('../src/routes/pages.js', import.meta.url), 'utf8')
+    // L402 Apps
+    assert.ok(source.includes('a63c1e77-cab0-4740-8d82-5a6fe451794f'), 'should have L402 Apps ID')
+    // AgentMail MPP
+    assert.ok(source.includes('8464d51f-706f-4fd8-b377-acbe5075624f'), 'should have AgentMail MPP ID')
+    // Anthropic
+    assert.ok(source.includes('bdbf6a07-9108-4fe4-b35b-eea76b824d3e'), 'should have Anthropic ID')
+  })
+
+  it('featured query passes featuredServices to demoPage', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample, featuredServices: [{ id: 'test-1', name: 'Test', url: 'https://test.com', protocol: 'L402', health_status: 'healthy' }] })
+    assert.ok(html.includes('test-1'), 'should embed featured service data in page')
+  })
+
+  it('fallback shows placeholder when fewer than 3 featured services', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample, featuredServices: [] })
+    assert.ok(html.includes('Featured endpoints load from production data'), 'should show fallback message')
+  })
+})
+
+// ─── Launch day: View Details button ──────────────────────────────────────
+
+describe('Launch day: View Details button', () => {
+  it('renderResults template includes demo-view-details-btn', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    // The renderResults function template is in the script
+    assert.ok(html.includes('demo-view-details-btn'), 'should have View Details button class')
+  })
+
+  it('View Details href includes /service/ path', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    assert.ok(html.includes("href=\"/service/"), 'should have /service/ link in template')
+  })
+
+  it('View Details link has target="_blank"', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    assert.ok(html.includes('target="_blank"'), 'should have target="_blank" attribute')
+  })
+
+  it('View Details button CSS exists', () => {
+    assert.ok(styles.includes('.demo-view-details-btn'), 'should have View Details CSS')
+  })
+})
+
+// ─── Launch day: Twin panel layout ────────────────────────────────────────
+
+describe('Launch day: Twin panel layout', () => {
+  const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+
+  it('demo-twin-panel wrapper exists', () => {
+    assert.ok(html.includes('demo-twin-panel'), 'should have twin panel wrapper')
+  })
+
+  it('Agent Discovery and Live Health Check are children of demo-twin-panel', () => {
+    const twinStart = html.indexOf('demo-twin-panel')
+    const twinEnd = html.indexOf('</div>', html.indexOf('demo-probe-log') + 20)
+    const twinSection = html.substring(twinStart, twinEnd)
+    assert.ok(twinSection.includes('demo-search'), 'search should be inside twin panel')
+    assert.ok(twinSection.includes('demo-probe'), 'probe should be inside twin panel')
+  })
+
+  it('Payment Flow is NOT inside demo-twin-panel', () => {
+    const twinEnd = html.indexOf('</div>', html.indexOf('demo-probe-log') + 20)
+    const afterTwin = html.substring(twinEnd)
+    assert.ok(afterTwin.includes('demo-flow'), 'flow should be after twin panel')
+  })
+
+  it('CSS contains 1fr 1fr grid for demo-twin-panel', () => {
+    assert.ok(styles.includes('grid-template-columns: 1fr 1fr'), 'should have side-by-side grid')
+  })
+
+  it('mobile CSS has single column for demo-twin-panel', () => {
+    // Check that there's a responsive rule collapsing to 1fr
+    const mobileIdx = styles.indexOf('max-width: 1023px')
+    assert.ok(mobileIdx > 0, 'should have 1023px breakpoint')
+    const nearbyStyles = styles.substring(mobileIdx, mobileIdx + 200)
+    assert.ok(nearbyStyles.includes('grid-template-columns: 1fr'), 'should collapse to single column')
+  })
+})
+
+// ─── Launch day: og:title fix ─────────────────────────────────────────────
+
+describe('Launch day: og:title fix', () => {
+  it('homepage title is "402 Index" not "402 Index — 402 Index"', () => {
+    const html = layout('402 Index', '')
+    assert.ok(html.includes('<title>402 Index</title>'), 'homepage title should not duplicate')
+    assert.ok(!html.includes('402 Index — 402 Index'), 'should not have duplicated title')
+  })
+
+  it('subpage title is "About — 402 Index"', () => {
+    const html = layout('About', '')
+    assert.ok(html.includes('<title>About — 402 Index</title>'), 'subpage title should have separator')
+  })
+
+  it('homepage og:title is "402 Index"', () => {
+    const html = layout('402 Index', '')
+    assert.ok(html.includes('og:title" content="402 Index"'), 'og:title should be just site name')
+  })
+
+  it('subpage og:title is "About — 402 Index"', () => {
+    const html = layout('About', '')
+    assert.ok(html.includes('og:title" content="About — 402 Index"'), 'og:title should include page name')
   })
 })

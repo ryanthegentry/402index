@@ -36,8 +36,11 @@ export function demoPage({ stats, probeSample, featuredServices = [] }) {
         </div>
         <div class="demo-stat-card">
           <div class="demo-stat-number">${formatNumber(s.distinctProviders)}</div>
-          <div class="demo-stat-label">Distinct Providers</div>
-          <div class="demo-stat-sub">${formatNumber(s.verifiedProviders)} Verified</div>
+          <div class="demo-stat-label">Providers Indexed</div>
+        </div>
+        <div class="demo-stat-card demo-stat-verified">
+          <div class="demo-stat-number">${formatNumber(s.verifiedProviders)}</div>
+          <div class="demo-stat-label">Providers Verified</div>
         </div>
       </div>
 
@@ -101,6 +104,7 @@ export function demoPage({ stats, probeSample, featuredServices = [] }) {
       </div>
     </section>
 
+    <div class="demo-twin-panel">
     <!-- ─── Panel 2: Interactive MCP Search ───────────────────────────── -->
     <section class="demo-panel demo-search">
       <h2>Agent Discovery</h2>
@@ -171,6 +175,7 @@ export function demoPage({ stats, probeSample, featuredServices = [] }) {
       </div>
       <div class="demo-probe-log" id="demo-probe-log"></div>
     </section>
+    </div>
 
     <!-- ─── Panel 4: Payment Flow Visualization ───────────────────────── -->
     <section class="demo-panel demo-flow">
@@ -325,7 +330,7 @@ Content-Type: application/json
         if (svc.price_usd != null) html += '<span class="demo-result-price">$' + svc.price_usd + '</span>'
         else if (svc.price_sats != null) html += '<span class="demo-result-price">' + svc.price_sats + ' sats</span>'
         html += '</div>'
-        html += '<div class="demo-result-url-row"><span class="demo-result-url">' + escapeHtmlClient(svc.url) + '</span><button class="demo-copy-url-btn" data-url="' + escapeHtmlClient(svc.url) + '">Copy URL</button></div>'
+        html += '<div class="demo-result-url-row"><span class="demo-result-url">' + escapeHtmlClient(svc.url) + '</span><button class="demo-copy-url-btn" data-url="' + escapeHtmlClient(svc.url) + '">Copy URL</button><a href="/service/' + escapeHtmlClient(svc.id) + '" class="demo-view-details-btn" target="_blank">View Details</a></div>'
         html += '</div>'
         html += '<div class="demo-result-detail" style="display:none">'
         html += '<div class="detail-row"><span class="detail-label">Provider</span><span class="detail-value">' + escapeHtmlClient(svc.provider || '—') + '</span></div>'
@@ -400,16 +405,13 @@ Content-Type: application/json
     var showingFeatured = true
 
     function showFeatured() {
-      if (featuredData.length > 0) {
+      if (featuredData.length >= 3) {
         renderResults({ services: featuredData, total: featuredData.length })
         var header = resultsContainer.querySelector('.demo-results-header')
         if (header) header.textContent = 'Featured endpoints across L402, x402, and MPP'
       } else {
-        // Fallback: fetch healthy endpoints if no featured data
-        fetch('/api/v1/services?health=healthy&sort=reliability&limit=10')
-          .then(function(r) { return r.json() })
-          .then(function(data) { renderResults(data) })
-          .catch(function() {})
+        // Fewer than 3 featured resolved (e.g. local dev DB) — show placeholder
+        resultsContainer.innerHTML = '<p class="demo-search-hint">Featured endpoints load from production data. Try searching above or <a href="/directory">browse the directory</a>.</p>'
       }
     }
 

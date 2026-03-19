@@ -146,19 +146,19 @@ router.get('/', (req, res) => {
 
   // Featured endpoints for Agent Discovery default view
   const FEATURED_IDS = [
-    // L402
-    '9918cf04-b69c-4bb5-8095-90aefcc0fdc2', // Mutinynet Faucet
-    'c0184ed2-33d1-44d9-a616-08c52622e838', // L402 Apps: Get APIs Directory
-    '35b96b0c-3109-4833-941e-c9e9960dfc0e', // Sats4AI: Image Generation
-    // x402
-    '8bb3e293-a7da-402d-9fa2-b953ecb882bb', // AgentMail: List all custom domains
-    'e985622f-25f0-49f0-89b4-d86153a1269e', // Fact verification — agentutil.net
-    '17686054-5a0b-469c-af5a-21448a8ac203', // URL metadata extraction — minifetch.com
-    'dcd7a505-3dd5-4b8b-8c42-8a78a7bc4082', // Nansen: Smart money net flow
-    // MPP
-    'd58c64de-45df-4666-926f-e8a66ef61c6b', // Anthropic: Create messages with Claude
-    '4e41d0be-34a3-4547-ab4a-94db04bdf3f3', // OpenAI: Chat completions
-    'a623a0cb-7cc0-45a0-9d4f-0a29c171b2b7', // Stripe Climate: Create a climate contribution
+    // L402 — 3 endpoints
+    'a63c1e77-cab0-4740-8d82-5a6fe451794f', // L402 Apps: Get APIs Directory (healthy, reliability 95)
+    'c2323cdb-8d35-44e1-a093-209beec8afa9', // Mutinynet Faucet (healthy, reliability 95)
+    '831e8bac-0197-426c-b826-500384f23673', // Sats4AI: File Conversion (healthy, reliability 95)
+    // x402 — 4 endpoints
+    '6a46b58c-8829-4e1b-adaa-fd4333f48bcf', // AgentMail: Create a draft email (healthy, reliability 95)
+    '71972e33-e5c0-47df-81c9-5c74bd600554', // Nansen: Find related wallets (healthy, reliability 100)
+    '9387a1ec-e775-491a-8c8a-159b76979625', // Nansen: Who bought/sold token (healthy, reliability 100)
+    'c467f0c6-db53-4f61-be26-999012092691', // Firecrawl web scraper (healthy, reliability 95)
+    // MPP — 3 endpoints
+    'bdbf6a07-9108-4fe4-b35b-eea76b824d3e', // Anthropic: Create messages with Claude (degraded, brand recognition)
+    '8464d51f-706f-4fd8-b377-acbe5075624f', // AgentMail: Create inbox (healthy, reliability 87)
+    '040a83af-438a-4683-ae85-d9154edfdf33', // AgentMail: Create pod (healthy, reliability 87)
   ]
   const placeholders = FEATURED_IDS.map(() => '?').join(',')
   const featuredServices = db.prepare(

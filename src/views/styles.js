@@ -627,7 +627,7 @@ export const styles = `
     /* Panel 1: Ecosystem */
     .demo-stat-cards {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 16px;
       margin-bottom: 24px;
     }
@@ -647,7 +647,6 @@ export const styles = `
     }
     .demo-stat-verified .demo-stat-number { color: var(--green); }
     .demo-stat-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
-    .demo-stat-sub { font-size: 11px; color: var(--green); margin-top: 2px; font-family: var(--mono); }
 
     .demo-protocol-compare {
       display: grid;
@@ -699,6 +698,33 @@ export const styles = `
     .demo-fill-unknown { background: var(--gray); }
     .demo-health-count { width: 60px; text-align: right; font-family: var(--mono); font-size: 12px; color: var(--text-bright); }
     .demo-last-checked { font-size: 11px; color: var(--text-muted); margin-top: 12px; }
+
+    /* Twin panel layout: search + probe side-by-side on desktop */
+    .demo-twin-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    .demo-twin-panel .demo-search {
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .demo-twin-panel .demo-probe {
+      position: sticky;
+      top: 24px;
+    }
+    @media (max-width: 1023px) {
+      .demo-twin-panel {
+        grid-template-columns: 1fr;
+      }
+      .demo-twin-panel .demo-search {
+        max-height: none;
+      }
+      .demo-twin-panel .demo-probe {
+        position: static;
+      }
+    }
 
     /* Panel 2: Search */
     .demo-search-form { margin-bottom: 16px; }
@@ -821,6 +847,20 @@ export const styles = `
       transition: background 0.15s, color 0.15s;
     }
     .demo-copy-url-btn:hover { background: var(--accent); color: var(--bg); }
+    .demo-view-details-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: var(--mono);
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.15s, color 0.15s;
+      text-decoration: none;
+    }
+    .demo-view-details-btn:hover { background: var(--accent); color: var(--bg); text-decoration: none; }
 
     /* Live Probe Section */
     .demo-probe-section { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 20px; }
@@ -1049,7 +1089,7 @@ export const styles = `
       /* Demo page responsive */
       .demo-header h1 { font-size: 20px; }
       .demo-subtitle { font-size: 13px; }
-      .demo-stat-cards { grid-template-columns: 1fr; }
+      .demo-stat-cards { grid-template-columns: repeat(2, 1fr); }
       .demo-stat-number { font-size: 20px; }
       .demo-stat-label { font-size: 11px; }
       .demo-protocol-compare { grid-template-columns: 1fr; }
