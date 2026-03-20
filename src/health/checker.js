@@ -448,7 +448,7 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
 }
 
 /** Check a single service: HTTP probe, classify result, persist. */
-async function checkService(service) {
+export async function checkService(service) {
   const { id, url, protocol, http_method, probe_body, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, x402_payment_valid: currentPaymentValid } = service
 
   // Per-host rate limiting: wait if we probed this host recently
@@ -468,8 +468,9 @@ async function checkService(service) {
     }
   }
 
-  // POST auto-detection for L402 and MPP (unified)
-  if ((protocol === 'L402' || protocol === 'MPP') &&
+  // POST auto-detection for L402, MPP, and x402
+  let effectiveResult = httpResult
+  if ((protocol === 'L402' || protocol === 'MPP' || protocol === 'x402') &&
       (!http_method || http_method === 'GET') &&
       classification.healthStatus !== 'healthy') {
     const shouldTryPost = (
@@ -488,6 +489,7 @@ async function checkService(service) {
             classification.checkStatus = 'healthy'
             classification.consecutiveFailures = 0
             persistHttpMethod().run({ id, http_method: 'POST' })
+            effectiveResult = postResult
           }
         }
       } catch {
@@ -501,16 +503,16 @@ async function checkService(service) {
   let x402FacilitatorReachable = null
   let x402AssetKnown = null
 
-  if (protocol === 'x402' && httpResult.httpStatus === 402) {
+  if (protocol === 'x402' && effectiveResult.httpStatus === 402) {
     // If we already determined payment validity and HEAD didn't include the header, preserve cached value
-    if (currentPaymentValid != null && !httpResult.paymentRequired) {
+    if (currentPaymentValid != null && !effectiveResult.paymentRequired) {
       x402PaymentValid = currentPaymentValid
     } else {
-      let paymentRequiredHeader = httpResult.paymentRequired
+      let paymentRequiredHeader = effectiveResult.paymentRequired
 
       // HEAD returned 402 but no PAYMENT-REQUIRED header — retry with GET.
       // Many x402 servers only include payment headers on content-bearing responses.
-      let v1BodyText = httpResult.responseBody // Body from performHttpCheck GET fallback
+      let v1BodyText = effectiveResult.responseBody // Body from performHttpCheck fallback
       if (!paymentRequiredHeader && (http_method || 'GET') !== 'POST') {
         try {
           const getRes = await fetch(url, {
@@ -572,7 +574,7 @@ async function checkService(service) {
 
   // Gap 1: x402 endpoints that don't return 402 should get payment_valid=0, not NULL.
   // NULL means "never checked" — 0 means "checked but paywall not working."
-  if (protocol === 'x402' && x402PaymentValid === null && !httpResult.errorMessage) {
+  if (protocol === 'x402' && x402PaymentValid === null && !effectiveResult.errorMessage) {
     x402PaymentValid = 0
   }
 
