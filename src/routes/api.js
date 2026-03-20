@@ -12,6 +12,7 @@ import { findOpportunities } from '../services/opportunities.js'
 import { discoverProbeConfig } from '../services/wellknown-discovery.js'
 import { getSnapshots } from '../services/daily-snapshot.js'
 import { openapiSpec, generateMarkdownDocs } from '../openapi.js'
+import { initiateClaim, verifyClaim, editService } from '../services/domain-verify.js'
 
 const router = Router()
 
@@ -739,6 +740,52 @@ router.delete('/webhooks/:id', (req, res) => {
     if (err.message.includes('not found')) return res.status(404).json({ error: err.message })
     if (err.message.includes('Unauthorized')) return res.status(401).json({ error: err.message })
     res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Domain Verification ────────────────────────────────────────────────────
+
+// POST /api/v1/claim — Initiate a domain claim
+router.post('/claim', (req, res) => {
+  try {
+    const { domain, contact_email } = req.body || {}
+    const result = initiateClaim(domain, contact_email)
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error })
+    }
+    return res.status(result.status).json(result.data)
+  } catch (err) {
+    console.error('[claim] Error:', err.message)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// POST /api/v1/claim/verify — Verify a pending domain claim
+router.post('/claim/verify', async (req, res) => {
+  try {
+    const { domain } = req.body || {}
+    const result = await verifyClaim(domain)
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error })
+    }
+    return res.status(result.status).json(result.data)
+  } catch (err) {
+    console.error('[claim/verify] Error:', err.message)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// PATCH /api/v1/services/:id — Edit a listing by verified domain owner
+router.patch('/services/:id', (req, res) => {
+  try {
+    const result = editService(req.params.id, req.body || {})
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error })
+    }
+    return res.status(result.status).json(result.data)
+  } catch (err) {
+    console.error('[services/patch] Error:', err.message)
+    return res.status(500).json({ error: 'Internal server error' })
   }
 })
 

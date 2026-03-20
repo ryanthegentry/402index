@@ -427,6 +427,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_daily_snapshots_date ON daily_snapshots(snapshot_date);
 `)
 
+// ─── Domain Claims ──────────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS domain_claims (
+    id TEXT PRIMARY KEY,
+    domain TEXT NOT NULL UNIQUE,
+    verification_token TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK(status IN ('pending', 'verified', 'expired')),
+    claimed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    verified_at TEXT,
+    expires_at TEXT NOT NULL,
+    last_check_at TEXT,
+    contact_email TEXT
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_domain_claims_domain ON domain_claims(domain);
+  CREATE INDEX IF NOT EXISTS idx_domain_claims_status ON domain_claims(status);
+`)
+
 // ─── Query Log ──────────────────────────────────────────────────────────────
 
 db.exec(`
