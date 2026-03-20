@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'crypto'
+import { randomBytes, randomUUID, timingSafeEqual } from 'crypto'
 import db from '../db.js'
 import { isBlockedScheme, resolveAndCheck } from '../health/checker.js'
 
@@ -12,6 +12,14 @@ const stmts = {}
 function stmt(key, sql) {
   if (!stmts[key]) stmts[key] = db.prepare(sql)
   return stmts[key]
+}
+
+/**
+ * Constant-time token comparison to prevent timing attacks.
+ */
+function tokensMatch(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b))
 }
 
 const MAX_LENGTHS = { name: 200, description: 2000, category: 100, payment_asset: 50, payment_network: 50 }
@@ -85,10 +93,10 @@ export function initiateClaim(domain, contactEmail) {
     return { status: 200, data }
   }
 
-  // Expired claims get replaced
-  if (existing && existing.status === 'expired') {
-    stmt('replaceExpiredClaim',
-      "UPDATE domain_claims SET verification_token = ?, status = 'pending', expires_at = ?, contact_email = ?, claimed_at = datetime('now'), verified_at = NULL WHERE domain = ? AND status = 'expired'"
+  // Expired or revoked claims get replaced
+  if (existing && (existing.status === 'expired' || existing.status === 'revoked')) {
+    stmt('replaceExpiredOrRevokedClaim',
+      "UPDATE domain_claims SET verification_token = ?, status = 'pending', expires_at = ?, contact_email = ?, claimed_at = datetime('now'), verified_at = NULL WHERE domain = ? AND status IN ('expired', 'revoked')"
     ).run(token, expiresAt, contactEmail || null, normalizedDomain)
     return { status: 201, data }
   }
@@ -181,6 +189,13 @@ export async function verifyClaim(domain, { fetchFn = fetch } = {}) {
     return { error: `Verification URL returned HTTP ${response.status}`, status: 422 }
   }
 
+  // Pre-check Content-Length if available to avoid reading oversized responses into memory.
+  // Note: streaming responses without Content-Length still fall through to the post-read check.
+  const contentLength = response.headers?.get?.('content-length')
+  if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_BYTES) {
+    return { error: 'Verification file exceeds maximum size of 1KB', status: 422 }
+  }
+
   // Read response body with size limit
   let body
   try {
@@ -193,9 +208,9 @@ export async function verifyClaim(domain, { fetchFn = fetch } = {}) {
     return { error: 'Verification file exceeds maximum size of 1KB', status: 422 }
   }
 
-  // Compare token — exact match after trimming whitespace
+  // Compare token — constant-time comparison to prevent timing attacks
   const receivedToken = body.trim()
-  if (receivedToken !== claim.verification_token) {
+  if (!tokensMatch(receivedToken, claim.verification_token)) {
     return { error: 'Token mismatch. The verification file content does not match the expected token.', status: 422 }
   }
 
@@ -238,8 +253,8 @@ export function editService(serviceId, { domain, verification_token, ...updates 
     return { error: 'No verified claim for this domain', status: 403 }
   }
 
-  // Verify token
-  if (claim.verification_token !== verification_token) {
+  // Verify token — constant-time comparison
+  if (!tokensMatch(claim.verification_token, verification_token)) {
     return { error: 'Invalid verification token', status: 403 }
   }
 
@@ -272,6 +287,27 @@ export function editService(serviceId, { domain, verification_token, ...updates 
     }
   }
 
+  // Numeric validation for price fields
+  if (fieldsToUpdate.price_usd !== undefined) {
+    if (typeof fieldsToUpdate.price_usd !== 'number' || !Number.isFinite(fieldsToUpdate.price_usd)) {
+      return { error: 'price_usd must be a number', status: 400 }
+    }
+    if (fieldsToUpdate.price_usd < 0) {
+      return { error: 'price_usd must be non-negative', status: 400 }
+    }
+  }
+  if (fieldsToUpdate.price_sats !== undefined) {
+    if (typeof fieldsToUpdate.price_sats !== 'number' || !Number.isFinite(fieldsToUpdate.price_sats)) {
+      return { error: 'price_sats must be a number', status: 400 }
+    }
+    if (fieldsToUpdate.price_sats < 0) {
+      return { error: 'price_sats must be non-negative', status: 400 }
+    }
+    if (!Number.isInteger(fieldsToUpdate.price_sats)) {
+      return { error: 'price_sats must be an integer', status: 400 }
+    }
+  }
+
   if (Object.keys(fieldsToUpdate).length === 0) {
     return { error: 'No valid fields to update', status: 400 }
   }
@@ -287,4 +323,48 @@ export function editService(serviceId, { domain, verification_token, ...updates 
   const updated = db.prepare('SELECT * FROM services WHERE id = ?').get(serviceId)
 
   return { status: 200, data: updated }
+}
+
+/**
+ * Revoke a verified domain claim. Requires the current token to authorize.
+ */
+export function revokeClaim(domain, verificationToken) {
+  if (!domain || !verificationToken) {
+    return { error: 'domain and verification_token are required', status: 400 }
+  }
+
+  const error = validateDomain(domain)
+  if (error) return { error, status: 400 }
+
+  const normalizedDomain = domain.trim().toLowerCase()
+
+  const claim = stmt('getClaimByDomain',
+    'SELECT * FROM domain_claims WHERE domain = ?'
+  ).get(normalizedDomain)
+
+  if (!claim) {
+    return { error: 'No claim found for this domain', status: 404 }
+  }
+
+  if (claim.status !== 'verified') {
+    return { error: 'No verified claim for this domain', status: 403 }
+  }
+
+  // Constant-time token comparison
+  if (!tokensMatch(claim.verification_token, verificationToken)) {
+    return { error: 'Invalid verification token', status: 403 }
+  }
+
+  stmt('revokeClaim',
+    "UPDATE domain_claims SET status = 'revoked' WHERE domain = ? AND status = 'verified'"
+  ).run(normalizedDomain)
+
+  return {
+    status: 200,
+    data: {
+      domain: normalizedDomain,
+      status: 'revoked',
+      message: 'Domain claim revoked. Initiate a new claim to re-verify.',
+    },
+  }
 }

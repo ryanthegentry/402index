@@ -446,6 +446,45 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_domain_claims_status ON domain_claims(status);
 `)
 
+// Migration: expand domain_claims status CHECK to include 'revoked'
+try {
+  const needsMigration = (() => {
+    try {
+      db.exec("INSERT INTO domain_claims (id, domain, verification_token, status, expires_at) VALUES ('__dc_test__', '__dc_test__', 'x', 'revoked', datetime('now'))")
+      db.exec("DELETE FROM domain_claims WHERE id = '__dc_test__'")
+      return false
+    } catch {
+      return true
+    }
+  })()
+
+  if (needsMigration) {
+    console.log('[db] Migrating domain_claims: expanding status CHECK to include revoked...')
+    db.exec(`
+      CREATE TABLE domain_claims_new (
+        id TEXT PRIMARY KEY,
+        domain TEXT NOT NULL UNIQUE,
+        verification_token TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending'
+          CHECK(status IN ('pending', 'verified', 'expired', 'revoked')),
+        claimed_at TEXT NOT NULL DEFAULT (datetime('now')),
+        verified_at TEXT,
+        expires_at TEXT NOT NULL,
+        last_check_at TEXT,
+        contact_email TEXT
+      );
+      INSERT INTO domain_claims_new SELECT * FROM domain_claims;
+      DROP TABLE domain_claims;
+      ALTER TABLE domain_claims_new RENAME TO domain_claims;
+      CREATE UNIQUE INDEX idx_domain_claims_domain ON domain_claims(domain);
+      CREATE INDEX idx_domain_claims_status ON domain_claims(status);
+    `)
+    console.log('[db] domain_claims CHECK constraint updated')
+  }
+} catch (err) {
+  console.warn(`[db] domain_claims migration note: ${err.message}`)
+}
+
 // ─── Query Log ──────────────────────────────────────────────────────────────
 
 db.exec(`
