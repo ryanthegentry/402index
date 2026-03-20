@@ -58,6 +58,43 @@ export const styles = `
     }
     nav a:hover { color: var(--text); text-decoration: none; }
 
+    /* Hamburger toggle — hidden on desktop */
+    .nav-toggle {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .nav-toggle span {
+      display: block;
+      width: 20px;
+      height: 2px;
+      background: var(--text-muted);
+      border-radius: 1px;
+    }
+
+    @media (max-width: 768px) {
+      header { position: relative; }
+      nav {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        padding: 12px 24px;
+        z-index: 100;
+        flex-direction: column;
+      }
+      nav.nav-open { display: flex; }
+      nav a { margin-left: 0; padding: 8px 0; font-size: 15px; }
+      .nav-toggle { display: flex; }
+    }
+
     /* Stats bar */
     .stats-bar {
       background: var(--bg-surface);

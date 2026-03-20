@@ -148,6 +148,10 @@ export async function verifyClaim(domain, { fetchFn = fetch } = {}) {
     return { error: 'Claim has expired. Please initiate a new claim.', status: 410 }
   }
 
+  if (claim.status === 'revoked') {
+    return { error: 'Domain claim has been revoked. Initiate a new claim.', status: 410 }
+  }
+
   const verifyUrl = `https://${normalizedDomain}/.well-known/402index-verify.txt`
 
   // SSRF protection — block non-http(s) schemes and private IPs

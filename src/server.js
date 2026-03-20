@@ -51,8 +51,8 @@ const claimLimiter = rateLimit({
   message: { error: 'Too many claim requests. Limit: 10 per hour per IP.' },
 })
 app.use('/api/v1/claim', express.json({ limit: '10kb' }), (req, res, next) => {
-  // Rate-limit only POST /claim (exact), not /claim/verify
-  if (req.path === '/' || req.path === '') return claimLimiter(req, res, next)
+  // Rate-limit POST /claim and POST /claim/revoke, not /claim/verify
+  if (req.path === '/' || req.path === '' || req.path === '/revoke') return claimLimiter(req, res, next)
   next()
 })
 
