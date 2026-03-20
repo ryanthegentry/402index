@@ -223,10 +223,16 @@ export async function verifyClaim(domain, { fetchFn = fetch } = {}) {
     "UPDATE domain_claims SET status = 'verified', verified_at = datetime('now') WHERE id = ? AND status = 'pending'"
   ).run(claim.id)
 
+  // Flag all services under this domain as domain-verified (protects from poller overwrites)
+  const domainPattern = `%://${normalizedDomain}/%`
+  db.prepare(
+    "UPDATE services SET domain_verified = 1 WHERE url LIKE ? AND (status = 'active' OR status IS NULL)"
+  ).run(domainPattern)
+
   // Count services under this domain
   const serviceCount = db.prepare(
     "SELECT COUNT(*) as c FROM services WHERE url LIKE ? AND (status = 'active' OR status IS NULL)"
-  ).get(`%://${normalizedDomain}/%`).c
+  ).get(domainPattern).c
 
   return {
     status: 200,
@@ -318,6 +324,7 @@ export function editService(serviceId, { domain, verification_token, ...updates 
 
   // Build and execute UPDATE
   const setClauses = Object.keys(fieldsToUpdate).map(f => `${f} = @${f}`)
+  setClauses.push('domain_verified = 1')
   setClauses.push("updated_at = datetime('now')")
 
   db.prepare(`UPDATE services SET ${setClauses.join(', ')} WHERE id = @id`)
@@ -362,6 +369,11 @@ export function revokeClaim(domain, verificationToken) {
   stmt('revokeClaim',
     "UPDATE domain_claims SET status = 'revoked' WHERE domain = ? AND status = 'verified'"
   ).run(normalizedDomain)
+
+  // Reset domain_verified flag so pollers can update these services again
+  db.prepare(
+    "UPDATE services SET domain_verified = 0 WHERE url LIKE ? AND (status = 'active' OR status IS NULL)"
+  ).run(`%://${normalizedDomain}/%`)
 
   return {
     status: 200,

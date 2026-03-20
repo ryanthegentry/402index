@@ -15,12 +15,12 @@ const upsertEndpoint = () => stmt('spongeUpsert', `
   INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, provider, source, source_id, http_method)
   VALUES (@id, @name, @description, @url, 'x402', @price_usd, 'USDC', @payment_network, @category, @provider, 'sponge', @source_id, @http_method)
   ON CONFLICT(url, protocol) DO UPDATE SET
-    name = excluded.name,
-    description = COALESCE(excluded.description, services.description),
+    name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
+    description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE COALESCE(excluded.description, services.description) END,
     price_usd = COALESCE(excluded.price_usd, services.price_usd),
     payment_network = COALESCE(excluded.payment_network, services.payment_network),
-    category = CASE WHEN services.category = 'uncategorized' THEN excluded.category ELSE services.category END,
-    provider = COALESCE(excluded.provider, services.provider),
+    category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE CASE WHEN services.category = 'uncategorized' THEN excluded.category ELSE services.category END END,
+    provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE COALESCE(excluded.provider, services.provider) END,
     http_method = COALESCE(excluded.http_method, services.http_method),
     source = CASE
       WHEN services.source LIKE '%sponge%' THEN services.source

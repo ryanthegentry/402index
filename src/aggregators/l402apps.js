@@ -15,12 +15,12 @@ const upsertNew = () => stmt('upsertNew', `
   INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id)
   VALUES (@id, @name, @description, @url, 'L402', @price_sats, @price_usd, 'BTC', 'Lightning', @category, @provider, 'l402apps', @source_id)
   ON CONFLICT(url, protocol) DO UPDATE SET
-    name = excluded.name,
-    description = excluded.description,
+    name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
+    description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE excluded.description END,
     price_sats = COALESCE(excluded.price_sats, services.price_sats),
     price_usd = COALESCE(excluded.price_usd, services.price_usd),
-    category = CASE WHEN services.category = 'uncategorized' THEN excluded.category ELSE services.category END,
-    provider = COALESCE(excluded.provider, services.provider),
+    category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE CASE WHEN services.category = 'uncategorized' THEN excluded.category ELSE services.category END END,
+    provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE COALESCE(excluded.provider, services.provider) END,
     source = CASE
       WHEN services.source LIKE '%l402apps%' THEN services.source
       ELSE services.source || ',l402apps'

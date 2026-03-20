@@ -21,15 +21,15 @@ const upsert = () => stmt('upsert', `
   INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id)
   VALUES (@id, @name, @description, @url, 'x402', @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'bazaar', @source_id)
   ON CONFLICT(url, protocol) DO UPDATE SET
-    name = excluded.name,
-    description = excluded.description,
+    name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
+    description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE excluded.description END,
     price_usd = excluded.price_usd,
     payment_asset = excluded.payment_asset,
     payment_network = excluded.payment_network,
-    category = excluded.category,
+    category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE excluded.category END,
     input_schema = excluded.input_schema,
     output_schema = excluded.output_schema,
-    provider = excluded.provider,
+    provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE excluded.provider END,
     source_id = excluded.source_id,
     updated_at = datetime('now')
 `)

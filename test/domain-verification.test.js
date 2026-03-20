@@ -690,3 +690,379 @@ describe('Page Routes', () => {
     assert.ok(html.includes('Claim Your Listings'), 'should contain page heading')
   })
 })
+
+// ─── 7. Domain-Verified Poller Protection ─────────────────────────────────
+
+describe('Domain-Verified Poller Protection', () => {
+  // Bazaar-style upsert (mirrors src/aggregators/bazaar.js)
+  const bazaarUpsert = () => db.prepare(`
+    INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id)
+    VALUES (@id, @name, @description, @url, 'x402', @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'bazaar', @source_id)
+    ON CONFLICT(url, protocol) DO UPDATE SET
+      name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
+      description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE excluded.description END,
+      price_usd = excluded.price_usd,
+      payment_asset = excluded.payment_asset,
+      payment_network = excluded.payment_network,
+      category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE excluded.category END,
+      input_schema = excluded.input_schema,
+      output_schema = excluded.output_schema,
+      provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE excluded.provider END,
+      source_id = excluded.source_id,
+      updated_at = datetime('now')
+  `)
+
+  // Satring-style upsert (mirrors src/aggregators/satring.js)
+  const satringUpsert = () => db.prepare(`
+    INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id)
+    VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'satring', @source_id)
+    ON CONFLICT(url, protocol) DO UPDATE SET
+      name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
+      description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE excluded.description END,
+      price_sats = excluded.price_sats,
+      price_usd = excluded.price_usd,
+      payment_asset = excluded.payment_asset,
+      payment_network = excluded.payment_network,
+      category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE excluded.category END,
+      provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE excluded.provider END,
+      source_id = excluded.source_id,
+      updated_at = datetime('now')
+  `)
+
+  // MPP-style upsert (mirrors src/aggregators/mpp.js)
+  const mppUpsert = () => db.prepare(`
+    INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, provider, source, source_id, http_method, probe_body)
+    VALUES (@id, @name, @description, @url, 'MPP', @price_usd, @payment_asset, @payment_network, @category, @provider, 'mpp', @source_id, @http_method, @probe_body)
+    ON CONFLICT(url, protocol) DO UPDATE SET
+      name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
+      description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE COALESCE(excluded.description, services.description) END,
+      price_usd = COALESCE(excluded.price_usd, services.price_usd),
+      payment_asset = COALESCE(excluded.payment_asset, services.payment_asset),
+      payment_network = COALESCE(excluded.payment_network, services.payment_network),
+      category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE CASE WHEN services.category = 'uncategorized' THEN excluded.category ELSE services.category END END,
+      provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE COALESCE(excluded.provider, services.provider) END,
+      http_method = COALESCE(excluded.http_method, services.http_method),
+      probe_body = COALESCE(excluded.probe_body, services.probe_body),
+      source = CASE
+        WHEN services.source LIKE '%mpp%' THEN services.source
+        ELSE services.source || ',mpp'
+      END,
+      updated_at = datetime('now')
+  `)
+
+  function insertVerifiedService(id, url, protocol, overrides = {}) {
+    db.prepare(`
+      INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, provider, source, source_id, domain_verified, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+    `).run(
+      id,
+      overrides.name || 'Owner Custom Name',
+      overrides.description || 'Owner custom description',
+      url,
+      protocol,
+      overrides.price_usd || 0.01,
+      overrides.payment_asset || 'USDC',
+      overrides.payment_network || 'Base',
+      overrides.category || 'ai/custom',
+      overrides.provider || 'CustomProvider',
+      overrides.source || 'bazaar',
+      overrides.source_id || 'src-123',
+      overrides.domain_verified ?? 1,
+    )
+  }
+
+  function getService(id) {
+    return db.prepare('SELECT * FROM services WHERE id = ?').get(id)
+  }
+
+  function cleanup(...ids) {
+    for (const id of ids) {
+      try { db.prepare('DELETE FROM services WHERE id = ?').run(id) } catch {}
+    }
+  }
+
+  it('40. Bazaar poll does NOT overwrite domain-verified editorial fields', (t) => {
+    if (!db) return t.skip('requires DB access')
+
+    const id = `dv-test-bazaar-${randomUUID().slice(0, 8)}`
+    const url = `https://verified-bazaar-${id}.example.com/api/test`
+    insertVerifiedService(id, url, 'x402')
+
+    try {
+      // Simulate Bazaar poll with different editorial + factual data
+      bazaarUpsert().run({
+        id: randomUUID(), // new ID ignored on conflict
+        name: 'Bazaar Override Name',
+        description: 'Bazaar override description',
+        url,
+        price_usd: 0.99,
+        payment_asset: 'WETH',
+        payment_network: 'Ethereum',
+        category: 'finance',
+        input_schema: '{"new": true}',
+        output_schema: '{"new": true}',
+        provider: 'BazaarProvider',
+        source_id: 'bazaar-999',
+      })
+
+      const svc = getService(id)
+      // Editorial fields preserved
+      assert.equal(svc.name, 'Owner Custom Name', 'name must be preserved')
+      assert.equal(svc.description, 'Owner custom description', 'description must be preserved')
+      assert.equal(svc.category, 'ai/custom', 'category must be preserved')
+      assert.equal(svc.provider, 'CustomProvider', 'provider must be preserved')
+
+      // Factual fields updated
+      assert.equal(svc.price_usd, 0.99, 'price_usd must be updated from upstream')
+      assert.equal(svc.payment_asset, 'WETH', 'payment_asset must be updated')
+      assert.equal(svc.payment_network, 'Ethereum', 'payment_network must be updated')
+    } finally {
+      cleanup(id)
+    }
+  })
+
+  it('41. Bazaar poll DOES overwrite non-verified service fields', (t) => {
+    if (!db) return t.skip('requires DB access')
+
+    const id = `dv-test-bazaar-nv-${randomUUID().slice(0, 8)}`
+    const url = `https://unverified-bazaar-${id}.example.com/api/test`
+    insertVerifiedService(id, url, 'x402', { domain_verified: 0 })
+
+    try {
+      bazaarUpsert().run({
+        id: randomUUID(),
+        name: 'Bazaar New Name',
+        description: 'Bazaar new description',
+        url,
+        price_usd: 1.50,
+        payment_asset: 'USDC',
+        payment_network: 'Base',
+        category: 'data',
+        input_schema: null,
+        output_schema: null,
+        provider: 'BazaarProv',
+        source_id: 'bazaar-888',
+      })
+
+      const svc = getService(id)
+      // All fields updated for non-verified service
+      assert.equal(svc.name, 'Bazaar New Name', 'name must be updated')
+      assert.equal(svc.description, 'Bazaar new description', 'description must be updated')
+      assert.equal(svc.category, 'data', 'category must be updated')
+      assert.equal(svc.provider, 'BazaarProv', 'provider must be updated')
+    } finally {
+      cleanup(id)
+    }
+  })
+
+  it('42. Satring poll does NOT overwrite domain-verified editorial fields', (t) => {
+    if (!db) return t.skip('requires DB access')
+
+    const id = `dv-test-satring-${randomUUID().slice(0, 8)}`
+    const url = `https://verified-satring-${id}.example.com/api/test`
+    insertVerifiedService(id, url, 'L402', { source: 'satring', payment_asset: 'BTC', payment_network: 'Lightning' })
+
+    try {
+      satringUpsert().run({
+        id: randomUUID(),
+        name: 'Satring Override Name',
+        description: 'Satring override desc',
+        url,
+        protocol: 'L402',
+        price_sats: 999,
+        price_usd: 0.50,
+        payment_asset: 'BTC',
+        payment_network: 'Lightning',
+        category: 'tools',
+        provider: 'SatringProv',
+        source_id: 'sat-111',
+      })
+
+      const svc = getService(id)
+      assert.equal(svc.name, 'Owner Custom Name', 'name preserved')
+      assert.equal(svc.description, 'Owner custom description', 'description preserved')
+      assert.equal(svc.category, 'ai/custom', 'category preserved')
+      assert.equal(svc.provider, 'CustomProvider', 'provider preserved')
+      // Factual fields updated
+      assert.equal(svc.price_sats, 999, 'price_sats updated')
+    } finally {
+      cleanup(id)
+    }
+  })
+
+  it('43. MPP poll does NOT overwrite domain-verified editorial fields', (t) => {
+    if (!db) return t.skip('requires DB access')
+
+    const id = `dv-test-mpp-${randomUUID().slice(0, 8)}`
+    const url = `https://verified-mpp-${id}.example.com/api/test`
+    insertVerifiedService(id, url, 'MPP', { source: 'mpp' })
+
+    try {
+      mppUpsert().run({
+        id: randomUUID(),
+        name: 'MPP Override Name',
+        description: 'MPP override desc',
+        url,
+        price_usd: 2.00,
+        payment_asset: 'ETH',
+        payment_network: 'Ethereum',
+        category: 'finance',
+        provider: 'MppProv',
+        source_id: 'mpp-222',
+        http_method: 'POST',
+        probe_body: '{"test": true}',
+      })
+
+      const svc = getService(id)
+      assert.equal(svc.name, 'Owner Custom Name', 'name preserved')
+      assert.equal(svc.description, 'Owner custom description', 'description preserved')
+      assert.equal(svc.category, 'ai/custom', 'category preserved')
+      assert.equal(svc.provider, 'CustomProvider', 'provider preserved')
+      // Factual fields updated
+      assert.equal(svc.price_usd, 2.00, 'price_usd updated')
+    } finally {
+      cleanup(id)
+    }
+  })
+})
+
+// ─── 8. verifyClaim / editService / revokeClaim set domain_verified ───────
+
+describe('domain_verified flag lifecycle', () => {
+  let verifyClaimFn, editServiceFn, revokeClaimFn
+
+  before(async () => {
+    try {
+      const mod = await import('../src/services/domain-verify.js')
+      verifyClaimFn = mod.verifyClaim
+      editServiceFn = mod.editService
+      revokeClaimFn = mod.revokeClaim
+    } catch {
+      // Module not ready
+    }
+  })
+
+  after(() => {
+    if (!db) return
+    try {
+      db.prepare("DELETE FROM domain_claims WHERE domain LIKE '%dv-flag-test%'").run()
+      db.prepare("DELETE FROM services WHERE id LIKE 'dv-flag-%'").run()
+    } catch {}
+  })
+
+  it('44. verifyClaim sets domain_verified=1 on all services for that domain', async (t) => {
+    if (!verifyClaimFn || !db) return t.skip('requires domain-verify module + DB')
+
+    // Use example.com — must resolve to a public IP for SSRF check to pass
+    const domain = 'example.com'
+    const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '')
+    const svcIds = ['dv-flag-verify-1', 'dv-flag-verify-2', 'dv-flag-verify-3']
+
+    // Clean up any prior state
+    try { db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(domain) } catch {}
+    for (const id of svcIds) {
+      try { db.prepare("DELETE FROM services WHERE id = ?").run(id) } catch {}
+    }
+
+    try {
+      // Insert pending claim
+      db.prepare(
+        "INSERT INTO domain_claims (id, domain, verification_token, status, expires_at) VALUES (?, ?, ?, 'pending', datetime('now', '+3 days'))"
+      ).run(randomUUID(), domain, token)
+
+      // Insert 3 services under the domain with domain_verified=0
+      for (let i = 0; i < svcIds.length; i++) {
+        db.prepare(
+          "INSERT INTO services (id, name, url, protocol, source, status, domain_verified) VALUES (?, ?, ?, 'x402', 'bazaar', 'active', 0)"
+        ).run(svcIds[i], `Service ${i + 1}`, `https://${domain}/api/endpoint-${i + 1}`)
+      }
+
+      // Verify the claim with mock fetch
+      const mockFetch = async () => ({ status: 200, text: async () => token })
+      const result = await verifyClaimFn(domain, { fetchFn: mockFetch })
+      assert.equal(result.status, 200)
+
+      // All 3 services should now have domain_verified=1
+      for (const id of svcIds) {
+        const svc = db.prepare('SELECT domain_verified FROM services WHERE id = ?').get(id)
+        assert.equal(svc.domain_verified, 1, `${id} must have domain_verified=1`)
+      }
+    } finally {
+      try { db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(domain) } catch {}
+      for (const id of svcIds) {
+        try { db.prepare("DELETE FROM services WHERE id = ?").run(id) } catch {}
+      }
+    }
+  })
+
+  it('45. revokeClaim resets domain_verified=0 on all services for that domain', async (t) => {
+    if (!revokeClaimFn || !db) return t.skip('requires domain-verify module + DB')
+
+    const domain = 'dv-flag-test-revoke.example.com'
+    const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '')
+
+    // Clean up
+    try { db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(domain) } catch {}
+    try { db.prepare("DELETE FROM services WHERE id LIKE 'dv-flag-revoke-%'").run() } catch {}
+
+    // Insert verified claim
+    db.prepare(
+      "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
+    ).run(randomUUID(), domain, token)
+
+    // Insert 3 services with domain_verified=1
+    for (let i = 1; i <= 3; i++) {
+      db.prepare(
+        "INSERT INTO services (id, name, url, protocol, source, status, domain_verified) VALUES (?, ?, ?, 'x402', 'bazaar', 'active', 1)"
+      ).run(`dv-flag-revoke-${i}`, `Service ${i}`, `https://${domain}/api/endpoint-${i}`)
+    }
+
+    // Revoke
+    const result = revokeClaimFn(domain, token)
+    assert.equal(result.status, 200)
+
+    // All 3 services should have domain_verified=0
+    for (let i = 1; i <= 3; i++) {
+      const svc = db.prepare('SELECT domain_verified FROM services WHERE id = ?').get(`dv-flag-revoke-${i}`)
+      assert.equal(svc.domain_verified, 0, `service ${i} must have domain_verified=0 after revoke`)
+    }
+  })
+
+  it('46. editService sets domain_verified=1 on the edited service', (t) => {
+    if (!editServiceFn || !db) return t.skip('requires domain-verify module + DB')
+
+    const domain = 'dv-flag-test-edit.example.com'
+    const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '')
+    const svcId = `dv-flag-edit-${randomUUID().slice(0, 8)}`
+
+    // Clean up
+    try { db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(domain) } catch {}
+    try { db.prepare("DELETE FROM services WHERE id = ?").run(svcId) } catch {}
+
+    // Insert verified claim
+    db.prepare(
+      "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
+    ).run(randomUUID(), domain, token)
+
+    // Insert service with domain_verified=0
+    db.prepare(
+      "INSERT INTO services (id, name, url, protocol, source, status, domain_verified) VALUES (?, ?, ?, 'x402', 'bazaar', 'active', 0)"
+    ).run(svcId, 'Original Name', `https://${domain}/api/test`)
+
+    // Edit via domain auth
+    const result = editServiceFn(svcId, {
+      domain,
+      verification_token: token,
+      description: 'Edited via domain',
+    })
+    assert.equal(result.status, 200)
+
+    // Should now be domain_verified=1
+    const svc = db.prepare('SELECT domain_verified FROM services WHERE id = ?').get(svcId)
+    assert.equal(svc.domain_verified, 1, 'editService must set domain_verified=1')
+
+    // Clean up
+    try { db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(domain) } catch {}
+    try { db.prepare("DELETE FROM services WHERE id = ?").run(svcId) } catch {}
+  })
+})

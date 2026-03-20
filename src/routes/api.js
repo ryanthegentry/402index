@@ -797,6 +797,8 @@ router.patch('/services/:id', (req, res) => {
     if (result.error) {
       return res.status(result.status).json({ error: result.error })
     }
+    const editedFields = Object.keys(req.body || {}).filter(k => !['domain', 'verification_token'].includes(k))
+    console.log(`[services/patch] EDIT: service=${req.params.id} domain=${req.body?.domain} fields=${editedFields.join(',')}`)
     return res.status(result.status).json(result.data)
   } catch (err) {
     console.error('[services/patch] Error:', err.message)
