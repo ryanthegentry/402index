@@ -39,8 +39,12 @@ export function layout(title, content, meta = {}) {
         <a href="/stats">Stats</a>
         <a href="/directory">Directory</a>
         <a href="/about">About</a>
+        <a href="/verify">Verify</a>
         <a href="/api-docs">API</a>
       </nav>
+      <button class="nav-toggle" onclick="document.querySelector('nav').classList.toggle('nav-open')" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
     </div>
   </header>
   ${content}

@@ -176,6 +176,23 @@ describe('POST /api/v1/claim/verify — API Error Cases', () => {
     const r = await apiVerify({ domain })
     assert.equal(r.status, 410)
   })
+
+  it('38. revoked domain → 410', async (t) => {
+    if (!db) return t.skip('requires DB access')
+
+    const domain = `revoked-verify-${randomUUID().slice(0, 8)}.example.com`
+    try {
+      db.prepare(
+        "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'revoked', datetime('now'), datetime('now', '+3 days'))"
+      ).run(randomUUID(), domain, 'a'.repeat(64))
+    } catch (err) {
+      return t.skip(`domain_claims table not ready: ${err.message}`)
+    }
+
+    const r = await apiVerify({ domain })
+    assert.equal(r.status, 410)
+    assert.ok(r.body.error.toLowerCase().includes('revoked'))
+  })
 })
 
 // ─── 3. Claim Verification — Service Logic (mock fetch) ─────────────────────
@@ -660,5 +677,16 @@ describe('POST /api/v1/claim/revoke — Token Revocation', () => {
     assert.equal(r.status, 201)
     assert.ok(r.body.verification_token)
     assert.notEqual(r.body.verification_token, REVOKE_TOKEN, 'should get a new token')
+  })
+})
+
+// ─── 6. Page Routes ─────────────────────────────────────────────────────────
+
+describe('Page Routes', () => {
+  it('39. GET /verify → 200 with HTML content', async () => {
+    const res = await fetch(`${BASE}/verify`)
+    assert.equal(res.status, 200)
+    const html = await res.text()
+    assert.ok(html.includes('Claim Your Listings'), 'should contain page heading')
   })
 })
