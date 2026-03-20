@@ -275,8 +275,8 @@ export async function* runProbeSteps(url, db) {
   }
 
   // POST auto-detection for L402 and MPP (unified)
-  if ((detectedProtocol === 'L402' || detectedProtocol === 'MPP' ||
-       config.protocol === 'L402' || config.protocol === 'MPP') &&
+  if ((detectedProtocol === 'L402' || detectedProtocol === 'MPP' || detectedProtocol === 'x402' ||
+       config.protocol === 'L402' || config.protocol === 'MPP' || config.protocol === 'x402') &&
       (!method || method === 'GET') &&
       classification.healthStatus !== 'healthy') {
     const shouldTryPost = (
@@ -307,6 +307,11 @@ export async function* runProbeSteps(url, db) {
             })
           } else if (postDetection.protocol === 'MPP') {
             yield formatProbeSteps.mppValidation(true, postDetection.details, null)
+          } else if (postDetection.protocol === 'x402') {
+            yield formatProbeSteps.x402Validation(true, {
+              assetKnown: postDetection.details.assetKnown,
+              facilitatorReachable: null,
+            })
           }
         }
       }
