@@ -76,6 +76,41 @@ export const openapiSpec = {
           '404': { description: 'Service not found' },
         },
       },
+      patch: {
+        summary: 'Edit a listing by verified domain owner',
+        operationId: 'editService',
+        tags: ['Domain Verification'],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Service ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['domain', 'verification_token'],
+            properties: {
+              domain: { type: 'string', description: 'Verified domain' },
+              verification_token: { type: 'string', description: 'Token from domain claim (ongoing credential)' },
+              name: { type: 'string' },
+              description: { type: 'string' },
+              category: { type: 'string' },
+              price_usd: { type: 'number' },
+              price_sats: { type: 'integer' },
+              payment_asset: { type: 'string' },
+              payment_network: { type: 'string' },
+            },
+          } } },
+        },
+        responses: {
+          '200': {
+            description: 'Service updated',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/Service' } } },
+          },
+          '400': { description: 'Missing domain/token, no valid fields, or field exceeds max length' },
+          '403': { description: 'Invalid token, unverified domain, or domain mismatch' },
+          '404': { description: 'Service not found' },
+        },
+      },
     },
 
     '/api/v1/health': {
@@ -339,6 +374,80 @@ export const openapiSpec = {
         },
       },
     },
+
+    '/api/v1/claim': {
+      post: {
+        summary: 'Initiate a domain claim for provider listing edits',
+        operationId: 'claimDomain',
+        tags: ['Domain Verification'],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['domain'],
+            properties: {
+              domain: { type: 'string', description: 'Hostname to claim (e.g. "api.example.com"). No protocol, path, or port.' },
+              contact_email: { type: 'string', format: 'email', description: 'Optional contact email for the provider' },
+            },
+          } } },
+        },
+        responses: {
+          '201': {
+            description: 'New domain claim created',
+            content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                domain: { type: 'string' },
+                verification_token: { type: 'string', description: '64-char hex token (256 bits of entropy)' },
+                verification_url: { type: 'string', description: 'URL where the token file must be placed' },
+                instructions: { type: 'string' },
+              },
+            } } },
+          },
+          '200': { description: 'Existing pending claim updated with new token' },
+          '400': { description: 'Invalid domain format' },
+          '409': { description: 'Domain already verified by another provider' },
+          '429': { description: 'Rate limited (10 claims per hour per IP)' },
+        },
+      },
+    },
+
+    '/api/v1/claim/verify': {
+      post: {
+        summary: 'Verify a pending domain claim',
+        operationId: 'verifyDomainClaim',
+        tags: ['Domain Verification'],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['domain'],
+            properties: {
+              domain: { type: 'string', description: 'Domain to verify' },
+            },
+          } } },
+        },
+        responses: {
+          '200': {
+            description: 'Domain verified successfully',
+            content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                domain: { type: 'string' },
+                status: { type: 'string', enum: ['verified'] },
+                services_count: { type: 'integer', description: 'Number of services under this domain' },
+              },
+            } } },
+          },
+          '400': { description: 'Invalid domain format' },
+          '404': { description: 'No pending claim found for this domain' },
+          '409': { description: 'Domain already verified' },
+          '410': { description: 'Claim expired (72-hour window). Initiate a new claim.' },
+          '422': { description: 'Verification failed (token mismatch, redirect, unreachable, SSRF blocked, or response too large)' },
+        },
+      },
+    },
+
   },
 
   components: {

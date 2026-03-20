@@ -42,8 +42,23 @@ const registerLimiter = rateLimit({
 })
 app.use('/api/v1/register', express.json({ limit: '10kb' }), registerLimiter)
 
+// Domain claim routes: JSON body parsing for all /claim/* + rate limit on claim creation only
+const claimLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: parseInt(process.env.CLAIM_RATE_LIMIT) || 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many claim requests. Limit: 10 per hour per IP.' },
+})
+app.use('/api/v1/claim', express.json({ limit: '10kb' }), (req, res, next) => {
+  // Rate-limit only POST /claim (exact), not /claim/verify
+  if (req.path === '/' || req.path === '') return claimLimiter(req, res, next)
+  next()
+})
+
 // Rate-limited API routes: services, services/:id, categories, export
-app.use('/api/v1/services', verifyL402, freeLimiter, l402Limiter)
+// express.json() included for PATCH /api/v1/services/:id (domain-verified edits)
+app.use('/api/v1/services', express.json({ limit: '10kb' }), verifyL402, freeLimiter, l402Limiter)
 app.use('/api/v1/categories', verifyL402, freeLimiter, l402Limiter)
 app.use('/api/v1/export.csv', verifyL402, freeLimiter, l402Limiter)
 // /api/v1/health is exempt from rate limiting (uptime monitors)
