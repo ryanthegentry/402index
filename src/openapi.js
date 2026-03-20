@@ -412,6 +412,41 @@ export const openapiSpec = {
       },
     },
 
+    '/api/v1/claim/revoke': {
+      post: {
+        summary: 'Revoke a verified domain claim',
+        operationId: 'revokeDomainClaim',
+        tags: ['Domain Verification'],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['domain', 'verification_token'],
+            properties: {
+              domain: { type: 'string', description: 'Verified domain to revoke' },
+              verification_token: { type: 'string', description: 'Current token (proves ownership)' },
+            },
+          } } },
+        },
+        responses: {
+          '200': {
+            description: 'Claim revoked',
+            content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                domain: { type: 'string' },
+                status: { type: 'string', enum: ['revoked'] },
+                message: { type: 'string' },
+              },
+            } } },
+          },
+          '400': { description: 'Missing domain or verification_token' },
+          '403': { description: 'Invalid token or no verified claim for this domain' },
+          '404': { description: 'No claim found for this domain' },
+        },
+      },
+    },
+
     '/api/v1/claim/verify': {
       post: {
         summary: 'Verify a pending domain claim',
