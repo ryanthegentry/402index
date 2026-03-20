@@ -12,7 +12,7 @@ import { findOpportunities } from '../services/opportunities.js'
 import { discoverProbeConfig } from '../services/wellknown-discovery.js'
 import { getSnapshots } from '../services/daily-snapshot.js'
 import { openapiSpec, generateMarkdownDocs } from '../openapi.js'
-import { initiateClaim, verifyClaim, editService } from '../services/domain-verify.js'
+import { initiateClaim, verifyClaim, editService, revokeClaim } from '../services/domain-verify.js'
 
 const router = Router()
 
@@ -771,6 +771,21 @@ router.post('/claim/verify', async (req, res) => {
     return res.status(result.status).json(result.data)
   } catch (err) {
     console.error('[claim/verify] Error:', err.message)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// POST /api/v1/claim/revoke — Revoke a verified domain claim
+router.post('/claim/revoke', (req, res) => {
+  try {
+    const { domain, verification_token } = req.body || {}
+    const result = revokeClaim(domain, verification_token)
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error })
+    }
+    return res.status(result.status).json(result.data)
+  } catch (err) {
+    console.error('[claim/revoke] Error:', err.message)
     return res.status(500).json({ error: 'Internal server error' })
   }
 })

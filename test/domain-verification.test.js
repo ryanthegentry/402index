@@ -36,6 +36,15 @@ async function apiVerify(body) {
   return { status: res.status, body: await res.json().catch(() => null) }
 }
 
+async function apiRevoke(body) {
+  const res = await fetch(`${API}/claim/revoke`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return { status: res.status, body: await res.json().catch(() => null) }
+}
+
 async function apiPatch(id, body) {
   const res = await fetch(`${API}/services/${id}`, {
     method: 'PATCH',
@@ -472,5 +481,184 @@ describe('PATCH /api/v1/services/:id — Listing Edits', () => {
       description: 'Missing auth fields entirely',
     })
     assert.equal(r.status, 400)
+  })
+
+  it('33. PATCH with price_sats: "not a number" → 400', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    const r = await apiPatch(SERVICE_ID, {
+      domain: DOMAIN,
+      verification_token: TOKEN,
+      price_sats: 'not a number',
+    })
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('price_sats'))
+  })
+
+  it('34. PATCH with price_sats: -100 → 400', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    const r = await apiPatch(SERVICE_ID, {
+      domain: DOMAIN,
+      verification_token: TOKEN,
+      price_sats: -100,
+    })
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('price_sats'))
+  })
+
+  it('35. PATCH with price_usd: -5.50 → 400', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    const r = await apiPatch(SERVICE_ID, {
+      domain: DOMAIN,
+      verification_token: TOKEN,
+      price_usd: -5.50,
+    })
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('price_usd'))
+  })
+
+  it('36. PATCH with valid price_sats: 500 → 200', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    const r = await apiPatch(SERVICE_ID, {
+      domain: DOMAIN,
+      verification_token: TOKEN,
+      price_sats: 500,
+    })
+    assert.equal(r.status, 200)
+    assert.equal(r.body.price_sats, 500)
+  })
+
+  it('37. PATCH with valid price_usd: 0.01 → 200', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    const r = await apiPatch(SERVICE_ID, {
+      domain: DOMAIN,
+      verification_token: TOKEN,
+      price_usd: 0.01,
+    })
+    assert.equal(r.status, 200)
+    assert.equal(r.body.price_usd, 0.01)
+  })
+})
+
+// ─── 5. Token Revocation (POST /api/v1/claim/revoke) ────────────────────────
+
+describe('POST /api/v1/claim/revoke — Token Revocation', () => {
+  const REVOKE_DOMAIN = 'revoke-test.example.com'
+  const REVOKE_TOKEN = 'revoketoken' + 'a'.repeat(53) // 64 chars
+  let skipAll = false
+
+  before(() => {
+    if (!db) { skipAll = true; return }
+
+    try {
+      db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(REVOKE_DOMAIN)
+
+      // Insert verified claim for revocation tests
+      db.prepare(
+        "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
+      ).run(randomUUID(), REVOKE_DOMAIN, REVOKE_TOKEN)
+    } catch (err) {
+      console.log('Revoke test setup failed:', err.message)
+      skipAll = true
+    }
+  })
+
+  after(() => {
+    if (!db) return
+    try {
+      db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(REVOKE_DOMAIN)
+    } catch {}
+  })
+
+  it('26. valid revocation (verified domain + correct token) → 200', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    const r = await apiRevoke({ domain: REVOKE_DOMAIN, verification_token: REVOKE_TOKEN })
+    assert.equal(r.status, 200)
+    assert.equal(r.body.status, 'revoked')
+    assert.equal(r.body.domain, REVOKE_DOMAIN)
+    assert.ok(r.body.message.includes('revoked'))
+  })
+
+  it('27. wrong token → 403', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    // Set up a fresh verified claim for this test
+    db.prepare("DELETE FROM domain_claims WHERE domain = ?").run('revoke-wrong.example.com')
+    db.prepare(
+      "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
+    ).run(randomUUID(), 'revoke-wrong.example.com', 'correcttoken' + 'a'.repeat(52))
+
+    const r = await apiRevoke({ domain: 'revoke-wrong.example.com', verification_token: 'wrongtoken' + 'b'.repeat(54) })
+    assert.equal(r.status, 403)
+
+    // Cleanup
+    db.prepare("DELETE FROM domain_claims WHERE domain = ?").run('revoke-wrong.example.com')
+  })
+
+  it('28. non-existent domain → 404', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    const r = await apiRevoke({ domain: 'nonexistent-revoke.example.com', verification_token: 'a'.repeat(64) })
+    assert.equal(r.status, 404)
+  })
+
+  it('29. already-revoked domain → 403', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    // The domain was revoked in test 26, so trying again should fail
+    const r = await apiRevoke({ domain: REVOKE_DOMAIN, verification_token: REVOKE_TOKEN })
+    assert.equal(r.status, 403)
+  })
+
+  it('30. pending (not yet verified) domain → 403', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    db.prepare("DELETE FROM domain_claims WHERE domain = ?").run('revoke-pending.example.com')
+    db.prepare(
+      "INSERT INTO domain_claims (id, domain, verification_token, status, expires_at) VALUES (?, ?, ?, 'pending', datetime('now', '+3 days'))"
+    ).run(randomUUID(), 'revoke-pending.example.com', 'pendingtoken' + 'a'.repeat(52))
+
+    const r = await apiRevoke({ domain: 'revoke-pending.example.com', verification_token: 'pendingtoken' + 'a'.repeat(52) })
+    assert.equal(r.status, 403)
+
+    // Cleanup
+    db.prepare("DELETE FROM domain_claims WHERE domain = ?").run('revoke-pending.example.com')
+  })
+
+  it('31. after revocation, PATCH with old token → 403', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    // REVOKE_DOMAIN was revoked in test 26 — PATCH should fail
+    // We need a service under this domain
+    const svcId = `dv-test-revoke-${randomUUID().slice(0, 8)}`
+    db.prepare(
+      "INSERT INTO services (id, name, url, protocol, source, category, status) VALUES (?, ?, ?, ?, ?, ?, 'active')"
+    ).run(svcId, 'Revoke Test Service', `https://${REVOKE_DOMAIN}/api/test`, 'L402', 'self-registered', 'uncategorized')
+
+    try {
+      const r = await apiPatch(svcId, {
+        domain: REVOKE_DOMAIN,
+        verification_token: REVOKE_TOKEN,
+        description: 'Should not update — token revoked',
+      })
+      assert.equal(r.status, 403)
+    } finally {
+      db.prepare("DELETE FROM services WHERE id = ?").run(svcId)
+    }
+  })
+
+  it('32. after revocation, re-initiate claim → 201 (new token)', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    // REVOKE_DOMAIN was revoked in test 26 — re-claim should work
+    const r = await apiClaim({ domain: REVOKE_DOMAIN })
+    assert.equal(r.status, 201)
+    assert.ok(r.body.verification_token)
+    assert.notEqual(r.body.verification_token, REVOKE_TOKEN, 'should get a new token')
   })
 })
