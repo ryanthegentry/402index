@@ -342,6 +342,14 @@ try {
   console.warn(`[db] health_checks migration note: ${err.message}`)
 }
 
+// Migration: add domain_verified flag (protects provider edits from poller overwrite)
+try {
+  db.exec('ALTER TABLE services ADD COLUMN domain_verified INTEGER DEFAULT 0')
+  console.log('[db] Added column: domain_verified')
+} catch {
+  // Column already exists
+}
+
 // Migration: expand protocol CHECK constraint to include 'MPP'
 try {
   const needsMppMigration = (() => {
