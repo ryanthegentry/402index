@@ -298,6 +298,153 @@ export function apiDocsPage() {
         <p>Exempt from rate limiting: <code>/</code>, <code>/about</code>, <code>/api-docs</code>, <code>/service/*</code>, <code>/api/v1/health</code>, <code>/feed.xml</code>, <code>/opportunities</code></p>
         <p><em>402 Index is the first service listed in its own directory — the CSV export endpoint is L402-gated, so we eat our own dog food.</em></p>
 
+        <h2>Domain Verification</h2>
+        <p>Providers can claim their domain to edit listings directly. See the <a href="/verify">step-by-step guide</a> for the full flow.</p>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
+            <span class="endpoint-path">/api/v1/claim</span>
+          </div>
+          <p>Initiate a domain claim. Returns a verification token and instructions for placing a <code>.well-known</code> file.</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Hostname to claim (e.g. <code>api.example.com</code>). No protocol, path, or port.</td></tr>
+              <tr><td>contact_email</td><td>string</td><td>Optional contact email for the provider</td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X POST https://402index.io/api/v1/claim \\
+  -H 'Content-Type: application/json' \\
+  -d '{"domain": "api.example.com"}'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Status</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>201</code></td><td>New claim created. Returns <code>verification_token</code>, <code>verification_url</code>, and <code>instructions</code>.</td></tr>
+              <tr><td><code>200</code></td><td>Existing pending claim updated with a new token.</td></tr>
+              <tr><td><code>400</code></td><td>Invalid domain format (includes protocol, path, port, or IP address).</td></tr>
+              <tr><td><code>409</code></td><td>Domain already verified by another provider.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
+            <span class="endpoint-path">/api/v1/claim/verify</span>
+          </div>
+          <p>Verify a pending domain claim. Fetches the <code>.well-known/402index-verify.txt</code> file from the domain and compares the token.</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Domain to verify</td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X POST https://402index.io/api/v1/claim/verify \\
+  -H 'Content-Type: application/json' \\
+  -d '{"domain": "api.example.com"}'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Status</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>200</code></td><td>Domain verified. Returns <code>domain</code>, <code>status: "verified"</code>, and <code>services_count</code>.</td></tr>
+              <tr><td><code>400</code></td><td>Invalid domain format.</td></tr>
+              <tr><td><code>404</code></td><td>No pending claim found for this domain.</td></tr>
+              <tr><td><code>409</code></td><td>Domain already verified.</td></tr>
+              <tr><td><code>410</code></td><td>Claim expired (72-hour window). Initiate a new claim.</td></tr>
+              <tr><td><code>422</code></td><td>Verification failed (token mismatch, redirect, unreachable, file too large, or SSRF blocked).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
+            <span class="endpoint-path">/api/v1/claim/revoke</span>
+          </div>
+          <p>Revoke a verified domain claim. Invalidates the token immediately. Re-initiate the claim flow to get a new token.</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Verified domain to revoke</td></tr>
+              <tr><td>verification_token</td><td>string</td><td><strong>Required.</strong> Current token (proves you own the claim)</td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X POST https://402index.io/api/v1/claim/revoke \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "domain": "api.example.com",
+  "verification_token": "a1b2c3d4..."
+}'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Status</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>200</code></td><td>Claim revoked. Returns <code>status: "revoked"</code> and next-steps message.</td></tr>
+              <tr><td><code>400</code></td><td>Missing domain or token.</td></tr>
+              <tr><td><code>403</code></td><td>Invalid token, or no verified claim for this domain.</td></tr>
+              <tr><td><code>404</code></td><td>No claim found for this domain.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method" style="color:#4dabf7;background:rgba(77,171,247,0.1)">PATCH</span>
+            <span class="endpoint-path">/api/v1/services/:id</span>
+          </div>
+          <p>Edit a listing by verified domain owner. The service URL hostname must match the claimed domain.</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Your verified domain</td></tr>
+              <tr><td>verification_token</td><td>string</td><td><strong>Required.</strong> Token from your domain claim</td></tr>
+              <tr><td>name</td><td>string</td><td>Display name (max 200 chars)</td></tr>
+              <tr><td>description</td><td>string</td><td>Description (max 2000 chars)</td></tr>
+              <tr><td>category</td><td>string</td><td>Category (max 100 chars)</td></tr>
+              <tr><td>price_usd</td><td>number</td><td>Price in USD (non-negative)</td></tr>
+              <tr><td>price_sats</td><td>integer</td><td>Price in satoshis (non-negative integer)</td></tr>
+              <tr><td>payment_asset</td><td>string</td><td>Payment asset (e.g. BTC, USDC)</td></tr>
+              <tr><td>payment_network</td><td>string</td><td>Payment network (e.g. Lightning, Base)</td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X PATCH https://402index.io/api/v1/services/SERVICE_ID \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "domain": "api.example.com",
+  "verification_token": "a1b2c3d4...",
+  "description": "Updated description",
+  "category": "ai/text"
+}'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Status</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>200</code></td><td>Service updated. Returns the full updated service record.</td></tr>
+              <tr><td><code>400</code></td><td>Missing domain/token, no valid fields, field exceeds max length, or invalid price value.</td></tr>
+              <tr><td><code>403</code></td><td>Invalid token, unverified domain, or service URL doesn't match claimed domain.</td></tr>
+              <tr><td><code>404</code></td><td>Service not found.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <div class="info-callout">
           <h3>MCP Server</h3>
           <p>Query the 402 Index directory directly from Claude, GPT, Cursor, or any MCP-compatible AI assistant.</p>

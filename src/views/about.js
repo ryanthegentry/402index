@@ -178,6 +178,11 @@ export function aboutPage() {
           See the <a href="/api-docs">API docs</a> for the full field reference.
         </p>
         <p>
+          <strong>Already listed?</strong> If your endpoints are already indexed (e.g., from Bazaar
+          or Satring), you can <a href="/verify">claim your domain</a> to edit your listings
+          directly &mdash; update names, descriptions, categories, and pricing.
+        </p>
+        <p>
           <strong>5. Email us a listing.</strong> Send a YAML file describing your service
           to <a href="mailto:hello@402index.io">hello@402index.io</a> for manual review.
         </p>

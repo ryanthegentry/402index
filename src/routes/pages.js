@@ -10,6 +10,7 @@ import { adminPage } from '../views/admin.js'
 import { demoPage } from '../views/demo.js'
 import { feedXml } from '../views/feed.js'
 import { opportunitiesPage } from '../views/opportunities.js'
+import { verifyPage } from '../views/verify.js'
 import { findOpportunities } from '../services/opportunities.js'
 import { layout } from '../views/layout.js'
 import { statsPage } from '../views/stats.js'
@@ -44,6 +45,7 @@ router.get('/sitemap.xml', (req, res) => {
     { loc: 'https://402index.io/directory', priority: '1.0' },
     { loc: 'https://402index.io/about', priority: '0.8' },
     { loc: 'https://402index.io/api-docs', priority: '0.8' },
+    { loc: 'https://402index.io/verify', priority: '0.7' },
   ]
 
   const services = db.prepare(
@@ -304,6 +306,11 @@ router.get('/about', (req, res) => {
 // API docs
 router.get('/api-docs', (req, res) => {
   res.send(apiDocsPage())
+})
+
+// Domain verification guide
+router.get('/verify', (req, res) => {
+  res.send(verifyPage())
 })
 
 // Demo redirect (301 to homepage)
