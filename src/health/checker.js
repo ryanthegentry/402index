@@ -6,6 +6,7 @@ import db, { DB_PATH } from '../db.js'
 import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from '../services/l402-utils.js'
 import { parsePaymentRequired, parsePaymentRequiredBody, validatePaymentRequirements } from '../services/x402-utils.js'
 import { detectProtocol } from '../services/detect-protocol.js'
+import { probeEndpoint } from '../services/probe-endpoint.js'
 
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
@@ -454,66 +455,53 @@ export async function checkService(service) {
   // Per-host rate limiting: wait if we probed this host recently
   await waitForHost(getHostname(url))
 
-  const httpResult = await performHttpCheck(url, http_method || 'GET', probe_body || '{}')
+  const result = await probeEndpoint(url, {
+    protocol,
+    method: http_method || 'GET',
+    body: probe_body || '{}',
+    followRedirects: true,
+    postFallback: (!http_method || http_method === 'GET'),
+  })
+
   const classification = classifyHealthStatus(
-    httpResult.httpStatus, httpResult.errorMessage, prevFailures, historicalP50, httpResult.responseTimeMs
+    result.httpStatus, result.errorMessage, prevFailures, historicalP50, result.responseTimeMs
   )
 
-  // L402/MPP compliance check via shared detectProtocol()
-  if ((protocol === 'L402' || protocol === 'MPP') && httpResult.httpStatus === 402 && classification.healthStatus === 'healthy') {
-    const detection = detectProtocol(httpResult)
-    if (!detection.valid) {
+  // L402/MPP compliance check via detection from probeEndpoint
+  if ((protocol === 'L402' || protocol === 'MPP') && result.httpStatus === 402 && classification.healthStatus === 'healthy') {
+    if (!result.detection.valid) {
       classification.healthStatus = 'degraded'
       classification.checkStatus = 'degraded'
     }
   }
 
-  // POST auto-detection for L402, MPP, and x402
-  let effectiveResult = httpResult
-  if ((protocol === 'L402' || protocol === 'MPP' || protocol === 'x402') &&
-      (!http_method || http_method === 'GET') &&
-      classification.healthStatus !== 'healthy') {
-    const shouldTryPost = (
-      classification.checkStatus === 'method_not_allowed' ||  // 405
-      httpResult.httpStatus === 400 ||                         // 400 (often wrong method)
-      httpResult.httpStatus === 200                            // 200 (paywall may only gate POST)
-    )
-
-    if (shouldTryPost) {
-      try {
-        const postResult = await performHttpCheck(url, 'POST')
-        if (postResult.httpStatus === 402) {
-          const postDetection = detectProtocol(postResult)
-          if (postDetection.protocol === protocol && postDetection.valid) {
-            classification.healthStatus = 'healthy'
-            classification.checkStatus = 'healthy'
-            classification.consecutiveFailures = 0
-            persistHttpMethod().run({ id, http_method: 'POST' })
-            effectiveResult = postResult
-          }
-        }
-      } catch {
-        // POST retry failed — keep original classification
-      }
+  // POST fallback persistence — if probeEndpoint detected POST works, save it
+  if (result.postFallback?.attempted && result.postFallback.detection?.valid) {
+    if (result.postFallback.detection.protocol === protocol) {
+      classification.healthStatus = 'healthy'
+      classification.checkStatus = 'healthy'
+      classification.consecutiveFailures = 0
+      persistHttpMethod().run({ id, http_method: 'POST' })
     }
   }
 
-  // x402 payment requirements validation
+  // x402 payment requirements validation (health-checker-specific layer)
   let x402PaymentValid = null
   let x402FacilitatorReachable = null
   let x402AssetKnown = null
 
-  if (protocol === 'x402' && effectiveResult.httpStatus === 402) {
+  if (protocol === 'x402' && result.httpStatus === 402) {
     // If we already determined payment validity and HEAD didn't include the header, preserve cached value
-    if (currentPaymentValid != null && !effectiveResult.paymentRequired) {
+    if (currentPaymentValid != null && !result.paymentRequired) {
       x402PaymentValid = currentPaymentValid
     } else {
-      let paymentRequiredHeader = effectiveResult.paymentRequired
+      let paymentRequiredHeader = result.paymentRequired
+      let v1BodyText = result.responseBody
 
-      // HEAD returned 402 but no PAYMENT-REQUIRED header — retry with GET.
-      // Many x402 servers only include payment headers on content-bearing responses.
-      let v1BodyText = effectiveResult.responseBody // Body from performHttpCheck fallback
-      if (!paymentRequiredHeader && (http_method || 'GET') !== 'POST') {
+      // probeEndpoint already does HEAD→GET fallback and captures responseBody,
+      // but if we still have no payment-required header, retry with explicit GET
+      // (some x402 servers only include payment headers on content-bearing responses)
+      if (!paymentRequiredHeader && !v1BodyText && (http_method || 'GET') !== 'POST') {
         try {
           const getRes = await fetch(url, {
             method: 'GET',
@@ -522,7 +510,6 @@ export async function checkService(service) {
           })
           if (getRes.status === 402) {
             paymentRequiredHeader = getRes.headers.get('payment-required')
-            // If still no header, capture body for V1 parsing
             if (!paymentRequiredHeader) {
               try {
                 v1BodyText = await getRes.text()
@@ -574,15 +561,15 @@ export async function checkService(service) {
 
   // Gap 1: x402 endpoints that don't return 402 should get payment_valid=0, not NULL.
   // NULL means "never checked" — 0 means "checked but paywall not working."
-  if (protocol === 'x402' && x402PaymentValid === null && !effectiveResult.errorMessage) {
+  if (protocol === 'x402' && x402PaymentValid === null && !result.errorMessage) {
     x402PaymentValid = 0
   }
 
   persistHealthResult(id, {
     ...classification,
-    httpStatus: httpResult.httpStatus,
-    responseTimeMs: httpResult.responseTimeMs,
-    errorMessage: httpResult.errorMessage,
+    httpStatus: result.httpStatus,
+    responseTimeMs: result.responseTimeMs,
+    errorMessage: result.errorMessage,
     historicalP50,
     registeredAt: service.registered_at,
     x402PaymentValid,
@@ -590,7 +577,7 @@ export async function checkService(service) {
     x402AssetKnown,
   })
 
-  return { id, healthStatus: classification.healthStatus, httpStatus: httpResult.httpStatus }
+  return { id, healthStatus: classification.healthStatus, httpStatus: result.httpStatus }
 }
 
 function calculateUptime(serviceId) {
