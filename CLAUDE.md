@@ -124,6 +124,7 @@ Never skip step 1. If you can't write a failing test, the bug isn't well-enough 
 
 ## Important Context
 
+- Every time we push to Github, Railway auto-deploys. Do not remind Ryan to deploy to Railway in the same message as telling him that a push to Github occurred, as that push caused a Railway auto-deploy.
 - Read `docs/competitive-intel.md` for competitive landscape (Merit Systems, x402 ecosystem, our verified supply)
 - Read `docs/strategy-v2.md` for founding strategic reasoning (historical — see `~/agent-state/projects/402index/status.md` and `roadmap.md` for current state)
 - For current project state, outreach status, and next priorities: `~/agent-state/projects/402index/status.md`

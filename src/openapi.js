@@ -223,7 +223,7 @@ export const openapiSpec = {
 
     '/api/v1/register': {
       post: {
-        summary: 'Register an L402 endpoint',
+        summary: 'Register a paid API endpoint (L402, x402, or MPP)',
         operationId: 'registerService',
         tags: ['Registration'],
         requestBody: {
@@ -234,7 +234,7 @@ export const openapiSpec = {
             properties: {
               url: { type: 'string', description: 'The endpoint URL to register' },
               name: { type: 'string', description: 'Display name for the service' },
-              protocol: { type: 'string', enum: ['L402'], description: 'Only L402 accepted for self-registration' },
+              protocol: { type: 'string', enum: ['L402', 'x402', 'MPP'], description: 'Payment protocol (case-insensitive)' },
               description: { type: 'string' },
               category: { type: 'string' },
               contact_email: { type: 'string', format: 'email' },
@@ -257,16 +257,24 @@ export const openapiSpec = {
                 message: { type: 'string' },
                 service: { $ref: '#/components/schemas/Service' },
                 verification: { type: 'object', properties: {
+                  protocol: { type: 'string', enum: ['L402', 'x402', 'MPP'] },
                   httpStatus: { type: 'integer' },
-                  scheme: { type: 'string' },
-                  hasMacaroon: { type: 'boolean' },
-                  hasInvoice: { type: 'boolean' },
+                  scheme: { type: 'string', description: 'L402 only' },
+                  hasMacaroon: { type: 'boolean', description: 'L402 only' },
+                  hasInvoice: { type: 'boolean', description: 'L402 only' },
+                  accepts: { type: 'array', description: 'x402 only — payment requirements' },
+                  assetKnown: { type: 'boolean', description: 'x402 only' },
+                  version: { type: 'integer', description: 'x402 only (1 or 2)' },
+                  method: { type: 'string', description: 'MPP only — payment method (e.g. tempo, stripe)' },
+                  intent: { type: 'string', description: 'MPP only — payment intent' },
+                  id: { type: 'string', description: 'MPP only — challenge ID' },
+                  realm: { type: 'string', description: 'MPP only — realm' },
                 } },
               },
             } } },
           },
           '400': { description: 'Missing required fields or invalid input' },
-          '422': { description: 'L402 verification failed — endpoint did not return valid L402 challenge' },
+          '422': { description: 'Verification failed — endpoint did not return a valid protocol challenge' },
           '429': { description: 'Rate limited (10 registrations per hour per IP)' },
         },
       },
