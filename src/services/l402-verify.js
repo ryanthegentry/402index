@@ -7,6 +7,11 @@ export { parseWwwAuthenticate, isValidMacaroon, isValidInvoice }
 const TIMEOUT_MS = 10_000
 
 /**
+ * @deprecated Use probeEndpoint() from './probe-endpoint.js' instead.
+ * This function is kept for backward compatibility with existing tests
+ * and any external consumers. The redirect-following and SSRF logic
+ * has been unified in probeEndpoint.
+ *
  * Probe a URL to verify it's L402-compliant.
  *
  * @param {string} url - The endpoint URL to verify
