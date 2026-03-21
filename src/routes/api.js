@@ -7,6 +7,7 @@ import { normalizeUrl } from '../services/url-normalize.js'
 import { verifyL402 } from '../services/l402-verify.js'
 import { isBlockedScheme, resolveAndCheck, performHttpCheck } from '../health/checker.js'
 import { detectProtocol } from '../services/detect-protocol.js'
+import { probeEndpoint } from '../services/probe-endpoint.js'
 import { getProvider } from '../services/l402-provider.js'
 import { registerWebhook, deleteWebhook, getWebhook } from '../services/webhooks.js'
 import { emit } from '../services/events.js'
@@ -296,72 +297,88 @@ const MAX_LENGTHS = { name: 200, description: 2000, url: 2000, provider: 200, ca
 
 /**
  * Multi-protocol verification dispatcher.
- * L402 → verifyL402(), x402/MPP → HTTP probe + detectProtocol().
+ * All protocols use the shared probeEndpoint() with redirect following,
+ * POST fallback, and unified 8s timeout.
  */
 async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}') {
-  if (protocol === 'L402') {
-    const result = await verifyL402(url, httpMethod, probeBody)
-    return {
-      valid: result.valid,
-      protocol: 'L402',
-      httpStatus: result.httpStatus,
-      error: result.error || null,
-      details: {
-        hasWwwAuthenticate: result.hasWwwAuthenticate,
-        scheme: result.scheme,
-        hasMacaroon: result.hasMacaroon,
-        hasInvoice: result.hasInvoice,
-      },
-    }
-  }
-
-  // x402 and MPP: HTTP probe then detectProtocol()
-  const httpResult = await performHttpCheck(url, httpMethod, probeBody)
-
-  if (httpResult.errorMessage) {
-    return {
-      valid: false,
-      protocol,
-      httpStatus: httpResult.httpStatus,
-      error: httpResult.errorMessage,
-      details: {},
-    }
-  }
-
-  if (httpResult.httpStatus !== 402) {
-    return {
-      valid: false,
-      protocol,
-      httpStatus: httpResult.httpStatus,
-      error: `Your endpoint returned HTTP ${httpResult.httpStatus} instead of 402. ${protocol} endpoints must return 402 Payment Required for unauthenticated requests.`,
-      details: {},
-    }
-  }
-
-  const detection = detectProtocol({
-    wwwAuthenticate: httpResult.wwwAuthenticate,
-    paymentRequired: httpResult.paymentRequired,
-    responseBody: httpResult.responseBody,
+  const result = await probeEndpoint(url, {
+    protocol,
+    method: httpMethod,
+    body: probeBody,
+    followRedirects: true,
+    postFallback: true,
   })
 
-  if (detection.protocol !== protocol) {
+  if (result.errorMessage) {
     return {
       valid: false,
       protocol,
-      httpStatus: httpResult.httpStatus,
-      error: detection.protocol
-        ? `Endpoint returned a ${detection.protocol} challenge, but was registered as ${protocol}.`
-        : `Endpoint returned 402 but no valid ${protocol} challenge was detected.`,
+      httpStatus: result.httpStatus,
+      error: result.errorMessage,
+      details: {},
+    }
+  }
+
+  // Effective status after POST fallback
+  const effectiveStatus = result.httpStatus
+  const detection = result.detection
+
+  if (effectiveStatus !== 402) {
+    return {
+      valid: false,
+      protocol,
+      httpStatus: effectiveStatus,
+      error: `Your endpoint returned HTTP ${effectiveStatus} instead of 402. ${protocol} endpoints must return 402 Payment Required for unauthenticated requests.`,
+      details: {},
+    }
+  }
+
+  // Graceful cross-detection: suggest the right protocol instead of hard-failing
+  if (detection.protocol && detection.protocol !== protocol) {
+    return {
+      valid: false,
+      protocol,
+      httpStatus: effectiveStatus,
+      error: `Your endpoint returns a ${detection.protocol} challenge. Register it as ${detection.protocol} instead.`,
+      suggestedProtocol: detection.protocol,
       details: detection.details,
+    }
+  }
+
+  if (!detection.protocol) {
+    return {
+      valid: false,
+      protocol,
+      httpStatus: effectiveStatus,
+      error: `Endpoint returned 402 but no valid ${protocol} challenge was detected.`,
+      details: detection.details,
+    }
+  }
+
+  // L402-specific details for backward compat
+  if (protocol === 'L402') {
+    return {
+      valid: detection.valid,
+      protocol,
+      httpStatus: effectiveStatus,
+      error: detection.valid ? null : (detection.degradeReason || 'Invalid L402 challenge'),
+      details: {
+        hasWwwAuthenticate: !!result.wwwAuthenticate,
+        scheme: detection.details.scheme,
+        hasMacaroon: detection.details.macaroonValid ?? false,
+        hasInvoice: detection.details.invoiceValid ?? false,
+      },
+      methodUsed: result.methodUsed,
     }
   }
 
   return {
     valid: detection.valid,
     protocol,
-    httpStatus: httpResult.httpStatus,
+    httpStatus: effectiveStatus,
     error: detection.valid ? null : (detection.degradeReason || `Invalid ${protocol} challenge`),
     details: detection.details,
+    methodUsed: result.methodUsed,
   }
 }
 
@@ -464,6 +481,9 @@ router.post('/register', async (req, res) => {
           ...probe.details,
         },
       }
+      if (probe.suggestedProtocol) {
+        response.suggestedProtocol = probe.suggestedProtocol
+      }
       if (discoveredConfig) {
         response.wellknown_attempted = true
         response.detail += ` (Also attempted .well-known auto-discovery — the constructed probe body did not trigger an ${protocol} challenge. Try providing an explicit probe_body parameter.)`
@@ -479,6 +499,11 @@ router.post('/register', async (req, res) => {
       if (!body.probe_body) {
         probeBody = discoveredConfig.probeBody
       }
+    }
+
+    // If POST fallback fired during verification, persist the detected method
+    if (probe.methodUsed && probe.methodUsed !== httpMethod && !body.http_method) {
+      httpMethod = probe.methodUsed
     }
 
     // Insert with status='pending' for admin review
