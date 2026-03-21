@@ -1,5 +1,6 @@
-import { isPrivateIp, resolveAndCheck, performHttpCheck, classifyHealthStatus } from '../health/checker.js'
-import { detectProtocol, decodeMppRequest } from './detect-protocol.js'
+import { isPrivateIp, classifyHealthStatus } from '../health/checker.js'
+import { decodeMppRequest } from './detect-protocol.js'
+import { probeEndpoint } from './probe-endpoint.js'
 
 /**
  * Validate a URL for the live probe endpoint.
@@ -194,7 +195,7 @@ export const formatProbeSteps = {
 }
 
 /**
- * Run a live probe against a URL using the same logic as the health checker.
+ * Run a live probe against a URL using the shared probeEndpoint.
  * Looks up the service in DB for http_method, probe_body, protocol context.
  * Yields SSE-formatted step objects as each phase completes.
  * @param {string} url
@@ -206,40 +207,39 @@ export async function* runProbeSteps(url, db) {
 
   yield formatProbeSteps.connect(url)
 
-  // DNS / SSRF check (same as health checker)
-  const blockReason = await resolveAndCheck(url)
-  if (blockReason) {
-    yield formatProbeSteps.error(`Blocked: ${blockReason}`)
-    return
-  }
-
   // Look up service config from DB
   const config = buildProbeConfig(db, url)
   const method = config.httpMethod
 
   yield formatProbeSteps.request(method, url)
 
-  // Use the real performHttpCheck from the health checker
-  const httpResult = await performHttpCheck(url, method, config.probeBody)
+  // Use the shared probeEndpoint with redirect following + POST fallback
+  const result = await probeEndpoint(url, {
+    protocol: config.protocol,
+    method,
+    body: config.probeBody,
+    followRedirects: true,
+    postFallback: (!method || method === 'GET'),
+  })
 
-  if (httpResult.errorMessage) {
-    yield formatProbeSteps.error(httpResult.errorMessage === 'timeout' ? 'Connection timed out (10s)' : httpResult.errorMessage)
+  if (result.errorMessage) {
+    yield formatProbeSteps.error(result.errorMessage === 'timeout' ? 'Connection timed out (8s)' : result.errorMessage)
     return
   }
 
-  yield formatProbeSteps.response(httpResult.httpStatus, httpResult.responseTimeMs)
+  yield formatProbeSteps.response(result.httpStatus, result.responseTimeMs)
 
   // Classify using the real health classifier
   const classification = classifyHealthStatus(
-    httpResult.httpStatus,
-    httpResult.errorMessage,
+    result.httpStatus,
+    result.errorMessage,
     config.consecutiveFailures,
     config.historicalP50,
-    httpResult.responseTimeMs
+    result.responseTimeMs
   )
 
   // ─── Protocol detection + validation ─────────────────────────────────
-  const detection = detectProtocol(httpResult)
+  const detection = result.detection
   let detectedProtocol = detection.protocol || config.protocol
 
   // Emit headers + protocol-specific validation
@@ -274,53 +274,37 @@ export async function* runProbeSteps(url, db) {
     }
   }
 
-  // POST auto-detection for L402 and MPP (unified)
-  if ((detectedProtocol === 'L402' || detectedProtocol === 'MPP' || detectedProtocol === 'x402' ||
-       config.protocol === 'L402' || config.protocol === 'MPP' || config.protocol === 'x402' ||
-     classification.checkStatus === 'method_not_allowed') &&
-      (!method || method === 'GET') &&
-      classification.healthStatus !== 'healthy') {
-    const shouldTryPost = (
-      classification.checkStatus === 'method_not_allowed' ||
-      httpResult.httpStatus === 400 ||
-      httpResult.httpStatus === 200 ||
-      httpResult.httpStatus === 405
-    )
+  // POST fallback results from probeEndpoint
+  if (result.postFallback?.attempted) {
+    yield formatProbeSteps.postRetry('POST', result.postFallback.httpStatus || 0)
 
-    if (shouldTryPost) {
-      const postResult = await performHttpCheck(url, 'POST', config.probeBody)
-      yield formatProbeSteps.postRetry('POST', postResult.httpStatus || 0)
+    if (result.postFallback.detection?.valid) {
+      const postDetection = result.postFallback.detection
+      classification.healthStatus = 'healthy'
+      classification.checkStatus = 'healthy'
+      classification.consecutiveFailures = 0
+      detectedProtocol = postDetection.protocol
 
-      if (postResult.httpStatus === 402) {
-        const postDetection = detectProtocol(postResult)
-        if (postDetection.protocol && postDetection.valid) {
-          classification.healthStatus = 'healthy'
-          classification.checkStatus = 'healthy'
-          classification.consecutiveFailures = 0
-          detectedProtocol = postDetection.protocol
-
-          yield formatProbeSteps.headers(postDetection.protocol, postDetection.rawHeaders)
-          if (postDetection.protocol === 'L402') {
-            yield formatProbeSteps.l402Validation(true, {
-              scheme: postDetection.details.scheme,
-              macaroon: 'valid',
-              invoice: 'valid',
-            })
-          } else if (postDetection.protocol === 'MPP') {
-            yield formatProbeSteps.mppValidation(true, postDetection.details, null)
-          } else if (postDetection.protocol === 'x402') {
-            yield formatProbeSteps.x402Validation(true, {
-              assetKnown: postDetection.details.assetKnown,
-              facilitatorReachable: null,
-            })
-          }
-        }
+      yield formatProbeSteps.headers(postDetection.protocol, postDetection.rawHeaders)
+      if (postDetection.protocol === 'L402') {
+        yield formatProbeSteps.l402Validation(true, {
+          scheme: postDetection.details.scheme,
+          macaroon: 'valid',
+          invoice: 'valid',
+        })
+      } else if (postDetection.protocol === 'MPP') {
+        yield formatProbeSteps.mppValidation(true, postDetection.details, null)
+      } else if (postDetection.protocol === 'x402') {
+        yield formatProbeSteps.x402Validation(true, {
+          assetKnown: postDetection.details.assetKnown,
+          facilitatorReachable: null,
+        })
       }
     }
   }
 
   // Emit fallback headers step if nothing was detected
-  if (!detection.protocol) {
+  if (!detection.protocol && !result.postFallback?.detection?.protocol) {
     yield formatProbeSteps.headers(detectedProtocol, {})
   }
 
