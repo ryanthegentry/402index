@@ -82,7 +82,7 @@ export function apiDocsPage() {
             <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
             <span class="endpoint-path">/api/v1/register</span>
           </div>
-          <p>Register an L402 endpoint. The URL is probed to verify L402 compliance. Registrations are reviewed before appearing in the directory. Rate limited to 10 registrations per hour per IP.</p>
+          <p>Register a paid API endpoint (L402, x402, or MPP). The URL is probed to verify protocol compliance. Registrations are reviewed before appearing in the directory. Rate limited to 10 registrations per hour per IP.</p>
           <table class="params-table">
             <thead>
               <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
@@ -90,9 +90,9 @@ export function apiDocsPage() {
             <tbody>
               <tr><td>url</td><td>string</td><td><strong>Required.</strong> The endpoint URL to register</td></tr>
               <tr><td>name</td><td>string</td><td><strong>Required.</strong> Display name for the service</td></tr>
-              <tr><td>protocol</td><td>string</td><td><strong>Required.</strong> Currently only <code>L402</code> is supported</td></tr>
-              <tr><td>http_method</td><td>string</td><td>HTTP method that triggers the L402 paywall. Default: <code>GET</code>. Allowed: <code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code></td></tr>
-              <tr><td>probe_body</td><td>string</td><td>JSON body to send during health checks and verification probes. Required for endpoints that validate the request body before issuing the L402 challenge. Must be valid JSON.</td></tr>
+              <tr><td>protocol</td><td>string</td><td><strong>Required.</strong> One of <code>L402</code>, <code>x402</code>, or <code>MPP</code> (case-insensitive)</td></tr>
+              <tr><td>http_method</td><td>string</td><td>HTTP method that triggers the paywall. Default: <code>GET</code>. Allowed: <code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code></td></tr>
+              <tr><td>probe_body</td><td>string</td><td>JSON body to send during health checks and verification probes. Required for endpoints that validate the request body before issuing the payment challenge. Must be valid JSON.</td></tr>
               <tr><td>description</td><td>string</td><td>Description of what the service does</td></tr>
               <tr><td>price_sats</td><td>integer</td><td>Price per request in satoshis</td></tr>
               <tr><td>price_usd</td><td>number</td><td>Price per request in USD</td></tr>
@@ -119,7 +119,7 @@ export function apiDocsPage() {
             <tbody>
               <tr><td><code>201</code></td><td>Registered and pending review. Returns the service record (with <code>status: "pending"</code>) and verification details. Re-registering an existing URL+protocol updates the record.</td></tr>
               <tr><td><code>400</code></td><td>Missing required fields, invalid protocol, invalid URL, or field exceeds max length.</td></tr>
-              <tr><td><code>422</code></td><td>L402 verification failed. The response includes actionable details: wrong HTTP status, missing <code>WWW-Authenticate</code> header, unreachable endpoint, or SSRF blocked.</td></tr>
+              <tr><td><code>422</code></td><td>Protocol verification failed. The response includes actionable details: wrong HTTP status, missing payment headers, unreachable endpoint, or SSRF blocked.</td></tr>
               <tr><td><code>429</code></td><td>Rate limit exceeded (10 registrations per hour per IP).</td></tr>
             </tbody>
           </table>

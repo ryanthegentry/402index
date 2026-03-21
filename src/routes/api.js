@@ -5,6 +5,8 @@ import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/servic
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeUrl } from '../services/url-normalize.js'
 import { verifyL402 } from '../services/l402-verify.js'
+import { isBlockedScheme, resolveAndCheck, performHttpCheck } from '../health/checker.js'
+import { detectProtocol } from '../services/detect-protocol.js'
 import { getProvider } from '../services/l402-provider.js'
 import { registerWebhook, deleteWebhook, getWebhook } from '../services/webhooks.js'
 import { emit } from '../services/events.js'
@@ -287,9 +289,81 @@ const registerUpsert = () => stmt('registerUpsert', `
   RETURNING *
 `)
 
+const VALID_PROTOCOLS = new Set(['L402', 'X402', 'MPP'])
 const REQUIRED_FIELDS = ['url', 'name', 'protocol']
 const VALID_HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE'])
 const MAX_LENGTHS = { name: 200, description: 2000, url: 2000, provider: 200, category: 100, payment_asset: 50, payment_network: 50, contact_email: 254, http_method: 10, probe_body: 4000 }
+
+/**
+ * Multi-protocol verification dispatcher.
+ * L402 → verifyL402(), x402/MPP → HTTP probe + detectProtocol().
+ */
+async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}') {
+  if (protocol === 'L402') {
+    const result = await verifyL402(url, httpMethod, probeBody)
+    return {
+      valid: result.valid,
+      protocol: 'L402',
+      httpStatus: result.httpStatus,
+      error: result.error || null,
+      details: {
+        hasWwwAuthenticate: result.hasWwwAuthenticate,
+        scheme: result.scheme,
+        hasMacaroon: result.hasMacaroon,
+        hasInvoice: result.hasInvoice,
+      },
+    }
+  }
+
+  // x402 and MPP: HTTP probe then detectProtocol()
+  const httpResult = await performHttpCheck(url, httpMethod, probeBody)
+
+  if (httpResult.errorMessage) {
+    return {
+      valid: false,
+      protocol,
+      httpStatus: httpResult.httpStatus,
+      error: httpResult.errorMessage,
+      details: {},
+    }
+  }
+
+  if (httpResult.httpStatus !== 402) {
+    return {
+      valid: false,
+      protocol,
+      httpStatus: httpResult.httpStatus,
+      error: `Your endpoint returned HTTP ${httpResult.httpStatus} instead of 402. ${protocol} endpoints must return 402 Payment Required for unauthenticated requests.`,
+      details: {},
+    }
+  }
+
+  const detection = detectProtocol({
+    wwwAuthenticate: httpResult.wwwAuthenticate,
+    paymentRequired: httpResult.paymentRequired,
+    responseBody: httpResult.responseBody,
+  })
+
+  if (detection.protocol !== protocol) {
+    return {
+      valid: false,
+      protocol,
+      httpStatus: httpResult.httpStatus,
+      error: detection.protocol
+        ? `Endpoint returned a ${detection.protocol} challenge, but was registered as ${protocol}.`
+        : `Endpoint returned 402 but no valid ${protocol} challenge was detected.`,
+      details: detection.details,
+    }
+  }
+
+  return {
+    valid: detection.valid,
+    protocol,
+    httpStatus: httpResult.httpStatus,
+    error: detection.valid ? null : (detection.degradeReason || `Invalid ${protocol} challenge`),
+    details: detection.details,
+  }
+}
 
 // POST /api/v1/register
 router.post('/register', async (req, res) => {
@@ -308,13 +382,14 @@ router.post('/register', async (req, res) => {
       })
     }
 
-    // Validate protocol — only L402 accepted (case-insensitive)
-    // x402 endpoints are auto-indexed from Bazaar; MPP endpoints are auto-indexed from mpp.dev
-    if (String(body.protocol).toUpperCase() !== 'L402') {
+    // Validate protocol — L402, x402, MPP accepted (case-insensitive)
+    const protocolUpper = String(body.protocol).toUpperCase()
+    if (!VALID_PROTOCOLS.has(protocolUpper)) {
       return res.status(400).json({
-        error: 'Invalid protocol. Only "L402" is accepted for self-registration. x402 endpoints are auto-indexed from Bazaar, and MPP endpoints are auto-indexed from mpp.dev.',
+        error: `Invalid protocol "${body.protocol}". Must be one of: L402, x402, MPP`,
       })
     }
+    const protocol = protocolUpper === 'X402' ? 'x402' : protocolUpper
 
     // Validate URL scheme
     let parsedUrl
@@ -362,16 +437,16 @@ router.post('/register', async (req, res) => {
     // normalizeUrl forces http→https which breaks HTTP-only tunnels (e.g. ngrok --scheme http).
     const probeUrl = body.url.trim()
 
-    // Run L402 verification probe against the raw URL
-    let probe = await verifyL402(probeUrl, httpMethod, probeBody)
+    // Run verification probe against the raw URL
+    let probe = await verifyEndpoint(probeUrl, protocol, httpMethod, probeBody)
 
-    // If probe failed with 400 or 406, try .well-known auto-discovery
+    // If L402 probe failed with 400 or 406, try .well-known auto-discovery
     let discoveredConfig = null
-    if (!probe.valid && [400, 406].includes(probe.httpStatus)) {
+    if (protocol === 'L402' && !probe.valid && [400, 406].includes(probe.httpStatus)) {
       discoveredConfig = await discoverProbeConfig(probeUrl)
       if (discoveredConfig) {
         console.log(`[register] .well-known discovery found config for ${probeUrl}: method=${discoveredConfig.method}, body=${discoveredConfig.probeBody.substring(0, 100)}`)
-        probe = await verifyL402(probeUrl, discoveredConfig.method, discoveredConfig.probeBody)
+        probe = await verifyEndpoint(probeUrl, protocol, discoveredConfig.method, discoveredConfig.probeBody)
       }
     }
 
@@ -382,19 +457,16 @@ router.post('/register', async (req, res) => {
 
     if (!probe.valid) {
       const response = {
-        error: 'L402 verification failed',
+        error: `${protocol} verification failed`,
         detail: probe.error,
         probe: {
           httpStatus: probe.httpStatus,
-          hasWwwAuthenticate: probe.hasWwwAuthenticate,
-          scheme: probe.scheme,
-          hasMacaroon: probe.hasMacaroon,
-          hasInvoice: probe.hasInvoice,
+          ...probe.details,
         },
       }
       if (discoveredConfig) {
         response.wellknown_attempted = true
-        response.detail += ' (Also attempted .well-known auto-discovery — the constructed probe body did not trigger an L402 challenge. Try providing an explicit probe_body parameter.)'
+        response.detail += ` (Also attempted .well-known auto-discovery — the constructed probe body did not trigger an ${protocol} challenge. Try providing an explicit probe_body parameter.)`
       }
       return res.status(422).json(response)
     }
@@ -415,7 +487,7 @@ router.post('/register', async (req, res) => {
       name: body.name,
       description: body.description || null,
       url,
-      protocol: 'L402',
+      protocol,
       price_sats: body.price_sats != null ? Number(body.price_sats) : null,
       price_usd: body.price_usd != null ? Number(body.price_usd) : null,
       payment_asset: body.payment_asset || null,
@@ -429,7 +501,7 @@ router.post('/register', async (req, res) => {
 
     let service = registerUpsert().get(params)
 
-    // Auto-approve trusted providers — probe already validated L402 compliance above
+    // Auto-approve trusted providers — probe already validated compliance above
     if (service.status === 'pending' && body.provider === 'golem-gateway') {
       approveService().run({ id: service.id })
       service = { ...service, status: 'active' }
@@ -449,10 +521,9 @@ router.post('/register', async (req, res) => {
       message,
       service,
       verification: {
+        protocol,
         httpStatus: probe.httpStatus,
-        scheme: probe.scheme,
-        hasMacaroon: probe.hasMacaroon,
-        hasInvoice: probe.hasInvoice,
+        ...probe.details,
       },
     })
   } catch (err) {

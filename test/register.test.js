@@ -71,14 +71,15 @@ describe('POST /api/v1/register — Validation', () => {
     assert.ok(r.body.error.includes('Invalid protocol'))
   })
 
-  it('rejects x402 protocol → 400', async () => {
+  it('accepts x402 protocol (passes validation, hits probe)', async () => {
     const r = await register({
       url: 'https://example.com/api',
       name: 'Test x402 Service',
       protocol: 'x402',
     })
-    assert.equal(r.status, 400)
-    assert.ok(r.body.error.includes('L402'))
+    // 422 = passed validation, failed probe (example.com returns 200, not 402)
+    assert.equal(r.status, 422, 'x402 should pass validation (not 400)')
+    assert.ok(r.body.error.includes('x402'))
   })
 
   it('rejects "both" protocol → 400', async () => {
@@ -88,7 +89,7 @@ describe('POST /api/v1/register — Validation', () => {
       protocol: 'both',
     })
     assert.equal(r.status, 400)
-    assert.ok(r.body.error.includes('L402'))
+    assert.ok(r.body.error.includes('Invalid protocol'))
   })
 
   it('accepts lowercase "l402" protocol (case-insensitive)', async () => {
@@ -269,6 +270,42 @@ function startMockL402Server(wwwAuthenticateValue) {
   })
 }
 
+/**
+ * Start a mock HTTP server that responds with x402 PAYMENT-REQUIRED header.
+ */
+function startMockX402Server(paymentRequiredB64, bodyJson) {
+  return new Promise((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const headers = { 'Content-Type': 'application/json' }
+      if (paymentRequiredB64) headers['PAYMENT-REQUIRED'] = paymentRequiredB64
+      res.writeHead(402, headers)
+      res.end(bodyJson || '')
+    })
+    server.listen(0, '::', () => {
+      const port = server.address().port
+      resolve({ server, port })
+    })
+    server.on('error', reject)
+  })
+}
+
+/**
+ * Start a mock HTTP server that responds with MPP Payment challenge.
+ */
+function startMockMppServer(wwwAuthenticateValue) {
+  return new Promise((resolve, reject) => {
+    const server = createServer((req, res) => {
+      res.writeHead(402, { 'WWW-Authenticate': wwwAuthenticateValue })
+      res.end()
+    })
+    server.listen(0, '::', () => {
+      const port = server.address().port
+      resolve({ server, port })
+    })
+    server.on('error', reject)
+  })
+}
+
 function closeMockServer(server) {
   return new Promise(resolve => server.close(resolve))
 }
@@ -342,6 +379,229 @@ describe('POST /api/v1/register — Macaroon/Invoice Validation', () => {
       assert.equal(r.body.service.status, 'pending')
       assert.equal(r.body.verification.hasMacaroon, true)
       assert.equal(r.body.verification.hasInvoice, true)
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+})
+
+// ─── x402 Registration (mock x402 server) ────────────────────────────────────
+
+const VALID_X402_ACCEPTS = [{
+  payTo: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+  asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+  amount: '10000',
+  network: 'eip155:8453',
+}]
+const VALID_X402_HEADER_B64 = Buffer.from(JSON.stringify({ accepts: VALID_X402_ACCEPTS })).toString('base64')
+
+describe('POST /api/v1/register — x402 Registration', () => {
+  const ipv6 = findPublicIpv6()
+  let serverAvailable = false
+
+  before(async () => {
+    if (!ipv6) return
+    try {
+      const res = await fetch(`${BASE}/api/v1/services`, { signal: AbortSignal.timeout(3000) })
+      serverAvailable = res.ok
+    } catch { serverAvailable = false }
+  })
+
+  it('accepts x402 protocol and probes for x402 payment headers → 201', async (t) => {
+    if (!ipv6 || !serverAvailable) return t.skip('requires public IPv6 + running 402index server')
+
+    const { server, port } = await startMockX402Server(VALID_X402_HEADER_B64)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({ url, name: 'Valid x402 Test', protocol: 'x402' })
+      assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.equal(r.body.service.protocol, 'x402')
+      assert.ok(r.body.verification)
+      assert.equal(r.body.verification.httpStatus, 402)
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('returns 422 with x402-specific verification details when probe fails', async (t) => {
+    if (!ipv6 || !serverAvailable) return t.skip('requires public IPv6 + running 402index server')
+
+    // Server returns 402 but no PAYMENT-REQUIRED header and no body → invalid x402
+    const { server, port } = await startMockX402Server(null, null)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({ url, name: 'Invalid x402 Test', protocol: 'x402' })
+      assert.equal(r.status, 422, `expected 422, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.ok(r.body.error.includes('x402'))
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('stores payment_asset and payment_network from x402 requirements', async (t) => {
+    if (!ipv6 || !serverAvailable) return t.skip('requires public IPv6 + running 402index server')
+
+    const { server, port } = await startMockX402Server(VALID_X402_HEADER_B64)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({
+        url, name: 'x402 Asset Test', protocol: 'x402',
+        payment_asset: 'USDC', payment_network: 'Base',
+      })
+      assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.equal(r.body.service.payment_asset, 'USDC')
+      assert.equal(r.body.service.payment_network, 'Base')
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('case-insensitive protocol matching for x402', async () => {
+    // Should pass validation and hit probe (which will fail on example.com → 422)
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'Case Test x402',
+      protocol: 'X402',
+    })
+    assert.equal(r.status, 422, 'uppercase X402 should pass validation (not 400)')
+  })
+})
+
+// ─── MPP Registration (mock MPP server) ──────────────────────────────────────
+
+const VALID_MPP_CHALLENGE = 'Payment id="test123", realm="test.example.com", method="tempo", intent="session", request="eyJ0ZXN0IjoxfQ", description="test payment", expires="2099-01-01T00:00:00Z"'
+
+describe('POST /api/v1/register — MPP Registration', () => {
+  const ipv6 = findPublicIpv6()
+  let serverAvailable = false
+
+  before(async () => {
+    if (!ipv6) return
+    try {
+      const res = await fetch(`${BASE}/api/v1/services`, { signal: AbortSignal.timeout(3000) })
+      serverAvailable = res.ok
+    } catch { serverAvailable = false }
+  })
+
+  it('accepts MPP protocol and probes for Payment challenge → 201', async (t) => {
+    if (!ipv6 || !serverAvailable) return t.skip('requires public IPv6 + running 402index server')
+
+    const { server, port } = await startMockMppServer(VALID_MPP_CHALLENGE)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({ url, name: 'Valid MPP Test', protocol: 'MPP' })
+      assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.equal(r.body.service.protocol, 'MPP')
+      assert.ok(r.body.verification)
+      assert.equal(r.body.verification.httpStatus, 402)
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('returns 422 with MPP-specific verification details when probe fails', async (t) => {
+    if (!ipv6 || !serverAvailable) return t.skip('requires public IPv6 + running 402index server')
+
+    // Payment challenge missing required 'intent' field
+    const badChallenge = 'Payment id="x", realm="r", method="tempo", request="eyJ0ZXN0IjoxfQ"'
+    const { server, port } = await startMockMppServer(badChallenge)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({ url, name: 'Invalid MPP Test', protocol: 'MPP' })
+      assert.equal(r.status, 422, `expected 422, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.ok(r.body.error.includes('MPP'))
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('validates MPP challenge has required fields', async (t) => {
+    if (!ipv6 || !serverAvailable) return t.skip('requires public IPv6 + running 402index server')
+
+    // Missing 'request' field
+    const incompleteChallenge = 'Payment id="x", realm="r", method="tempo", intent="charge"'
+    const { server, port } = await startMockMppServer(incompleteChallenge)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({ url, name: 'Incomplete MPP Test', protocol: 'MPP' })
+      assert.equal(r.status, 422, `expected 422, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.ok(r.body.error.includes('MPP'))
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('case-insensitive protocol matching for MPP', async () => {
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'Case Test MPP',
+      protocol: 'mpp',
+    })
+    assert.equal(r.status, 422, 'lowercase mpp should pass validation (not 400)')
+  })
+})
+
+// ─── Protocol Dispatcher ─────────────────────────────────────────────────────
+
+describe('POST /api/v1/register — Protocol Dispatcher', () => {
+  it('dispatches L402 to correct verification', async () => {
+    // L402 on example.com returns 200 (not 402) → 422 with L402 error
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'L402 Dispatch Test',
+      protocol: 'L402',
+    })
+    assert.equal(r.status, 422)
+    assert.ok(r.body.error.includes('L402'))
+  })
+
+  it('dispatches x402 to correct verification', async () => {
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'x402 Dispatch Test',
+      protocol: 'x402',
+    })
+    assert.equal(r.status, 422)
+    assert.ok(r.body.error.includes('x402'))
+  })
+
+  it('dispatches MPP to correct verification', async () => {
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'MPP Dispatch Test',
+      protocol: 'MPP',
+    })
+    assert.equal(r.status, 422)
+    assert.ok(r.body.error.includes('MPP'))
+  })
+
+  it('returns 400 for unknown protocol', async () => {
+    const r = await register({
+      url: 'https://example.com/api',
+      name: 'Unknown Protocol Test',
+      protocol: 'BOLT12',
+    })
+    assert.equal(r.status, 400)
+    assert.ok(r.body.error.includes('Invalid protocol'))
+  })
+
+  it('golem-gateway auto-approve still works for L402', async (t) => {
+    const ipv6 = findPublicIpv6()
+    if (!ipv6) return t.skip('requires public IPv6')
+    let serverAvailable = false
+    try {
+      const res = await fetch(`${BASE}/api/v1/services`, { signal: AbortSignal.timeout(3000) })
+      serverAvailable = res.ok
+    } catch { serverAvailable = false }
+    if (!serverAvailable) return t.skip('requires running 402index server')
+
+    const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${VALID_INVOICE}"`
+    const { server, port } = await startMockL402Server(wwwAuth)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register({ url, name: 'Golem Gateway Test', protocol: 'L402', provider: 'golem-gateway' })
+      assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.equal(r.body.service.status, 'active')
     } finally {
       await closeMockServer(server)
     }
