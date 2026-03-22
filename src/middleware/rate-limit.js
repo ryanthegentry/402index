@@ -71,6 +71,26 @@ export const freeLimiter = rateLimit({
 })
 
 /**
+ * Digest API rate limiter: 10 req/hour.
+ * @type {import('express').RequestHandler}
+ */
+export const digestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: extractClientIp,
+  validate: { keyGeneratorIpFallback: false },
+  handler: (_req, res) => {
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Digest rate limit exceeded. Limit: 10 per hour.',
+      retry_after: 3600,
+    })
+  },
+})
+
+/**
  * L402 tier rate limiter: 1000 req/min, only applies to L402-verified requests.
  * @type {import('express').RequestHandler}
  */
