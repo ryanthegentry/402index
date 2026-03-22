@@ -350,6 +350,22 @@ try {
   // Column already exists
 }
 
+// Migration: add provider_deleted flag (soft delete by domain-verified owner)
+try {
+  db.exec('ALTER TABLE services ADD COLUMN provider_deleted INTEGER DEFAULT 0')
+  console.log('[db] Added column: provider_deleted')
+} catch {
+  // Column already exists
+}
+
+// Migration: add deleted_at timestamp for soft-deleted services
+try {
+  db.exec('ALTER TABLE services ADD COLUMN deleted_at TEXT')
+  console.log('[db] Added column: deleted_at')
+} catch {
+  // Column already exists
+}
+
 // Migration: expand protocol CHECK constraint to include 'MPP'
 try {
   const needsMppMigration = (() => {
@@ -551,9 +567,24 @@ function pruneHealthChecks() {
   }
 }
 
+function purgeSoftDeleted() {
+  try {
+    const result = db.prepare(
+      "DELETE FROM services WHERE provider_deleted = 1 AND deleted_at < datetime('now', '-30 days')"
+    ).run()
+    if (result.changes > 0) {
+      console.log(`[db] Hard-deleted ${result.changes} soft-deleted services older than 30 days`)
+      db.pragma('incremental_vacuum')
+    }
+  } catch (err) {
+    console.warn(`[db] Soft-delete purge failed: ${err.message}`)
+  }
+}
+
 function pruneAll() {
   pruneHealthChecks()
   pruneQueryLog()
+  purgeSoftDeleted()
 }
 
 pruneAll()

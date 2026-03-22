@@ -114,7 +114,35 @@ export function verifyPage() {
           </tbody>
         </table>
 
-        <h2>6. Revoke access</h2>
+        <h2>6. Delete your listings</h2>
+        <p>
+          Verified domain owners can soft-delete any service whose URL matches their domain.
+          Deleted listings are hidden from the directory, health checks, pollers, and API queries.
+          They are permanently purged after 30 days. Contact <a href="mailto:hello@402index.io">hello@402index.io</a> to restore a deleted listing before purge.
+        </p>
+
+        <h3>Single delete</h3>
+        <pre>curl -X DELETE https://402index.io/api/v1/services/SERVICE_ID \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "domain": "api.example.com",
+  "verification_token": "a1b2c3d4e5f6..."
+}'</pre>
+
+        <h3>Bulk delete (up to 25 at once)</h3>
+        <pre>curl -X POST https://402index.io/api/v1/services/bulk-delete \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "ids": [101, 102, 103],
+  "domain": "api.example.com",
+  "verification_token": "a1b2c3d4e5f6..."
+}'</pre>
+        <p>
+          Bulk delete returns which IDs were deleted, which were skipped (wrong domain, not found),
+          and reasons for each skip.
+        </p>
+
+        <h2>7. Revoke access</h2>
         <p>
           If your token is compromised or you want to rotate credentials, revoke it:
         </p>

@@ -40,6 +40,7 @@ const upsert = () => stmt('upsert', `
     provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE excluded.provider END,
     source_id = excluded.source_id,
     updated_at = datetime('now')
+    WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
 `)
 
 const findExisting = () => stmt('findExisting', 'SELECT id FROM services WHERE url = ? AND protocol = ?')

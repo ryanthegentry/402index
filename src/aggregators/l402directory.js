@@ -33,6 +33,7 @@ const upsert = () => stmt('l402dirUpsert', `
       ELSE services.source || ',l402directory'
     END,
     updated_at = datetime('now')
+    WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
 `)
 
 const findExisting = () => stmt('l402dirFind', "SELECT id FROM services WHERE url = ? AND protocol = 'L402'")

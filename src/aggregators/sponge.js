@@ -27,6 +27,7 @@ const upsertEndpoint = () => stmt('spongeUpsert', `
       ELSE services.source || ',sponge'
     END,
     updated_at = datetime('now')
+    WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
 `)
 
 const findExisting = () => stmt('spongeFindExisting', "SELECT id FROM services WHERE url = ? AND protocol = 'x402'")
