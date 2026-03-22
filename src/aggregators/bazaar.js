@@ -1,5 +1,6 @@
 import db from '../db.js'
 import { normalizeItem } from './bazaar-utils.js'
+import { extractHostname } from '../services/url-normalize.js'
 
 const BAZAAR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources'
 const PAGE_SIZE = 100
@@ -18,8 +19,8 @@ function stmt(key, sql) {
 }
 
 const upsert = () => stmt('upsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id)
-  VALUES (@id, @name, @description, @url, 'x402', @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'bazaar', @source_id)
+  INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id, hostname)
+  VALUES (@id, @name, @description, @url, 'x402', @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'bazaar', @source_id, @hostname)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
     description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE excluded.description END,
@@ -31,6 +32,7 @@ const upsert = () => stmt('upsert', `
     output_schema = excluded.output_schema,
     provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE excluded.provider END,
     source_id = excluded.source_id,
+    hostname = COALESCE(excluded.hostname, services.hostname),
     updated_at = datetime('now')
     WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
 `)
@@ -104,6 +106,8 @@ export async function pollBazaar() {
         // Skip dupes within this poll
         if (seen.has(normalized.url)) continue
         seen.add(normalized.url)
+
+        normalized.hostname = extractHostname(normalized.url)
 
         // Check if service already exists
         const existing = findExisting().get(normalized.url, 'x402')

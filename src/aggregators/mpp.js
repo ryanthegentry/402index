@@ -1,5 +1,6 @@
 import db from '../db.js'
 import { normalizeMppEndpoint } from './mpp-utils.js'
+import { extractHostname } from '../services/url-normalize.js'
 
 const MPP_API = 'https://mpp.dev/api/services'
 
@@ -10,8 +11,8 @@ function stmt(key, sql) {
 }
 
 const upsertEndpoint = () => stmt('mppUpsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, provider, source, source_id, http_method, probe_body)
-  VALUES (@id, @name, @description, @url, 'MPP', @price_usd, @payment_asset, @payment_network, @category, @provider, 'mpp', @source_id, @http_method, @probe_body)
+  INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, provider, source, source_id, http_method, probe_body, hostname)
+  VALUES (@id, @name, @description, @url, 'MPP', @price_usd, @payment_asset, @payment_network, @category, @provider, 'mpp', @source_id, @http_method, @probe_body, @hostname)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
     description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE COALESCE(excluded.description, services.description) END,
@@ -22,6 +23,7 @@ const upsertEndpoint = () => stmt('mppUpsert', `
     provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE COALESCE(excluded.provider, services.provider) END,
     http_method = COALESCE(excluded.http_method, services.http_method),
     probe_body = COALESCE(excluded.probe_body, services.probe_body),
+    hostname = COALESCE(excluded.hostname, services.hostname),
     source = CASE
       WHEN services.source LIKE '%mpp%' THEN services.source
       ELSE services.source || ',mpp'
@@ -62,6 +64,7 @@ export async function pollMPP() {
         const record = normalizeMppEndpoint(svc, ep)
         if (!record) continue // free endpoint
 
+        record.hostname = extractHostname(record.url)
         const existing = findExisting().get(record.url)
         upsertEndpoint().run(record)
         if (existing) updatedCount++

@@ -1,6 +1,7 @@
 import { isPrivateIp, classifyHealthStatus } from '../health/checker.js'
 import { decodeMppRequest } from './detect-protocol.js'
 import { probeEndpoint } from './probe-endpoint.js'
+import { liveProbeWithThrottle } from './live-probe-cache.js'
 
 /**
  * Validate a URL for the live probe endpoint.
@@ -214,7 +215,8 @@ export async function* runProbeSteps(url, db) {
   yield formatProbeSteps.request(method, url)
 
   // Use the shared probeEndpoint with redirect following + POST fallback
-  const result = await probeEndpoint(url, {
+  // Wrapped in per-host debounce to prevent hammering same host on rapid probes
+  const result = await liveProbeWithThrottle(url, probeEndpoint, {
     protocol: config.protocol,
     method,
     body: config.probeBody,

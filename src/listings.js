@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url'
 import yaml from 'js-yaml'
 import { randomUUID } from 'crypto'
 import db from './db.js'
-import { normalizeUrl } from './services/url-normalize.js'
+import { normalizeUrl, extractHostname } from './services/url-normalize.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const LISTINGS_DIR = join(__dirname, '..', 'listings')
@@ -18,8 +18,8 @@ function stmt(key, sql) {
 }
 
 const upsert = () => stmt('upsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id)
-  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'exclusive', @source_id)
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id, hostname)
+  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'exclusive', @source_id, @hostname)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = excluded.name,
     description = excluded.description,
@@ -31,6 +31,7 @@ const upsert = () => stmt('upsert', `
     input_schema = excluded.input_schema,
     output_schema = excluded.output_schema,
     provider = excluded.provider,
+    hostname = COALESCE(excluded.hostname, services.hostname),
     updated_at = datetime('now')
 `)
 
@@ -56,12 +57,14 @@ export function loadListings() {
         continue
       }
 
+      const listingUrl = normalizeUrl(listing.url)
       upsert().run({
         id: randomUUID(),
         name: listing.name || 'Unknown',
         description: listing.description || null,
-        url: normalizeUrl(listing.url),
+        url: listingUrl,
         protocol: listing.protocol,
+        hostname: extractHostname(listingUrl),
         price_sats: listing.price_sats || null,
         price_usd: listing.price_usd || null,
         payment_asset: listing.payment_asset || null,

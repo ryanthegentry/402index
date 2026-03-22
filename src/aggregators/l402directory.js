@@ -2,6 +2,7 @@ import db from '../db.js'
 import { randomUUID } from 'crypto'
 import { fetchBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeServices } from './l402directory-utils.js'
+import { extractHostname } from '../services/url-normalize.js'
 
 const L402DIR_URL = 'https://l402.directory/api/services'
 
@@ -18,8 +19,8 @@ function stmt(key, sql) {
 }
 
 const upsert = () => stmt('l402dirUpsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id, http_method)
-  VALUES (@id, @name, @description, @url, 'L402', @price_sats, @price_usd, 'BTC', 'Lightning', @category, @provider, 'l402directory', @source_id, @http_method)
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id, http_method, hostname)
+  VALUES (@id, @name, @description, @url, 'L402', @price_sats, @price_usd, 'BTC', 'Lightning', @category, @provider, 'l402directory', @source_id, @http_method, @hostname)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
     description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE COALESCE(excluded.description, services.description) END,
@@ -28,6 +29,7 @@ const upsert = () => stmt('l402dirUpsert', `
     category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE CASE WHEN services.category = 'uncategorized' THEN excluded.category ELSE services.category END END,
     provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE COALESCE(excluded.provider, services.provider) END,
     http_method = COALESCE(excluded.http_method, services.http_method),
+    hostname = COALESCE(excluded.hostname, services.hostname),
     source = CASE
       WHEN services.source LIKE '%l402directory%' THEN services.source
       ELSE services.source || ',l402directory'
@@ -83,6 +85,7 @@ export async function pollL402Directory() {
         ep.price_usd = (ep.price_sats / 100_000_000) * btcRate
       }
 
+      ep.hostname = extractHostname(ep.url)
       const existing = findExisting().get(ep.url)
       if (existing) {
         ep.id = existing.id

@@ -374,6 +374,48 @@ try {
   // Column already exists
 }
 
+// Migration: add hostname column for exact-match queries (replaces LIKE on url)
+try {
+  db.exec('ALTER TABLE services ADD COLUMN hostname TEXT')
+  console.log('[db] Added column: hostname')
+} catch {
+  // Column already exists
+}
+
+// Backfill: extract hostname from url for all rows where hostname is NULL
+try {
+  const hostnameRows = db.prepare('SELECT id, url FROM services WHERE hostname IS NULL').all()
+  if (hostnameRows.length > 0) {
+    const hostnameUpdate = db.prepare('UPDATE services SET hostname = ? WHERE id = ?')
+    const backfillHostnames = db.transaction(() => {
+      let count = 0
+      for (const row of hostnameRows) {
+        try {
+          const hostname = new URL(row.url).hostname.toLowerCase()
+          hostnameUpdate.run(hostname, row.id)
+          count++
+        } catch {
+          // Malformed URL — skip, hostname stays NULL
+        }
+      }
+      return count
+    })
+    const filled = backfillHostnames()
+    if (filled > 0) {
+      console.log(`[db] Backfilled hostname for ${filled} services`)
+    }
+  }
+} catch (err) {
+  console.warn(`[db] Hostname backfill note: ${err.message}`)
+}
+
+// Index: create index on hostname for fast exact-match lookups
+try {
+  db.exec('CREATE INDEX IF NOT EXISTS idx_services_hostname ON services(hostname)')
+} catch (err) {
+  console.warn(`[db] Hostname index note: ${err.message}`)
+}
+
 // Migration: expand protocol CHECK constraint to include 'MPP'
 try {
   const needsMppMigration = (() => {

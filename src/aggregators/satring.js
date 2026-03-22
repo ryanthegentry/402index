@@ -1,6 +1,7 @@
 import db from '../db.js'
 import { fetchBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeRawService } from './satring-utils.js'
+import { extractHostname } from '../services/url-normalize.js'
 
 const SATRING_URL = 'https://satring.com/api/v1/services'
 
@@ -27,8 +28,8 @@ function stmt(key, sql) {
 }
 
 const upsert = () => stmt('upsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id)
-  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'satring', @source_id)
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id, hostname)
+  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'satring', @source_id, @hostname)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
     description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE excluded.description END,
@@ -39,6 +40,7 @@ const upsert = () => stmt('upsert', `
     category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE excluded.category END,
     provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE excluded.provider END,
     source_id = excluded.source_id,
+    hostname = COALESCE(excluded.hostname, services.hostname),
     updated_at = datetime('now')
     WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
 `)
@@ -121,6 +123,7 @@ export async function pollSatring() {
             // invalid URL — let upsert handle it
           }
 
+          normalized.hostname = extractHostname(normalized.url)
           const existing = findExisting().get(normalized.url, normalized.protocol)
 
           upsert().run(normalized)

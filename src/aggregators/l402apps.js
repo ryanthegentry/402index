@@ -1,6 +1,7 @@
 import db from '../db.js'
 import { fetchBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
 import { parseL402AppsHtml, normalizeApi } from './l402apps-utils.js'
+import { extractHostname } from '../services/url-normalize.js'
 
 const L402APPS_URL = 'https://www.l402apps.com'
 
@@ -12,8 +13,8 @@ function stmt(key, sql) {
 }
 
 const upsertNew = () => stmt('upsertNew', `
-  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id)
-  VALUES (@id, @name, @description, @url, 'L402', @price_sats, @price_usd, 'BTC', 'Lightning', @category, @provider, 'l402apps', @source_id)
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, source_id, hostname)
+  VALUES (@id, @name, @description, @url, 'L402', @price_sats, @price_usd, 'BTC', 'Lightning', @category, @provider, 'l402apps', @source_id, @hostname)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
     description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE excluded.description END,
@@ -21,6 +22,7 @@ const upsertNew = () => stmt('upsertNew', `
     price_usd = COALESCE(excluded.price_usd, services.price_usd),
     category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE CASE WHEN services.category = 'uncategorized' THEN excluded.category ELSE services.category END END,
     provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE COALESCE(excluded.provider, services.provider) END,
+    hostname = COALESCE(excluded.hostname, services.hostname),
     source = CASE
       WHEN services.source LIKE '%l402apps%' THEN services.source
       ELSE services.source || ',l402apps'
@@ -66,6 +68,7 @@ export async function pollL402Apps() {
         continue
       }
 
+      normalized.hostname = extractHostname(normalized.url)
       const existing = findExisting().get(normalized.url)
       upsertNew().run(normalized)
       if (existing) updatedCount++
