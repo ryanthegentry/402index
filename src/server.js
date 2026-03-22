@@ -3,8 +3,8 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { notFoundHandler, errorHandler } from './middleware/error-handler.js'
 import { verifyL402 } from './middleware/l402.js'
-import { freeLimiter, l402Limiter } from './middleware/rate-limit.js'
-import { adminAuth } from './middleware/admin-auth.js'
+import { freeLimiter, l402Limiter, digestLimiter } from './middleware/rate-limit.js'
+import { adminAuth, digestAuth } from './middleware/admin-auth.js'
 import apiRoutes from './routes/api.js'
 import pageRoutes from './routes/pages.js'
 import { startScheduler, shutdown } from './scheduler.js'
@@ -73,6 +73,9 @@ const webhookLimiter = rateLimit({
 })
 app.use('/api/v1/webhooks', express.json({ limit: '10kb' }), webhookLimiter)
 
+// Digest endpoint: separate auth + conservative rate limit (10/hour)
+app.use('/api/v1/digest', digestAuth, digestLimiter)
+
 // Admin routes: JSON body parsing + auth
 app.use('/api/v1/admin', express.json({ limit: '10kb' }), adminAuth)
 
@@ -86,6 +89,9 @@ app.use(errorHandler)
 // Start server
 const server = app.listen(PORT, () => {
   console.log(`[server] 402index listening on port ${PORT}`)
+  if (!process.env.DIGEST_API_KEY) {
+    console.log('[server] DIGEST_API_KEY not set — /api/v1/digest endpoint disabled')
+  }
   startScheduler()
 })
 

@@ -565,6 +565,184 @@ router.post('/register', async (req, res) => {
   }
 })
 
+// ─── Digest Endpoint ─────────────────────────────────────────────────────────
+
+function classifyAgent(ua) {
+  if (!ua || ua === '') return 'api'
+  if (ua.includes('402index-mcp')) return 'mcp'
+  if (ua.includes('Mozilla') || ua.includes('Chrome') || ua.includes('Safari')) return 'browser'
+  return 'api'
+}
+
+router.get('/digest', (req, res) => {
+  const ACTIVE = "(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
+
+  // ── Totals ──
+  const totalEndpoints = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE}`).get().c
+
+  const byProtocol = {}
+  db.prepare(`SELECT protocol, COUNT(*) as c FROM services WHERE ${ACTIVE} GROUP BY protocol`).all()
+    .forEach(r => { byProtocol[r.protocol] = r.c })
+
+  const byHealth = {}
+  db.prepare(`SELECT health_status, COUNT(*) as c FROM services WHERE ${ACTIVE} GROUP BY health_status`).all()
+    .forEach(r => { byHealth[r.health_status] = r.c })
+
+  // Providers via JS hostname extraction (same approach as /health)
+  const allUrls = db.prepare(`SELECT url, is_template, is_demo FROM services WHERE ${ACTIVE}`).all()
+  const providerSet = new Set()
+  for (const svc of allUrls) {
+    if (svc.is_template || svc.is_demo) continue
+    try { providerSet.add(new URL(svc.url).hostname) } catch { /* skip */ }
+  }
+
+  const paymentVerified = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE} AND x402_payment_valid = 1`).get().c
+  const domainVerifiedProviders = db.prepare("SELECT COUNT(DISTINCT domain) as c FROM domain_claims WHERE status = 'verified'").get().c
+
+  // ── Registrations ──
+  const last24h = db.prepare(`
+    SELECT id, name, url, protocol, provider, source, registered_at as created_at
+    FROM services
+    WHERE source = 'self-registered'
+      AND registered_at > datetime('now', '-24 hours')
+      AND ${ACTIVE}
+    ORDER BY registered_at DESC
+  `).all()
+
+  const last7dCount = db.prepare(`
+    SELECT COUNT(*) as c FROM services
+    WHERE registered_at > datetime('now', '-7 days') AND ${ACTIVE}
+  `).get().c
+
+  const pendingApproval = db.prepare("SELECT COUNT(*) as c FROM services WHERE status = 'pending'").get().c
+
+  const selfRegisteredTotal = db.prepare(`
+    SELECT COUNT(*) as c FROM services WHERE source = 'self-registered' AND ${ACTIVE}
+  `).get().c
+
+  // ── Traffic ──
+  const queriesToday = db.prepare(
+    "SELECT COUNT(*) as c FROM query_log WHERE timestamp > date('now')"
+  ).get().c
+
+  const queries7d = db.prepare(
+    "SELECT COUNT(*) as c FROM query_log WHERE timestamp > datetime('now', '-7 days')"
+  ).get().c
+
+  const uniqueAgentsToday = db.prepare(
+    "SELECT COUNT(DISTINCT user_agent) as c FROM query_log WHERE timestamp > date('now')"
+  ).get().c
+
+  const mcpToday = db.prepare(
+    "SELECT COUNT(*) as c FROM query_log WHERE timestamp > date('now') AND user_agent LIKE '%402index-mcp%'"
+  ).get().c
+
+  const mcpSummary = db.prepare(
+    `SELECT COUNT(*) as total, COUNT(DISTINCT date(timestamp)) as activeDays
+     FROM query_log WHERE user_agent LIKE '%402index-mcp%'`
+  ).get()
+
+  // ── Search Intelligence ──
+  const topSearches = db.prepare(
+    `SELECT query_text as term, COUNT(*) as count
+     FROM query_log
+     WHERE query_text IS NOT NULL AND query_text != ''
+       AND timestamp > datetime('now', '-7 days')
+     GROUP BY query_text
+     ORDER BY count DESC LIMIT 20`
+  ).all()
+
+  const zeroResults = db.prepare(
+    `SELECT query_text as term, filters, COUNT(*) as count
+     FROM query_log
+     WHERE result_count = 0
+       AND query_text IS NOT NULL AND query_text != ''
+       AND timestamp > datetime('now', '-7 days')
+     GROUP BY query_text
+     ORDER BY count DESC LIMIT 10`
+  ).all()
+
+  const topAgents = db.prepare(
+    `SELECT user_agent as agent, COUNT(*) as count
+     FROM query_log
+     WHERE timestamp > datetime('now', '-7 days')
+     GROUP BY user_agent
+     ORDER BY count DESC LIMIT 15`
+  ).all().map(r => ({ ...r, type: classifyAgent(r.agent) }))
+
+  // ── Health Changes (approximate — based on current status + last_checked) ──
+  const newlyDegraded = db.prepare(`
+    SELECT id, name, url, protocol, provider, health_status, last_checked
+    FROM services
+    WHERE health_status = 'degraded'
+      AND last_checked > datetime('now', '-24 hours')
+      AND ${ACTIVE}
+    ORDER BY last_checked DESC LIMIT 10
+  `).all()
+
+  const newlyDown = db.prepare(`
+    SELECT id, name, url, protocol, provider, health_status, last_checked
+    FROM services
+    WHERE health_status = 'down'
+      AND last_checked > datetime('now', '-24 hours')
+      AND ${ACTIVE}
+    ORDER BY last_checked DESC LIMIT 10
+  `).all()
+
+  // Recovered: currently healthy but had a down/degraded check in last 48h
+  const recovered = db.prepare(`
+    SELECT s.id, s.name, s.url, s.protocol, s.provider, s.health_status, s.last_checked
+    FROM services s
+    WHERE s.health_status = 'healthy'
+      AND s.last_checked > datetime('now', '-24 hours')
+      AND EXISTS (
+        SELECT 1 FROM health_checks hc
+        WHERE hc.service_id = s.id
+          AND hc.status IN ('down', 'degraded')
+          AND hc.checked_at > datetime('now', '-48 hours')
+      )
+      AND (s.status = 'active' OR s.status IS NULL)
+      AND (s.provider_deleted = 0 OR s.provider_deleted IS NULL)
+    ORDER BY s.last_checked DESC LIMIT 10
+  `).all()
+
+  res.json({
+    generated_at: new Date().toISOString(),
+    totals: {
+      endpoints: totalEndpoints,
+      providers: providerSet.size,
+      by_protocol: byProtocol,
+      by_health: byHealth,
+      payment_verified: paymentVerified,
+      domain_verified_providers: domainVerifiedProviders,
+    },
+    registrations: {
+      last_24h: last24h,
+      last_7d_count: last7dCount,
+      pending_approval: pendingApproval,
+      self_registered_total: selfRegisteredTotal,
+    },
+    traffic: {
+      queries_today: queriesToday,
+      queries_7d: queries7d,
+      unique_agents_today: uniqueAgentsToday,
+      mcp_queries_today: mcpToday,
+      mcp_queries_total: mcpSummary.total,
+      mcp_active_days: mcpSummary.activeDays,
+    },
+    search_intelligence: {
+      top_searches_7d: topSearches,
+      zero_results_7d: zeroResults,
+      top_user_agents_7d: topAgents,
+    },
+    health_changes: {
+      newly_degraded_24h: newlyDegraded,
+      newly_down_24h: newlyDown,
+      recovered_24h: recovered,
+    },
+  })
+})
+
 // ─── Demo Endpoints ──────────────────────────────────────────────────────────
 
 import { buildProbeSample } from './pages.js'
