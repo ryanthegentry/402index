@@ -1,5 +1,5 @@
 import { layout } from './layout.js'
-import { escapeHtml, healthDot, protocolBadge, formatPrice, formatSchema } from './helpers.js'
+import { escapeHtml, healthDot, protocolBadge, formatPrice, formatSchema, sourceLink } from './helpers.js'
 
 export function detailPage(service) {
   const healthRows = (service.health_checks || []).map(h => `
@@ -69,7 +69,7 @@ export function detailPage(service) {
           </div>
           <div class="detail-row">
             <span class="detail-label">Source</span>
-            <span class="detail-value">${service.source}</span>
+            <span class="detail-value">${sourceLink(service.source)}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">Indexed</span>

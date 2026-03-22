@@ -34,6 +34,13 @@ describe('layout', () => {
     assert.ok(html.includes('</footer>'))
   })
 
+  it('includes data sources in footer with links', () => {
+    const html = layout('Test', '')
+    assert.ok(html.includes('footer-sources'), 'footer should have data sources section')
+    assert.ok(html.includes('href="https://satring.com"'), 'footer should link to Satring')
+    assert.ok(html.includes('href="https://x402.org/bazaar"'), 'footer should link to x402 Bazaar')
+  })
+
   it('includes CSS styles', () => {
     const html = layout('Test', '')
     assert.ok(html.includes('<style>'))
@@ -49,6 +56,15 @@ describe('aboutPage', () => {
     assert.ok(html.includes('x402'))
     assert.ok(html.includes('Bazaar'))
     assert.ok(html.includes('Satring'))
+  })
+
+  it('links to data source websites', () => {
+    const html = aboutPage()
+    assert.ok(html.includes('href="https://satring.com"'), 'should link to Satring')
+    assert.ok(html.includes('href="https://x402.org/bazaar"'), 'should link to x402 Bazaar')
+    assert.ok(html.includes('href="https://l402apps.com"'), 'should link to L402 Apps')
+    assert.ok(html.includes('href="https://paysponge.com"'), 'should link to Sponge')
+    assert.ok(html.includes('href="https://mpp.dev"'), 'should link to MPP/Tempo')
   })
 })
 
@@ -128,6 +144,35 @@ describe('homePage (directory page)', () => {
     })
     assert.ok(!html.includes('class="stats-bar"'), 'should not have stats-bar')
     assert.ok(!html.includes('class="protocol-bar"'), 'should not have protocol-bar')
+  })
+
+  it('renders source as hyperlink for known sources', () => {
+    const html = homePage({
+      services: [{
+        id: '1', name: 'Test', url: 'https://example.com',
+        protocol: 'x402', health_status: 'healthy',
+        source: 'satring',
+      }],
+      total: 1, limit: 50, offset: 0, filters: {},
+      stats: { verified: 1, totalIndexed: 1, healthy: 1, degraded: 0, down: 0, unknown: 0 },
+      categories: [],
+    })
+    assert.ok(html.includes('href="https://satring.com"'), 'source tag should link to satring.com')
+  })
+
+  it('renders source as plain text for non-linked sources', () => {
+    const html = homePage({
+      services: [{
+        id: '1', name: 'Test', url: 'https://example.com',
+        protocol: 'x402', health_status: 'healthy',
+        source: 'exclusive',
+      }],
+      total: 1, limit: 50, offset: 0, filters: {},
+      stats: { verified: 1, totalIndexed: 1, healthy: 1, degraded: 0, down: 0, unknown: 0 },
+      categories: [],
+    })
+    // The source filter dropdown will have href= in its form, so check specifically in the source-tag
+    assert.ok(html.includes('<span class="source-tag">exclusive</span>'), 'exclusive source should be plain text')
   })
 
   it('escapes HTML in service names', () => {
@@ -228,6 +273,14 @@ describe('detailPage', () => {
 
     assert.ok(html.includes('Input Schema'))
     assert.ok(html.includes('Output Schema'))
+  })
+  it('renders source as hyperlink on detail page', () => {
+    const html = detailPage({
+      name: 'Test', url: 'https://example.com', protocol: 'L402',
+      health_status: 'healthy', source: 'satring',
+      consecutive_failures: 0, health_checks: [],
+    })
+    assert.ok(html.includes('href="https://satring.com"'), 'detail source should link to satring.com')
   })
 })
 

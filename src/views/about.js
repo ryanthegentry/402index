@@ -22,27 +22,27 @@ export function aboutPage() {
           We aggregate services from multiple sources:
         </p>
         <p>
-          <strong>x402 Bazaar</strong> — Coinbase's auto-registration directory for x402-enabled endpoints.
+          <strong><a href="https://x402.org/bazaar" target="_blank" rel="noopener">x402 Bazaar</a></strong> — Coinbase's auto-registration directory for x402-enabled endpoints.
           We poll this hourly and normalize the data into our schema.
         </p>
         <p>
-          <strong>Satring</strong> — A small directory of L402 (Lightning) paywalled services.
+          <strong><a href="https://satring.com" target="_blank" rel="noopener">Satring</a></strong> — A small directory of L402 (Lightning) paywalled services.
         </p>
         <p>
           <strong>Exclusive listings</strong> — Manually curated services submitted via YAML files.
           These are the highest-quality listings, reviewed by the 402 Index team.
         </p>
         <p>
-          <strong>L402 Apps</strong> — A community directory of L402-enabled apps and APIs, scraped daily.
+          <strong><a href="https://l402apps.com" target="_blank" rel="noopener">L402 Apps</a></strong> — A community directory of L402-enabled apps and APIs, scraped daily.
         </p>
         <p>
-          <strong>Sponge</strong> — x402 services cataloged by PaySponge.
+          <strong><a href="https://paysponge.com" target="_blank" rel="noopener">Sponge</a></strong> — x402 services cataloged by PaySponge.
         </p>
         <p>
           <strong>Well-Known</strong> — Endpoints discovered via providers' <code>/.well-known/l402-services</code> JSON documents.
         </p>
         <p>
-          <strong>MPP (Tempo)</strong> — Machine Payments Protocol services from Tempo's aggregation API.
+          <strong><a href="https://mpp.dev" target="_blank" rel="noopener">MPP (Tempo)</a></strong> — Machine Payments Protocol services from Tempo's aggregation API.
           These are services that accept Stripe/Tempo machine payments, including major AI platforms
           like OpenAI, Anthropic, and Google Gemini.
         </p>
