@@ -1,5 +1,5 @@
 import { layout } from './layout.js'
-import { escapeHtml, healthDot, protocolBadge, formatPrice } from './helpers.js'
+import { escapeHtml, healthDot, protocolBadge, formatPrice, sourceLink } from './helpers.js'
 
 export function homePage({ services, total, limit, offset, filters, stats, categories, btcUsdRate }) {
   const currentPage = Math.floor(offset / limit) + 1
@@ -16,7 +16,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
       <td>${s.category ? `<span class="category-tag">${escapeHtml(s.category)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
       <td>${healthDot(s.health_status)}</td>
       <td class="latency">${s.latency_p50_ms != null ? s.latency_p50_ms + 'ms' : '—'}</td>
-      <td><span class="source-tag">${s.source}</span></td>
+      <td><span class="source-tag">${sourceLink(s.source)}</span></td>
     </tr>
   `).join('')
 

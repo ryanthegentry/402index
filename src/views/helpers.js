@@ -27,6 +27,22 @@ export function formatPrice(service, btcUsdRate) {
   return '—'
 }
 
+const SOURCE_URLS = {
+  satring: 'https://satring.com',
+  bazaar: 'https://x402.org/bazaar',
+  l402apps: 'https://l402apps.com',
+  sponge: 'https://paysponge.com',
+  mpp: 'https://mpp.dev',
+}
+
+export function sourceLink(source) {
+  const url = SOURCE_URLS[source]
+  if (url) {
+    return `<a href="${url}" target="_blank" rel="noopener" class="source-link">${escapeHtml(source)}</a>`
+  }
+  return escapeHtml(source)
+}
+
 export function formatSchema(json) {
   if (!json) return null
   try {

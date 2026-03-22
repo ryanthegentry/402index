@@ -349,6 +349,8 @@ export const styles = `
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .source-link { color: var(--accent); text-decoration: none; }
+    .source-link:hover { text-decoration: underline; }
 
     /* Pagination */
     .pagination {
@@ -484,6 +486,10 @@ export const styles = `
       display: flex;
       justify-content: space-between;
     }
+
+    .footer-sources { margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+    .footer-sources a { color: var(--text-muted); text-decoration: none; }
+    .footer-sources a:hover { color: var(--accent); text-decoration: underline; }
 
     /* Filter toggle (mobile only) */
     .filter-toggle {

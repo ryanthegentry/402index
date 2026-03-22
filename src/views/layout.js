@@ -51,6 +51,14 @@ export function layout(title, content, meta = {}) {
   <footer>
     <div class="container">
       <span>402 Index — paid API directory for AI agents</span>
+      <div class="footer-sources">
+        Data sources:
+        <a href="https://satring.com" target="_blank" rel="noopener">Satring</a> ·
+        <a href="https://x402.org/bazaar" target="_blank" rel="noopener">x402 Bazaar</a> ·
+        <a href="https://l402apps.com" target="_blank" rel="noopener">L402 Apps</a> ·
+        <a href="https://paysponge.com" target="_blank" rel="noopener">Sponge</a> ·
+        <a href="https://mpp.dev" target="_blank" rel="noopener">MPP/Tempo</a>
+      </div>
     </div>
   </footer>
 </body>
