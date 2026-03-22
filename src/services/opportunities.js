@@ -4,7 +4,7 @@
  * single-provider dependencies, and failing services.
  */
 
-const ACTIVE_FILTER = "(status = 'active' OR status IS NULL)"
+const ACTIVE_FILTER = "(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
 
 /**
  * Find ecosystem opportunities (gaps) for developers.
