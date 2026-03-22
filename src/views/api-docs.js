@@ -445,6 +445,77 @@ export function apiDocsPage() {
           </table>
         </div>
 
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method" style="color:#e03131;background:rgba(224,49,49,0.1)">DELETE</span>
+            <span class="endpoint-path">/api/v1/services/:id</span>
+          </div>
+          <p>Soft-delete a listing by verified domain owner. The service is hidden from all queries, health checks, and pollers. Permanently purged after 30 days. Idempotent &mdash; deleting an already-deleted service returns 200.</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Your verified domain</td></tr>
+              <tr><td>verification_token</td><td>string</td><td><strong>Required.</strong> Token from your domain claim</td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X DELETE https://402index.io/api/v1/services/SERVICE_ID \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "domain": "api.example.com",
+  "verification_token": "a1b2c3d4..."
+}'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Status</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>200</code></td><td>Service soft-deleted (or already deleted). Returns <code>id</code> and confirmation message.</td></tr>
+              <tr><td><code>400</code></td><td>Missing domain or verification_token.</td></tr>
+              <tr><td><code>403</code></td><td>Invalid token, unverified domain, or service URL doesn't match claimed domain.</td></tr>
+              <tr><td><code>404</code></td><td>Service not found.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
+            <span class="endpoint-path">/api/v1/services/bulk-delete</span>
+          </div>
+          <p>Bulk soft-delete up to 25 listings at once. Same auth as single delete. Services whose URL doesn't match the claimed domain are skipped (not rejected).</p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>ids</td><td>array</td><td><strong>Required.</strong> Array of service IDs to delete (max 25)</td></tr>
+              <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Your verified domain</td></tr>
+              <tr><td>verification_token</td><td>string</td><td><strong>Required.</strong> Token from your domain claim</td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X POST https://402index.io/api/v1/services/bulk-delete \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "ids": [101, 102, 103],
+  "domain": "api.example.com",
+  "verification_token": "a1b2c3d4..."
+}'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th>Status</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>200</code></td><td>Returns <code>deleted</code> (array of IDs), <code>skipped</code> (array of IDs), and <code>reasons</code> (object with skip reasons).</td></tr>
+              <tr><td><code>400</code></td><td>Missing fields, ids not an array, empty, or exceeds 25.</td></tr>
+              <tr><td><code>403</code></td><td>Invalid token or unverified domain.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
         <div class="info-callout">
           <h3>MCP Server</h3>
           <p>Query the 402 Index directory directly from Claude, GPT, Cursor, or any MCP-compatible AI assistant.</p>

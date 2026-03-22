@@ -51,6 +51,7 @@ router.get('/sitemap.xml', (req, res) => {
   const services = db.prepare(
     `SELECT id, updated_at FROM services
      WHERE (status = 'active' OR status IS NULL)
+       AND (provider_deleted = 0 OR provider_deleted IS NULL)
        AND is_template = 0 AND is_demo = 0
      ORDER BY updated_at DESC
      LIMIT 1000`
@@ -96,7 +97,7 @@ router.get('/feed.xml', (req, res) => {
 
 // llms.txt — machine-readable project summary for AI agents
 router.get('/llms.txt', (req, res) => {
-  const ACTIVE_FILTER = "(status = 'active' OR status IS NULL)"
+  const ACTIVE_FILTER = "(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
   const totalEndpoints = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER}`).get().c
   const l402Count = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER} AND protocol = 'L402'`).get().c
   const x402Count = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE_FILTER} AND protocol = 'x402'`).get().c
@@ -148,7 +149,7 @@ Setup: See mcp-server/ directory or npm install @402index/mcp-server
 
 // Homepage: ecosystem overview (formerly /demo)
 router.get('/', (req, res) => {
-  const ACTIVE_FILTER = "WHERE (status = 'active' OR status IS NULL)"
+  const ACTIVE_FILTER = "WHERE (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
 
   // Gather stats
   const totalIndexed = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER}`).get().c
@@ -286,7 +287,7 @@ router.get('/directory', (req, res) => {
 
 // Service detail
 router.get('/service/:id', (req, res) => {
-  const service = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id)
+  const service = db.prepare('SELECT * FROM services WHERE id = ? AND (provider_deleted = 0 OR provider_deleted IS NULL)').get(req.params.id)
   if (!service) {
     return res.status(404).send(layout('Not Found', '<div class="container"><h1>Service not found</h1><p><a href="/">Back to directory</a></p></div>'))
   }

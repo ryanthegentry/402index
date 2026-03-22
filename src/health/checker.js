@@ -93,7 +93,7 @@ function stmt(key, sql) {
   return stmts[key]
 }
 
-const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, registered_at, x402_payment_valid FROM services WHERE status = 'active' OR status IS NULL")
+const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, registered_at, x402_payment_valid FROM services WHERE (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
 
 const insertHealthCheck = () => stmt('insertHealthCheck', `
   INSERT INTO health_checks (service_id, status, response_time_ms, http_status, error_message)

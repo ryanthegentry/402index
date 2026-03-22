@@ -54,7 +54,7 @@ export function buildServiceQuery(opts = {}) {
   const parsedOffset = parseInt(rawOffset)
   const offset = Math.max(Number.isNaN(parsedOffset) ? 0 : parsedOffset, 0)
 
-  const conditions = ["(status = 'active' OR status IS NULL)"]
+  const conditions = ["(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"]
   const params = {}
 
   if (protocol) {

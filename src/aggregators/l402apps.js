@@ -26,6 +26,7 @@ const upsertNew = () => stmt('upsertNew', `
       ELSE services.source || ',l402apps'
     END,
     updated_at = datetime('now')
+    WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
 `)
 
 const findExisting = () => stmt('findExisting', "SELECT id, source FROM services WHERE url = ? AND protocol = 'L402'")

@@ -12,7 +12,7 @@ import { findOpportunities } from '../services/opportunities.js'
 import { discoverProbeConfig } from '../services/wellknown-discovery.js'
 import { getSnapshots } from '../services/daily-snapshot.js'
 import { openapiSpec, generateMarkdownDocs } from '../openapi.js'
-import { initiateClaim, verifyClaim, editService, revokeClaim } from '../services/domain-verify.js'
+import { initiateClaim, verifyClaim, editService, revokeClaim, deleteService, bulkDeleteServices } from '../services/domain-verify.js'
 
 const router = Router()
 
@@ -47,7 +47,7 @@ router.get('/services', (req, res) => {
 
 // GET /api/v1/services/:id
 router.get('/services/:id', (req, res) => {
-  const service = db.prepare("SELECT * FROM services WHERE id = ? AND (status = 'active' OR status IS NULL)").get(req.params.id)
+  const service = db.prepare("SELECT * FROM services WHERE id = ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)").get(req.params.id)
   if (!service) {
     return res.status(404).json({ error: 'Service not found' })
   }
@@ -133,7 +133,7 @@ function extractHostname(url) {
 
 // GET /api/v1/health
 router.get('/health', (req, res) => {
-  const ACTIVE_FILTER = "WHERE (status = 'active' OR status IS NULL)"
+  const ACTIVE_FILTER = "WHERE (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
 
   const total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER}`).get().c
 
@@ -232,6 +232,7 @@ router.get('/categories', (req, res) => {
     `SELECT category, protocol, COUNT(*) as count
      FROM services
      WHERE (status = 'active' OR status IS NULL)
+       AND (provider_deleted = 0 OR provider_deleted IS NULL)
        AND category IS NOT NULL
        AND is_template = 0 AND is_demo = 0
      GROUP BY category, protocol
@@ -521,6 +522,16 @@ router.post('/register', async (req, res) => {
       probe_body: probeBody !== '{}' ? probeBody : null,
     }
 
+    // Block re-registration of soft-deleted URLs
+    const softDeleted = db.prepare(
+      "SELECT id FROM services WHERE url = @url AND protocol = @protocol AND provider_deleted = 1"
+    ).get({ url, protocol })
+    if (softDeleted) {
+      return res.status(409).json({
+        error: 'This endpoint was recently removed by its domain owner. Contact admin to restore.',
+      })
+    }
+
     let service = registerUpsert().get(params)
 
     // Auto-approve trusted providers — probe already validated compliance above
@@ -692,6 +703,19 @@ router.post('/admin/reject/:id', (req, res) => {
     return res.status(404).json({ error: 'No pending service with that ID' })
   }
   res.json({ message: 'Service rejected', id: req.params.id })
+})
+
+// POST /admin/services/:id/restore — Restore a soft-deleted service (admin only)
+router.post('/admin/services/:id/restore', (req, res) => {
+  const service = db.prepare('SELECT * FROM services WHERE id = ? AND provider_deleted = 1').get(req.params.id)
+  if (!service) {
+    return res.status(404).json({ error: 'No soft-deleted service with that ID' })
+  }
+  db.prepare(
+    "UPDATE services SET provider_deleted = 0, deleted_at = NULL, updated_at = datetime('now') WHERE id = ?"
+  ).run(req.params.id)
+  console.log(`[admin/restore] RESTORED: service=${req.params.id} name=${service.name}`)
+  res.json({ restored: true, id: req.params.id, name: service.name })
 })
 
 // ─── Admin Traffic Dashboard ──────────────────────────────────────────────
@@ -895,6 +919,37 @@ router.patch('/services/:id', (req, res) => {
     return res.status(result.status).json(result.data)
   } catch (err) {
     console.error('[services/patch] Error:', err.message)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// DELETE /api/v1/services/:id — Soft-delete a listing by verified domain owner
+router.delete('/services/:id', (req, res) => {
+  try {
+    const result = deleteService(req.params.id, req.body || {})
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error })
+    }
+    console.log(`[services/delete] SOFT-DELETE: service=${req.params.id} domain=${req.body?.domain}`)
+    return res.status(result.status).json(result.data)
+  } catch (err) {
+    console.error('[services/delete] Error:', err.message)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// POST /api/v1/services/bulk-delete — Soft-delete multiple listings by verified domain owner
+router.post('/services/bulk-delete', (req, res) => {
+  try {
+    const { domain, verification_token, service_ids } = req.body || {}
+    const result = bulkDeleteServices(service_ids, { domain, verification_token })
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error })
+    }
+    console.log(`[services/bulk-delete] SOFT-DELETE: domain=${domain} deleted=${result.data.deleted.length} skipped=${result.data.skipped.length}`)
+    return res.status(result.status).json(result.data)
+  } catch (err) {
+    console.error('[services/bulk-delete] Error:', err.message)
     return res.status(500).json({ error: 'Internal server error' })
   }
 })

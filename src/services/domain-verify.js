@@ -274,6 +274,11 @@ export function editService(serviceId, { domain, verification_token, ...updates 
     return { error: 'Service not found', status: 404 }
   }
 
+  // Cannot edit a soft-deleted service
+  if (service.provider_deleted === 1) {
+    return { error: 'Service not found', status: 404 }
+  }
+
   // Verify domain match — service URL hostname must equal claimed domain
   let serviceHostname
   try {
@@ -383,4 +388,131 @@ export function revokeClaim(domain, verificationToken) {
       message: 'Domain claim revoked. Initiate a new claim to re-verify.',
     },
   }
+}
+
+/**
+ * Soft-delete a service listing using domain verification credentials.
+ * Sets provider_deleted=1 and deleted_at timestamp. Does NOT remove the row.
+ */
+export function deleteService(serviceId, { domain, verification_token }) {
+  if (!domain || !verification_token) {
+    return { error: 'domain and verification_token are required', status: 400 }
+  }
+
+  const normalizedDomain = (typeof domain === 'string' ? domain : '').trim().toLowerCase()
+
+  const claim = stmt('getVerifiedClaim',
+    "SELECT * FROM domain_claims WHERE domain = ? AND status = 'verified'"
+  ).get(normalizedDomain)
+
+  if (!claim) {
+    return { error: 'No verified claim for this domain', status: 403 }
+  }
+
+  if (!tokensMatch(claim.verification_token, verification_token)) {
+    return { error: 'Invalid verification token', status: 403 }
+  }
+
+  const service = db.prepare('SELECT * FROM services WHERE id = ?').get(serviceId)
+  if (!service) {
+    return { error: 'Service not found', status: 404 }
+  }
+
+  // Already deleted — idempotent
+  if (service.provider_deleted === 1) {
+    return { status: 200, data: { id: service.id, name: service.name, url: service.url, deleted: true } }
+  }
+
+  let serviceHostname
+  try {
+    serviceHostname = new URL(service.url).hostname
+  } catch {
+    return { error: 'Service URL is malformed', status: 500 }
+  }
+
+  if (serviceHostname !== normalizedDomain) {
+    return { error: 'Service URL hostname does not match claimed domain', status: 403 }
+  }
+
+  db.prepare(
+    "UPDATE services SET provider_deleted = 1, deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
+  ).run(serviceId)
+
+  return { status: 200, data: { id: service.id, name: service.name, url: service.url, deleted: true } }
+}
+
+/**
+ * Bulk soft-delete multiple service listings using domain verification credentials.
+ * Max 25 IDs per request. Skips IDs that don't match the verified domain.
+ */
+export function bulkDeleteServices(serviceIds, { domain, verification_token }) {
+  if (!domain || !verification_token) {
+    return { error: 'domain and verification_token are required', status: 400 }
+  }
+
+  if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
+    return { error: 'service_ids must be a non-empty array', status: 400 }
+  }
+
+  if (serviceIds.length > 25) {
+    return { error: 'Maximum 25 service IDs per bulk delete request', status: 400 }
+  }
+
+  const normalizedDomain = (typeof domain === 'string' ? domain : '').trim().toLowerCase()
+
+  const claim = stmt('getVerifiedClaim',
+    "SELECT * FROM domain_claims WHERE domain = ? AND status = 'verified'"
+  ).get(normalizedDomain)
+
+  if (!claim) {
+    return { error: 'No verified claim for this domain', status: 403 }
+  }
+
+  if (!tokensMatch(claim.verification_token, verification_token)) {
+    return { error: 'Invalid verification token', status: 403 }
+  }
+
+  const deleted = []
+  const skipped = []
+  const reasons = {}
+
+  const bulkDelete = db.transaction(() => {
+    for (const id of serviceIds) {
+      const service = db.prepare('SELECT * FROM services WHERE id = ?').get(id)
+      if (!service) {
+        skipped.push(id)
+        reasons[id] = 'not found'
+        continue
+      }
+
+      if (service.provider_deleted === 1) {
+        deleted.push(id)
+        continue
+      }
+
+      let serviceHostname
+      try {
+        serviceHostname = new URL(service.url).hostname
+      } catch {
+        skipped.push(id)
+        reasons[id] = 'malformed URL'
+        continue
+      }
+
+      if (serviceHostname !== normalizedDomain) {
+        skipped.push(id)
+        reasons[id] = 'domain mismatch'
+        continue
+      }
+
+      db.prepare(
+        "UPDATE services SET provider_deleted = 1, deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
+      ).run(id)
+      deleted.push(id)
+    }
+  })
+
+  bulkDelete()
+
+  return { status: 200, data: { deleted, skipped, reasons } }
 }

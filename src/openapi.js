@@ -111,6 +111,75 @@ export const openapiSpec = {
           '404': { description: 'Service not found' },
         },
       },
+      delete: {
+        summary: 'Soft-delete a listing by verified domain owner',
+        operationId: 'deleteService',
+        tags: ['Domain Verification'],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Service ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['domain', 'verification_token'],
+            properties: {
+              domain: { type: 'string', description: 'Verified domain' },
+              verification_token: { type: 'string', description: 'Token from domain claim (ongoing credential)' },
+            },
+          } } },
+        },
+        responses: {
+          '200': {
+            description: 'Service soft-deleted (or already deleted)',
+            content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                message: { type: 'string' },
+                id: { type: 'integer' },
+              },
+            } } },
+          },
+          '400': { description: 'Missing domain or verification_token' },
+          '403': { description: 'Invalid token, unverified domain, or domain mismatch' },
+          '404': { description: 'Service not found' },
+        },
+      },
+    },
+
+    '/api/v1/services/bulk-delete': {
+      post: {
+        summary: 'Bulk soft-delete listings by verified domain owner',
+        operationId: 'bulkDeleteServices',
+        tags: ['Domain Verification'],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            required: ['ids', 'domain', 'verification_token'],
+            properties: {
+              ids: { type: 'array', items: { type: 'integer' }, maxItems: 25, description: 'Service IDs to delete (max 25)' },
+              domain: { type: 'string', description: 'Verified domain' },
+              verification_token: { type: 'string', description: 'Token from domain claim' },
+            },
+          } } },
+        },
+        responses: {
+          '200': {
+            description: 'Bulk delete results',
+            content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                deleted: { type: 'array', items: { type: 'integer' }, description: 'IDs successfully deleted' },
+                skipped: { type: 'array', items: { type: 'integer' }, description: 'IDs skipped (wrong domain, not found, already deleted)' },
+                reasons: { type: 'object', additionalProperties: { type: 'string' }, description: 'Reason each skipped ID was skipped' },
+              },
+            } } },
+          },
+          '400': { description: 'Missing fields, ids not an array, empty ids, or exceeds 25 limit' },
+          '403': { description: 'Invalid token or unverified domain' },
+        },
+      },
     },
 
     '/api/v1/health': {

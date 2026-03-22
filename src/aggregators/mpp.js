@@ -27,6 +27,7 @@ const upsertEndpoint = () => stmt('mppUpsert', `
       ELSE services.source || ',mpp'
     END,
     updated_at = datetime('now')
+    WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
 `)
 
 const findExisting = () => stmt('mppFindExisting', "SELECT id FROM services WHERE url = ? AND protocol = 'MPP'")
