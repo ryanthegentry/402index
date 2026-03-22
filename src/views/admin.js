@@ -28,6 +28,8 @@ export function adminPage() {
           <div class="tab-bar" role="tablist">
             <button class="tab active" data-tab="pending" role="tab">Pending <span id="pending-count" class="tab-count"></span></button>
             <button class="tab" data-tab="recent" role="tab">Recent</button>
+            <button class="tab" data-tab="domains" role="tab">Domains</button>
+            <button class="tab" data-tab="failed" role="tab">Failed <span id="failed-count" class="tab-count"></span></button>
             <button class="tab" data-tab="search" role="tab">Search</button>
             <button class="tab" data-tab="traffic" role="tab">Traffic</button>
           </div>
@@ -40,6 +42,20 @@ export function adminPage() {
           <!-- Recent panel -->
           <div id="panel-recent" class="tab-panel" style="display:none">
             <div id="recent-list"></div>
+          </div>
+
+          <!-- Domains panel -->
+          <div id="panel-domains" class="tab-panel" style="display:none">
+            <div id="domains-content">
+              <div class="empty-state">Loading domain data...</div>
+            </div>
+          </div>
+
+          <!-- Failed registrations panel -->
+          <div id="panel-failed" class="tab-panel" style="display:none">
+            <div id="failed-content">
+              <div class="empty-state">Loading failed registrations...</div>
+            </div>
           </div>
 
           <!-- Search panel -->
@@ -185,6 +201,9 @@ export function adminPage() {
       .status-badge.pending { background: rgba(251,191,36,0.15); color: var(--yellow); }
       .status-badge.rejected { background: rgba(255,90,90,0.12); color: var(--red); }
       .status-badge.unknown { background: rgba(124,138,255,0.1); color: var(--text-muted); }
+      .status-badge.verified { background: rgba(52,211,153,0.15); color: var(--green); }
+      .status-badge.expired { background: rgba(124,138,255,0.1); color: var(--text-muted); }
+      .status-badge.revoked { background: rgba(255,90,90,0.12); color: var(--red); }
 
       .empty-state {
         text-align: center;
@@ -323,7 +342,7 @@ export function adminPage() {
 
     // ─── Tab switching ──────────────────────────────────────────────────────
 
-    var tabLoaded = { pending: false, recent: false, traffic: false }
+    var tabLoaded = { pending: false, recent: false, domains: false, failed: false, traffic: false }
 
     function switchTab(name) {
       document.querySelectorAll('.tab').forEach(function(t) {
@@ -335,6 +354,14 @@ export function adminPage() {
       if (name === 'recent' && !tabLoaded.recent) {
         loadRecent()
         tabLoaded.recent = true
+      }
+      if (name === 'domains' && !tabLoaded.domains) {
+        loadDomains()
+        tabLoaded.domains = true
+      }
+      if (name === 'failed' && !tabLoaded.failed) {
+        loadFailed()
+        tabLoaded.failed = true
       }
       if (name === 'traffic' && !tabLoaded.traffic) {
         loadTraffic()
@@ -371,6 +398,7 @@ export function adminPage() {
         + '<div class="reg-card-verify">'
         + '<span class="verify-tag ok">HTTP ' + (s.health_status === 'healthy' ? '402' : '?') + '</span>'
         + '<span class="verify-tag' + (s.verified ? ' ok' : '') + '">verified: ' + (s.verified ? 'yes' : 'no') + '</span>'
+        + (s.domain_verified ? '<span class="verify-tag ok">domain verified</span>' : '')
         + '</div>'
         + '<div class="reg-card-actions">'
         + '<button class="btn-approve" data-id="' + escHtml(s.id) + '">Approve</button>'
@@ -409,6 +437,8 @@ export function adminPage() {
         + '<span class="verify-tag' + (s.health_status === 'healthy' ? ' ok' : '') + '">'
         + escHtml(s.health_status || 'unknown') + '</span>'
         + '<span class="verify-tag' + (s.verified ? ' ok' : '') + '">verified: ' + (s.verified ? 'yes' : 'no') + '</span>'
+        + (s.domain_verified ? '<span class="verify-tag ok">domain verified</span>' : '')
+        + (s.approval_reason ? '<span class="verify-tag">' + escHtml(s.approval_reason) + '</span>' : '')
         + '</div>'
         + '<div class="reg-card-actions" style="justify-content:flex-end">'
         + '<button class="btn-delete" data-id="' + escHtml(s.id) + '" data-name="' + escHtml(s.name) + '">Delete</button>'
@@ -538,6 +568,80 @@ export function adminPage() {
         deleteService(btn.dataset.id, btn.dataset.name, btn)
       }
     })
+
+    // ─── Domains ──────────────────────────────────────────────────────────
+
+    async function loadDomains() {
+      var el = document.getElementById('domains-content')
+      el.innerHTML = '<div class="empty-state">Loading domain data...</div>'
+      var res = await apiFetch('/admin/domains')
+      if (!res) return
+      if (!res.ok) {
+        el.innerHTML = '<div class="empty-state">Failed to load domain data.</div>'
+        return
+      }
+      var d = await res.json()
+      if (d.domains.length === 0) {
+        el.innerHTML = '<div class="empty-state">No domain claims yet.</div>'
+        return
+      }
+      var html = '<table class="admin-table"><thead><tr>'
+        + '<th>Domain</th><th>Status</th><th>Endpoints</th><th>Contact</th><th>Claimed</th><th>Verified</th>'
+        + '</tr></thead><tbody>'
+      for (var i = 0; i < d.domains.length; i++) {
+        var dm = d.domains[i]
+        var statusClass = dm.status === 'verified' ? 'verified' : dm.status === 'pending' ? 'pending' : dm.status === 'revoked' ? 'revoked' : 'expired'
+        var claimed = dm.claimed_at ? new Date(dm.claimed_at + (dm.claimed_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString() : '—'
+        var verified = dm.verified_at ? new Date(dm.verified_at + (dm.verified_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString() : '—'
+        html += '<tr>'
+          + '<td style="font-family:var(--mono);font-size:12px">' + escHtml(dm.domain) + '</td>'
+          + '<td><span class="status-badge ' + statusClass + '">' + escHtml(dm.status) + '</span></td>'
+          + '<td>' + (dm.endpoint_count || 0) + '</td>'
+          + '<td>' + escHtml(dm.contact_email || '—') + '</td>'
+          + '<td>' + claimed + '</td>'
+          + '<td>' + verified + '</td>'
+          + '</tr>'
+      }
+      html += '</tbody></table>'
+      el.innerHTML = html
+    }
+
+    // ─── Failed Registrations ─────────────────────────────────────────────
+
+    async function loadFailed() {
+      var el = document.getElementById('failed-content')
+      el.innerHTML = '<div class="empty-state">Loading failed registrations...</div>'
+      var res = await apiFetch('/admin/failed-registrations')
+      if (!res) return
+      if (!res.ok) {
+        el.innerHTML = '<div class="empty-state">Failed to load data.</div>'
+        return
+      }
+      var d = await res.json()
+      var countEl = document.getElementById('failed-count')
+      countEl.textContent = d.total || 0
+      if (d.attempts.length === 0) {
+        el.innerHTML = '<div class="empty-state">No failed registration attempts.</div>'
+        return
+      }
+      var html = '<table class="admin-table"><thead><tr>'
+        + '<th>URL</th><th>Protocol</th><th>Provider</th><th>Failure Reason</th><th>HTTP</th><th>When</th>'
+        + '</tr></thead><tbody>'
+      for (var i = 0; i < d.attempts.length; i++) {
+        var a = d.attempts[i]
+        var when = a.attempted_at ? new Date(a.attempted_at + (a.attempted_at.endsWith('Z') ? '' : 'Z')).toLocaleString() : '—'
+        html += '<tr>'
+          + '<td style="font-family:var(--mono);font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.url) + '</td>'
+          + '<td>' + escHtml(a.protocol) + '</td>'
+          + '<td>' + escHtml(a.provider || '—') + '</td>'
+          + '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(a.failure_reason) + '">' + escHtml(a.failure_reason) + '</td>'
+          + '<td>' + (a.probe_http_status || '—') + '</td>'
+          + '<td style="white-space:nowrap">' + when + '</td>'
+          + '</tr>'
+      }
+      html += '</tbody></table>'
+      el.innerHTML = html
+    }
 
     // ─── Traffic ───────────────────────────────────────────────────────────
 
