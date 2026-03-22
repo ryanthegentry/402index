@@ -26,7 +26,7 @@ export function aboutPage() {
           We poll this hourly and normalize the data into our schema.
         </p>
         <p>
-          <strong><a href="https://satring.com" target="_blank" rel="noopener">Satring</a></strong> — A small directory of L402 (Lightning) paywalled services.
+          <strong><a href="https://satring.com" target="_blank" rel="noopener">Satring</a></strong> — A Paid API Directory for AI Agents: Discover paid APIs for your AI agents, via Lightning and USDC.
         </p>
         <p>
           <strong>Exclusive listings</strong> — Manually curated services submitted via YAML files.
