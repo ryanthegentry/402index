@@ -1,6 +1,6 @@
 import db from '../db.js'
 
-const ACTIVE_FILTER = "(status = 'active' OR status IS NULL)"
+const ACTIVE_FILTER = "(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
 
 /**
  * Capture a daily snapshot of ecosystem metrics.

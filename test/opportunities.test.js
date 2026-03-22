@@ -15,7 +15,8 @@ function createTestDb() {
       health_status TEXT DEFAULT 'unknown',
       status TEXT DEFAULT 'active',
       is_template INTEGER DEFAULT 0,
-      is_demo INTEGER DEFAULT 0
+      is_demo INTEGER DEFAULT 0,
+      provider_deleted INTEGER DEFAULT 0
     )
   `)
   return db
