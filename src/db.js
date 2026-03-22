@@ -350,6 +350,14 @@ try {
   // Column already exists
 }
 
+// Migration: add approval_reason for tracking how services were approved
+try {
+  db.exec('ALTER TABLE services ADD COLUMN approval_reason TEXT')
+  console.log('[db] Added column: approval_reason')
+} catch {
+  // Column already exists
+}
+
 // Migration: add provider_deleted flag (soft delete by domain-verified owner)
 try {
   db.exec('ALTER TABLE services ADD COLUMN provider_deleted INTEGER DEFAULT 0')
@@ -509,6 +517,28 @@ try {
   console.warn(`[db] domain_claims migration note: ${err.message}`)
 }
 
+// ─── Registration Attempts (failed probe logs) ─────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS registration_attempts (
+    id TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    protocol TEXT NOT NULL,
+    name TEXT,
+    provider TEXT,
+    contact_email TEXT,
+    http_method TEXT,
+    probe_body TEXT,
+    attempted_at TEXT NOT NULL DEFAULT (datetime('now')),
+    failure_reason TEXT NOT NULL,
+    probe_http_status INTEGER,
+    probe_error TEXT,
+    suggested_protocol TEXT,
+    ip_address TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_reg_attempts_date ON registration_attempts(attempted_at);
+`)
+
 // ─── Query Log ──────────────────────────────────────────────────────────────
 
 db.exec(`
@@ -581,10 +611,25 @@ function purgeSoftDeleted() {
   }
 }
 
+function pruneRegistrationAttempts() {
+  try {
+    const result = db.prepare(
+      "DELETE FROM registration_attempts WHERE attempted_at < datetime('now', '-7 days')"
+    ).run()
+    if (result.changes > 0) {
+      console.log(`[db] Pruned ${result.changes} registration attempts older than 7 days`)
+      db.pragma('incremental_vacuum')
+    }
+  } catch (err) {
+    console.warn(`[db] Registration attempts prune failed: ${err.message}`)
+  }
+}
+
 function pruneAll() {
   pruneHealthChecks()
   pruneQueryLog()
   purgeSoftDeleted()
+  pruneRegistrationAttempts()
 }
 
 pruneAll()

@@ -471,6 +471,24 @@ router.post('/register', async (req, res) => {
     const url = normalizeUrl(body.url, { preserveScheme: true })
 
     if (!probe.valid) {
+      // Log probe failure to registration_attempts (skip pure validation failures)
+      try {
+        db.prepare(
+          `INSERT INTO registration_attempts (id, url, protocol, name, provider, contact_email, http_method, probe_body, failure_reason, probe_http_status, probe_error, suggested_protocol, ip_address)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          randomUUID(), url, protocol,
+          body.name || null, body.provider || null, body.contact_email || null,
+          httpMethod, probeBody !== '{}' ? probeBody : null,
+          probe.error || 'Probe failed',
+          probe.httpStatus || null, probe.error || null,
+          probe.suggestedProtocol || null,
+          req.ip || req.connection?.remoteAddress || null
+        )
+      } catch (logErr) {
+        console.warn('[register] Failed to log registration attempt:', logErr.message)
+      }
+
       const response = {
         error: `${protocol} verification failed`,
         detail: probe.error,
@@ -532,13 +550,44 @@ router.post('/register', async (req, res) => {
       })
     }
 
+    // Per-domain rate limit: max 20 registrations per domain per hour
+    const regHostname = parsedUrl.hostname.toLowerCase()
+    const domainRegCount = db.prepare(
+      `SELECT COUNT(*) as c FROM services
+       WHERE source = 'self-registered'
+         AND registered_at > datetime('now', '-1 hour')
+         AND (url LIKE 'https://' || @host || '/%' OR url LIKE 'https://' || @host
+           OR url LIKE 'http://' || @host || '/%' OR url LIKE 'http://' || @host)`
+    ).get({ host: regHostname }).c
+    if (domainRegCount >= 20) {
+      return res.status(429).json({
+        error: 'Rate limit: maximum 20 registrations per domain per hour.',
+      })
+    }
+
     let service = registerUpsert().get(params)
 
     // Auto-approve trusted providers — probe already validated compliance above
     if (service.status === 'pending' && body.provider === 'golem-gateway') {
-      approveService().run({ id: service.id })
-      service = { ...service, status: 'active' }
+      db.prepare(
+        "UPDATE services SET status = 'active', approval_reason = 'golem-gateway', updated_at = datetime('now') WHERE id = ? AND status = 'pending'"
+      ).run(service.id)
+      service = { ...service, status: 'active', approval_reason: 'golem-gateway' }
       console.log(`[register] Auto-approved golem-gateway registration: ${url}`)
+    }
+
+    // Auto-approve if registering domain is verified
+    if (service.status === 'pending') {
+      const verifiedDomain = db.prepare(
+        "SELECT id FROM domain_claims WHERE domain = ? AND status = 'verified'"
+      ).get(regHostname)
+      if (verifiedDomain) {
+        db.prepare(
+          "UPDATE services SET status = 'active', approval_reason = 'domain-verified', updated_at = datetime('now') WHERE id = ?"
+        ).run(service.id)
+        service = { ...service, status: 'active', approval_reason: 'domain-verified' }
+        console.log(`[register] Auto-approved domain-verified registration: ${url}`)
+      }
     }
 
     // Fire-and-forget event distribution (webhooks, Nostr, email — only on genuinely new registrations)
@@ -547,10 +596,12 @@ router.post('/register', async (req, res) => {
     }
 
     const message = service.status === 'active'
-      ? 'Service registered and live'
-      : 'Service registered and pending review'
+      ? (service.approval_reason === 'domain-verified'
+        ? 'Service registered and live (domain verified).'
+        : 'Service registered and live')
+      : 'Service registered and pending review. Verify your domain for instant approval.'
 
-    return res.status(201).json({
+    const responseBody = {
       message,
       service,
       verification: {
@@ -558,7 +609,20 @@ router.post('/register', async (req, res) => {
         httpStatus: probe.httpStatus,
         ...probe.details,
       },
-    })
+    }
+
+    // Nudge unverified providers toward domain verification
+    if (service.status === 'pending') {
+      responseBody.domain_verification = {
+        domain: regHostname,
+        claim_url: 'POST /api/v1/claim',
+        verify_url: 'POST /api/v1/claim/verify',
+        guide: 'https://402index.io/verify',
+        note: 'Domain verification enables instant approval for all future registrations from this domain, plus self-service editing.',
+      }
+    }
+
+    return res.status(201).json(responseBody)
   } catch (err) {
     console.error('[register] Error:', err.message)
     return res.status(500).json({ error: 'Internal server error' })
@@ -805,7 +869,7 @@ router.get('/demo/probe-live', async (req, res) => {
 
 const ADMIN_COLUMNS = `id, name, url, status, protocol, provider, category,
   price_sats, payment_asset, payment_network, contact_email,
-  health_status, verified, registered_at`
+  health_status, verified, domain_verified, approval_reason, registered_at`
 
 const getPending = () => stmt('getPending', "SELECT * FROM services WHERE status = 'pending' ORDER BY registered_at DESC")
 
@@ -826,7 +890,7 @@ const deleteServiceTxn = db.transaction((id) => {
 })
 
 const approveService = () => stmt('approveService', `
-  UPDATE services SET status = 'active', updated_at = datetime('now') WHERE id = @id AND status = 'pending'
+  UPDATE services SET status = 'active', approval_reason = 'admin-manual', updated_at = datetime('now') WHERE id = @id AND status = 'pending'
 `)
 
 const rejectService = () => stmt('rejectService', `
@@ -894,6 +958,33 @@ router.post('/admin/services/:id/restore', (req, res) => {
   ).run(req.params.id)
   console.log(`[admin/restore] RESTORED: service=${req.params.id} name=${service.name}`)
   res.json({ restored: true, id: req.params.id, name: service.name })
+})
+
+// ─── Admin Domain Verification Funnel ─────────────────────────────────────
+
+router.get('/admin/domains', (req, res) => {
+  const domains = db.prepare(`
+    SELECT dc.*,
+      (SELECT COUNT(*) FROM services s
+       WHERE (s.url LIKE 'https://' || dc.domain || '/%' OR s.url LIKE 'https://' || dc.domain
+           OR s.url LIKE 'http://' || dc.domain || '/%' OR s.url LIKE 'http://' || dc.domain)
+         AND (s.status = 'active' OR s.status IS NULL)
+         AND (s.provider_deleted = 0 OR s.provider_deleted IS NULL)) as endpoint_count
+    FROM domain_claims dc
+    ORDER BY COALESCE(dc.verified_at, dc.claimed_at) DESC
+  `).all()
+  res.json({ domains, total: domains.length })
+})
+
+// ─── Admin Failed Registrations ──────────────────────────────────────────
+
+router.get('/admin/failed-registrations', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200)
+  const attempts = db.prepare(
+    'SELECT * FROM registration_attempts ORDER BY attempted_at DESC LIMIT ?'
+  ).all(limit)
+  const total = db.prepare('SELECT COUNT(*) as c FROM registration_attempts').get().c
+  res.json({ attempts, total })
 })
 
 // ─── Admin Traffic Dashboard ──────────────────────────────────────────────
