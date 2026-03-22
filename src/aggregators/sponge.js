@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import db from '../db.js'
-import { normalizeUrl } from '../services/url-normalize.js'
+import { normalizeUrl, extractHostname } from '../services/url-normalize.js'
 import { categorize } from './l402apps-utils.js'
 
 const SPONGE_API = 'https://api.catalog.paysponge.com/api/services'
@@ -12,8 +12,8 @@ function stmt(key, sql) {
 }
 
 const upsertEndpoint = () => stmt('spongeUpsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, provider, source, source_id, http_method)
-  VALUES (@id, @name, @description, @url, 'x402', @price_usd, 'USDC', @payment_network, @category, @provider, 'sponge', @source_id, @http_method)
+  INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, provider, source, source_id, http_method, hostname)
+  VALUES (@id, @name, @description, @url, 'x402', @price_usd, 'USDC', @payment_network, @category, @provider, 'sponge', @source_id, @http_method, @hostname)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
     description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE COALESCE(excluded.description, services.description) END,
@@ -22,6 +22,7 @@ const upsertEndpoint = () => stmt('spongeUpsert', `
     category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE CASE WHEN services.category = 'uncategorized' THEN excluded.category ELSE services.category END END,
     provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE COALESCE(excluded.provider, services.provider) END,
     http_method = COALESCE(excluded.http_method, services.http_method),
+    hostname = COALESCE(excluded.hostname, services.hostname),
     source = CASE
       WHEN services.source LIKE '%sponge%' THEN services.source
       ELSE services.source || ',sponge'
@@ -100,6 +101,7 @@ export async function pollSponge() {
           http_method: (ep.httpMethod || 'GET').toUpperCase(),
         }
 
+        record.hostname = extractHostname(fullUrl)
         const existing = findExisting().get(fullUrl)
         upsertEndpoint().run(record)
         if (existing) updatedCount++

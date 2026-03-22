@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import db, { logQuery } from '../db.js'
 import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/services.js'
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
-import { normalizeUrl } from '../services/url-normalize.js'
+import { normalizeUrl, extractHostname } from '../services/url-normalize.js'
 import { probeEndpoint } from '../services/probe-endpoint.js'
 import { getProvider } from '../services/l402-provider.js'
 import { registerWebhook, deleteWebhook, getWebhook } from '../services/webhooks.js'
@@ -268,8 +268,8 @@ function stmt(key, sql) {
 }
 
 const registerUpsert = () => stmt('registerUpsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, http_method, probe_body, health_status, status)
-  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, @http_method, @probe_body, 'healthy', 'pending')
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, http_method, probe_body, health_status, status, hostname)
+  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, @http_method, @probe_body, 'healthy', 'pending', @hostname)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = excluded.name,
     description = COALESCE(excluded.description, services.description),
@@ -283,6 +283,7 @@ const registerUpsert = () => stmt('registerUpsert', `
     http_method = COALESCE(excluded.http_method, services.http_method),
     probe_body = COALESCE(excluded.probe_body, services.probe_body),
     health_status = 'healthy',
+    hostname = COALESCE(excluded.hostname, services.hostname),
     status = CASE WHEN services.status = 'active' THEN 'active' ELSE 'pending' END,
     updated_at = datetime('now')
   RETURNING *
@@ -538,6 +539,7 @@ router.post('/register', async (req, res) => {
       contact_email: body.contact_email || null,
       http_method: httpMethod,
       probe_body: probeBody !== '{}' ? probeBody : null,
+      hostname: extractHostname(url),
     }
 
     // Block re-registration of soft-deleted URLs
@@ -556,8 +558,12 @@ router.post('/register', async (req, res) => {
       `SELECT COUNT(*) as c FROM services
        WHERE source = 'self-registered'
          AND registered_at > datetime('now', '-1 hour')
-         AND (url LIKE 'https://' || @host || '/%' OR url LIKE 'https://' || @host
-           OR url LIKE 'http://' || @host || '/%' OR url LIKE 'http://' || @host)`
+         AND (hostname = @host
+           OR (hostname IS NULL AND (
+             url LIKE 'https://' || @host || '/%' OR url LIKE 'https://' || @host
+             OR url LIKE 'http://' || @host || '/%' OR url LIKE 'http://' || @host)))`
+      // NOTE: The hostname IS NULL fallback handles rows not yet backfilled.
+      // TODO: Remove the NULL fallback after confirming backfill is complete on production.
     ).get({ host: regHostname }).c
     if (domainRegCount >= 20) {
       return res.status(429).json({
@@ -966,8 +972,7 @@ router.get('/admin/domains', (req, res) => {
   const domains = db.prepare(`
     SELECT dc.*,
       (SELECT COUNT(*) FROM services s
-       WHERE (s.url LIKE 'https://' || dc.domain || '/%' OR s.url LIKE 'https://' || dc.domain
-           OR s.url LIKE 'http://' || dc.domain || '/%' OR s.url LIKE 'http://' || dc.domain)
+       WHERE s.hostname = dc.domain
          AND (s.status = 'active' OR s.status IS NULL)
          AND (s.provider_deleted = 0 OR s.provider_deleted IS NULL)) as endpoint_count
     FROM domain_claims dc

@@ -224,27 +224,23 @@ export async function verifyClaim(domain, { fetchFn = fetch } = {}) {
   ).run(claim.id)
 
   // Flag all services under this domain as domain-verified (protects from poller overwrites)
-  const domainLike1 = `%://${normalizedDomain}/%`
-  const domainLike2 = `%://${normalizedDomain}`
-  const domainCondition = "(url LIKE @p1 OR url LIKE @p2)"
-
   db.prepare(
-    `UPDATE services SET domain_verified = 1 WHERE ${domainCondition} AND (status = 'active' OR status IS NULL)`
-  ).run({ p1: domainLike1, p2: domainLike2 })
+    "UPDATE services SET domain_verified = 1 WHERE hostname = ? AND (status = 'active' OR status IS NULL)"
+  ).run(normalizedDomain)
 
   // Retroactively approve all pending services from this newly verified domain
   const retroApproved = db.prepare(
     `UPDATE services SET status = 'active', approval_reason = 'domain-verified', updated_at = datetime('now')
-     WHERE status = 'pending' AND (provider_deleted = 0 OR provider_deleted IS NULL) AND ${domainCondition}`
-  ).run({ p1: domainLike1, p2: domainLike2 })
+     WHERE status = 'pending' AND (provider_deleted = 0 OR provider_deleted IS NULL) AND hostname = ?`
+  ).run(normalizedDomain)
   if (retroApproved.changes > 0) {
     console.log(`[domain-verify] Retroactively approved ${retroApproved.changes} pending services for ${normalizedDomain}`)
   }
 
   // Count services under this domain
   const serviceCount = db.prepare(
-    `SELECT COUNT(*) as c FROM services WHERE ${domainCondition} AND (status = 'active' OR status IS NULL)`
-  ).get({ p1: domainLike1, p2: domainLike2 }).c
+    "SELECT COUNT(*) as c FROM services WHERE hostname = ? AND (status = 'active' OR status IS NULL)"
+  ).get(normalizedDomain).c
 
   return {
     status: 200,
@@ -389,11 +385,9 @@ export function revokeClaim(domain, verificationToken) {
   ).run(normalizedDomain)
 
   // Reset domain_verified flag so pollers can update these services again
-  const rp1 = `%://${normalizedDomain}/%`
-  const rp2 = `%://${normalizedDomain}`
   db.prepare(
-    "UPDATE services SET domain_verified = 0 WHERE (url LIKE ? OR url LIKE ?) AND (status = 'active' OR status IS NULL)"
-  ).run(rp1, rp2)
+    "UPDATE services SET domain_verified = 0 WHERE hostname = ? AND (status = 'active' OR status IS NULL)"
+  ).run(normalizedDomain)
 
   return {
     status: 200,
