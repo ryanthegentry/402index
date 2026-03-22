@@ -122,14 +122,6 @@ router.get('/export.csv', async (req, res) => {
   res.send(csvRows.join('\n'))
 })
 
-// Extract hostname from a URL (strips scheme and path)
-function extractHostname(url) {
-  try {
-    return new URL(url).hostname
-  } catch {
-    return url
-  }
-}
 
 // GET /api/v1/health
 router.get('/health', (req, res) => {
