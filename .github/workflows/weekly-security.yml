@@ -1,0 +1,37 @@
+name: Weekly Security Audit
+
+on:
+  schedule:
+    # Every Monday at 9am CT (14:00 UTC)
+    - cron: '0 14 * * 1'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run full audit
+        run: |
+          echo "## Dependency Audit Results" > audit-report.md
+          echo "Run date: $(date -u '+%Y-%m-%d %H:%M UTC')" >> audit-report.md
+          echo "" >> audit-report.md
+          npm audit 2>&1 >> audit-report.md || true
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-audit-${{ github.run_number }}
+          path: audit-report.md
+          retention-days: 90
