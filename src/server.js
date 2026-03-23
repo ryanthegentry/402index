@@ -32,13 +32,15 @@ app.use(/^\/(about|api-docs|opportunities|stats)$/, (req, res, next) => { res.se
 // API reads: 1 min (not register, probe-live, webhooks, or admin)
 app.use(/^\/api\/v1\/(services|health|categories|opportunities)/, (req, res, next) => { res.set('Cache-Control', 'public, max-age=60'); next() })
 
-// Registration endpoint: JSON body parsing + IP-based rate limit (10/hour)
+// Registration endpoint: JSON body parsing + IP-based rate limit (50/hour)
+// Per-domain limits (20 unverified / 100 verified) are the real abuse brake;
+// this just caps a single IP from flooding the endpoint itself.
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  limit: parseInt(process.env.REGISTER_RATE_LIMIT) || 10,
+  limit: parseInt(process.env.REGISTER_RATE_LIMIT) || 50,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  message: { error: 'Too many registrations. Limit: 10 per hour per IP.' },
+  message: { error: 'Too many registrations. Limit: 50 per hour per IP.' },
 })
 app.use('/api/v1/register', express.json({ limit: '10kb' }), registerLimiter)
 
