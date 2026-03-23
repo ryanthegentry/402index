@@ -139,6 +139,48 @@ const V1_WRONG_VERSION_MAC = buildV1Macaroon(V1_WRONG_VERSION_ID, VALID_SIGNATUR
 // Neither V1 nor V2 (starts with 0x05, not 0x02 or uint32 BE=1)
 const NEITHER_MACAROON = Buffer.from([0x05, 0x01, 0x02, 0x03, ...Array(62).fill(0)]).toString('base64')
 
+// Truly unknown format (starts with 0xFF — not JSON, V0, V2, or V1)
+const TRULY_UNKNOWN_MACAROON = Buffer.from([0xFF, 0xFE, 0x00, ...Array(30).fill(0x42)]).toString('base64')
+
+/**
+ * Build a V0 libmacaroons text-format macaroon.
+ * Format: each line is `NNNNfield value\n` where NNNN is 4-hex-digit packet length.
+ */
+function buildV0TextMacaroon({ location, identifier, caveats = [], signature }) {
+  const lines = []
+
+  function addPacket(tag, value) {
+    const content = `${tag} ${value}\n`
+    const len = (content.length + 4).toString(16).padStart(4, '0')
+    lines.push(`${len}${content}`)
+  }
+
+  addPacket('location', location || 'test-location')
+  addPacket('identifier', identifier || 'test-id')
+  for (const c of caveats) {
+    addPacket('cid', c)
+  }
+
+  // Signature packet
+  const sigContent = `signature ${signature || 'A'.repeat(32)}\n`
+  const sigLen = (sigContent.length + 4).toString(16).padStart(4, '0')
+  lines.push(`${sigLen}${sigContent}`)
+
+  return Buffer.from(lines.join('')).toString('base64')
+}
+
+// V0 text format macaroons
+const V0_BASIC = buildV0TextMacaroon({ location: '0/receipt/1', identifier: 'id11503id' })
+const V0_WITH_CAVEATS = buildV0TextMacaroon({
+  location: 'test-host',
+  identifier: 'abc123',
+  caveats: ['service = my-service', 'expires = 1774279339'],
+})
+const V0_WITH_URL = buildV0TextMacaroon({
+  location: 'https://api.lightningenable.com',
+  identifier: 'token-xyz',
+})
+
 // ─── isSpecCompliantMacaroon — Identifier Validation ─────────────────────────
 
 describe('isSpecCompliantMacaroon — identifier validation', () => {
@@ -536,5 +578,81 @@ describe('readVarint overflow protection', () => {
     const result = isSpecCompliantMacaroon(edgeCase)
     // Should not crash — just return non-compliant due to truncation
     assert.equal(result.compliant, false)
+  })
+})
+
+// ─── V0 Libmacaroons Text Format Detection ──────────────────────────────────
+
+describe('V0 libmacaroons text format detection', () => {
+  it('V0 text macaroon → detected with specific V0 reason (not "unrecognized")', () => {
+    const result = isSpecCompliantMacaroon(V0_BASIC)
+    assert.equal(result.compliant, false)
+    assert.ok(result.reason.includes('v0'), `expected reason to mention "v0", got: ${result.reason}`)
+    assert.ok(!result.reason.includes('unrecognized'), `should NOT say "unrecognized", got: ${result.reason}`)
+    assert.ok(result.reason.includes('V2 TLV'), `expected actionable fix guidance mentioning V2 TLV, got: ${result.reason}`)
+  })
+
+  it('V0 text with caveats → still detected as V0', () => {
+    const result = isSpecCompliantMacaroon(V0_WITH_CAVEATS)
+    assert.equal(result.compliant, false)
+    assert.ok(result.reason.includes('v0'), `expected V0-specific reason, got: ${result.reason}`)
+  })
+
+  it('V0 text with full URL location → detected as V0', () => {
+    const result = isSpecCompliantMacaroon(V0_WITH_URL)
+    assert.equal(result.compliant, false)
+    assert.ok(result.reason.includes('v0'), `expected V0-specific reason, got: ${result.reason}`)
+  })
+
+  it('buffer starting with 0x30 but NOT valid V0 text → falls through to unrecognized', () => {
+    // 0x30 = ASCII "0", but followed by random non-hex bytes — should NOT match V0
+    const buf = Buffer.from([0x30, 0xFF, 0x00, 0x42, ...Array(30).fill(0x99)])
+    const b64 = buf.toString('base64')
+    const result = isSpecCompliantMacaroon(b64)
+    assert.equal(result.compliant, false)
+    assert.ok(!result.reason.includes('v0'), `should NOT classify random 0x30 data as V0, got: ${result.reason}`)
+  })
+})
+
+// ─── Actionable Degrade Reasons ─────────────────────────────────────────────
+
+describe('Actionable degrade reasons', () => {
+  it('JSON macaroon reason includes V2 TLV fix guidance and spec link', () => {
+    const result = isSpecCompliantMacaroon(JSON_MACAROON)
+    assert.equal(result.compliant, false)
+    assert.ok(result.reason.includes('V2 TLV'), `expected V2 TLV guidance, got: ${result.reason}`)
+    assert.ok(result.reason.includes('L402'), `expected spec link, got: ${result.reason}`)
+  })
+
+  it('V2 TLV with short identifier → reason mentions "66 bytes"', () => {
+    const result = isSpecCompliantMacaroon(SHORT_ID_MACAROON)
+    assert.equal(result.compliant, false)
+    assert.ok(result.reason.includes('66'), `expected mention of 66 bytes, got: ${result.reason}`)
+  })
+
+  it('V1 binary with wrong version → reason mentions "version"', () => {
+    const result = isSpecCompliantMacaroon(V1_WRONG_VERSION_MAC)
+    assert.equal(result.compliant, false)
+    assert.ok(result.reason.includes('version'), `expected mention of version, got: ${result.reason}`)
+  })
+
+  it('truly unknown format → unrecognized fallback with spec link', () => {
+    const result = isSpecCompliantMacaroon(TRULY_UNKNOWN_MACAROON)
+    assert.equal(result.compliant, false)
+    assert.ok(result.reason.includes('unrecognized'), `expected "unrecognized", got: ${result.reason}`)
+    assert.ok(result.reason.includes('V2 TLV'), `expected spec guidance, got: ${result.reason}`)
+  })
+})
+
+// ─── detectProtocol — V0 Text Format Integration ────────────────────────────
+
+describe('detectProtocol — V0 text format integration', () => {
+  it('V0 text macaroon in WWW-Authenticate → specCompliant=false with V0-specific reason', () => {
+    const result = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${V0_BASIC}", invoice="${VALID_BOLT11}"`,
+    })
+    assert.equal(result.protocol, 'L402')
+    assert.equal(result.details.specCompliant, false)
+    assert.ok(result.degradeReason.includes('v0'), `expected V0-specific degrade reason, got: ${result.degradeReason}`)
   })
 })
