@@ -93,7 +93,7 @@ function stmt(key, sql) {
   return stmts[key]
 }
 
-const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, registered_at, x402_payment_valid FROM services WHERE (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
+const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, consecutive_latency_spikes, registered_at, x402_payment_valid FROM services WHERE (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
 
 const insertHealthCheck = () => stmt('insertHealthCheck', `
   INSERT INTO health_checks (service_id, status, response_time_ms, http_status, error_message)
@@ -107,6 +107,7 @@ const updateService = () => stmt('updateService', `
     last_checked = datetime('now'),
     last_seen_healthy = CASE WHEN @health_status = 'healthy' THEN datetime('now') ELSE last_seen_healthy END,
     consecutive_failures = @consecutive_failures,
+    consecutive_latency_spikes = @consecutive_latency_spikes,
     uptime_30d = @uptime_30d,
     reliability_score = @reliability_score,
     x402_payment_valid = @x402_payment_valid,
@@ -239,27 +240,34 @@ export async function performHttpCheck(url, httpMethod = 'GET', probeBody = '{}'
  * - checkStatus: raw result for health_checks table ('healthy'|'degraded'|'down'|'timeout'|'error')
  * - healthStatus: derived aggregate for services table ('healthy'|'degraded'|'down'|'unknown')
  */
-export function classifyHealthStatus(httpStatus, errorMessage, prevFailures, historicalP50, responseTimeMs) {
+export function classifyHealthStatus(httpStatus, errorMessage, prevFailures, historicalP50, responseTimeMs, prevLatencySpikes = 0) {
   if (errorMessage) {
     const newFailures = (prevFailures || 0) + 1
     return {
       healthStatus: newFailures >= 3 ? 'down' : 'unknown',
       checkStatus: errorMessage === 'timeout' ? 'timeout' : 'error',
       consecutiveFailures: newFailures,
+      consecutiveLatencySpikes: 0,
     }
   }
 
   if (httpStatus === 402) {
-    // 402 = paywall active = healthy (unless latency degraded)
+    // 402 = paywall active = healthy (unless sustained latency degradation)
     if (historicalP50 && responseTimeMs > historicalP50 * 2) {
-      return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: 0 }
+      const newSpikes = (prevLatencySpikes || 0) + 1
+      return {
+        healthStatus: newSpikes >= 3 ? 'degraded' : 'healthy',
+        checkStatus: newSpikes >= 3 ? 'degraded' : 'healthy',
+        consecutiveFailures: 0,
+        consecutiveLatencySpikes: newSpikes,
+      }
     }
-    return { healthStatus: 'healthy', checkStatus: 'healthy', consecutiveFailures: 0 }
+    return { healthStatus: 'healthy', checkStatus: 'healthy', consecutiveFailures: 0, consecutiveLatencySpikes: 0 }
   }
 
   if (httpStatus === 200) {
     // 200 on a paywall = possible misconfiguration
-    return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0 }
+    return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0, consecutiveLatencySpikes: 0 }
   }
 
   if (httpStatus >= 500) {
@@ -268,26 +276,27 @@ export function classifyHealthStatus(httpStatus, errorMessage, prevFailures, his
       healthStatus: newFailures >= 3 ? 'down' : 'degraded',
       checkStatus: 'down',
       consecutiveFailures: newFailures,
+      consecutiveLatencySpikes: 0,
     }
   }
 
   // 429 = rate limited by provider. Don't punish — preserve previous health state.
   if (httpStatus === 429) {
-    return { healthStatus: 'degraded', checkStatus: 'rate_limited', consecutiveFailures: prevFailures || 0 }
+    return { healthStatus: 'degraded', checkStatus: 'rate_limited', consecutiveFailures: prevFailures || 0, consecutiveLatencySpikes: 0 }
   }
 
   // 405 = Method Not Allowed. Signal for http_method auto-detection (future).
   if (httpStatus === 405) {
-    return { healthStatus: 'degraded', checkStatus: 'method_not_allowed', consecutiveFailures: prevFailures || 0 }
+    return { healthStatus: 'degraded', checkStatus: 'method_not_allowed', consecutiveFailures: prevFailures || 0, consecutiveLatencySpikes: 0 }
   }
 
   // 406 = Not Acceptable. Provider rejected the request body before reaching the paywall.
   if (httpStatus === 406) {
-    return { healthStatus: 'degraded', checkStatus: 'not_acceptable', consecutiveFailures: prevFailures || 0 }
+    return { healthStatus: 'degraded', checkStatus: 'not_acceptable', consecutiveFailures: prevFailures || 0, consecutiveLatencySpikes: 0 }
   }
 
   // Other status codes (3xx, 4xx except 402/429/405/406)
-  return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0 }
+  return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0, consecutiveLatencySpikes: 0 }
 }
 
 /**
@@ -397,7 +406,7 @@ async function checkFacilitatorReachable(url) {
 }
 
 /** Persist health check result and update service record. */
-function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown, l402Compliant, l402DegradeReason, l402Format, lngetCompatible }) {
+function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, consecutiveLatencySpikes, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown, l402Compliant, l402DegradeReason, l402Format, lngetCompatible }) {
   try {
     // Read current status before update (for event emission)
     const oldStatus = db.prepare('SELECT health_status FROM services WHERE id = ?').get(serviceId)?.health_status
@@ -425,6 +434,7 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
       health_status: healthStatus,
       latency_p50_ms: newP50,
       consecutive_failures: consecutiveFailures,
+      consecutive_latency_spikes: consecutiveLatencySpikes ?? 0,
       uptime_30d: uptime,
       reliability_score: reliability,
       x402_payment_valid: x402PaymentValid ?? null,
@@ -458,7 +468,7 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
 
 /** Check a single service: HTTP probe, classify result, persist. */
 export async function checkService(service) {
-  const { id, url, protocol, http_method, probe_body, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, x402_payment_valid: currentPaymentValid } = service
+  const { id, url, protocol, http_method, probe_body, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, consecutive_latency_spikes: prevLatencySpikes, x402_payment_valid: currentPaymentValid } = service
 
   // Per-host rate limiting: wait if we probed this host recently
   await waitForHost(getHostname(url))
@@ -472,7 +482,7 @@ export async function checkService(service) {
   })
 
   const classification = classifyHealthStatus(
-    result.httpStatus, result.errorMessage, prevFailures, historicalP50, result.responseTimeMs
+    result.httpStatus, result.errorMessage, prevFailures, historicalP50, result.responseTimeMs, prevLatencySpikes
   )
 
   // L402/MPP validation: only degrade for invalid detection or payment hash mismatch
