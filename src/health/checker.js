@@ -472,6 +472,14 @@ export async function checkService(service) {
     if (!result.detection.valid) {
       classification.healthStatus = 'degraded'
       classification.checkStatus = 'degraded'
+    } else if (protocol === 'L402' && result.detection.details?.specCompliant === false) {
+      classification.healthStatus = 'degraded'
+      classification.checkStatus = 'degraded'
+      classification.degradeReason = result.detection.degradeReason || 'non-standard L402 macaroon format'
+    } else if (protocol === 'L402' && result.detection.details?.paymentHashMatch === false) {
+      classification.healthStatus = 'degraded'
+      classification.checkStatus = 'degraded'
+      classification.degradeReason = result.detection.degradeReason || 'payment hash mismatch between macaroon and invoice'
     }
   }
 

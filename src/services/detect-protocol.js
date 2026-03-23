@@ -3,7 +3,7 @@
  * Single source of truth — called by both health/checker.js and probe-live.js.
  */
 
-import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from './l402-utils.js'
+import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice, validateL402Challenge } from './l402-utils.js'
 import { parsePaymentRequired, parsePaymentRequiredBody, validatePaymentRequirements } from './x402-utils.js'
 
 /**
@@ -69,18 +69,23 @@ export function detectProtocol(httpResult) {
       const invoiceValid = isValidInvoice(parsed.invoice)
       const valid = macaroonValid && invoiceValid
 
+      // Spec compliance: V2/V1 TLV identifier + payment hash cross-validation
+      const validation = validateL402Challenge(parsed.macaroon, parsed.invoice)
+
       return {
         protocol: 'L402',
         valid,
-        degradeReason: valid ? null
-          : !macaroonValid ? 'invalid macaroon'
-          : 'invalid invoice',
+        degradeReason: valid
+          ? (validation.specCompliant === false ? (validation.degradeReason || 'non-standard macaroon format') : null)
+          : (!macaroonValid ? 'invalid macaroon' : 'invalid invoice'),
         details: {
           scheme: parsed.scheme,
           macaroon: parsed.macaroon,
           macaroonValid,
           invoice: parsed.invoice,
           invoiceValid,
+          specCompliant: validation.specCompliant,
+          paymentHashMatch: validation.paymentHashMatch,
         },
         rawHeaders: { 'WWW-Authenticate': wwwAuthenticate },
       }
