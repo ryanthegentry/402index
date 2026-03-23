@@ -33,6 +33,29 @@ function makePaymentHeader() {
 
 const longInvoice = 'lnbc1000n1p' + 'a'.repeat(200)
 
+// Spec-compliant V2 TLV macaroon fixture for L402 POST auto-detection test
+// Builds a valid binary macaroon: 0x02 version + 0x02 tag + varint(66) + 66-byte identifier + 0x00 EOS + 0x06 sig tag + varint(32) + 32-byte sig + 0x00 EOM
+function buildSpecCompliantMacaroon() {
+  const id = Buffer.alloc(66)
+  id.writeUInt16BE(0, 0)           // L402 version 0
+  id.fill(0xAB, 2, 34)            // payment hash (32 bytes)
+  id.fill(0xCD, 34, 66)           // token id (32 bytes)
+  const sig = Buffer.alloc(32, 0xEE)
+  const parts = [
+    Buffer.from([0x02]),           // V2 version marker
+    Buffer.from([0x02]),           // identifier field type
+    Buffer.from([66]),             // varint(66) — single byte since <128
+    id,                            // 66-byte identifier
+    Buffer.from([0x00]),           // EOS
+    Buffer.from([0x06]),           // signature field type
+    Buffer.from([32]),             // varint(32)
+    sig,                           // 32-byte signature
+    Buffer.from([0x00]),           // EOM
+  ]
+  return Buffer.concat(parts).toString('base64')
+}
+const specCompliantMacaroon = buildSpecCompliantMacaroon()
+
 function mockResponse(status, headers = {}) {
   return {
     status,
@@ -191,7 +214,7 @@ describe('L402/MPP POST auto-detection regression guards', () => {
       const method = opts?.method || 'GET'
       if (method === 'POST') {
         return mockResponse(402, {
-          'www-authenticate': `L402 macaroon="AgELYmVuY2FybWFu", invoice="${longInvoice}"`,
+          'www-authenticate': `L402 macaroon="${specCompliantMacaroon}", invoice="${longInvoice}"`,
         })
       }
       return mockResponse(405, {})

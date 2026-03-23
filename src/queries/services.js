@@ -2,7 +2,7 @@ const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_m
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
 const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'self-registered', 'sponge', 'well-known', 'discovery'])
 
-export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known'
+export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason'
 export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, latency_p50_ms, reliability_score, x402_payment_valid'
 
 const DEFAULT_ORDER = `ORDER BY
@@ -41,6 +41,7 @@ export function buildServiceQuery(opts = {}) {
     max_price_usd,
     payment_asset,
     payment_valid,
+    l402_compliant,
     sort,
     order,
     rawLimit,
@@ -96,6 +97,11 @@ export function buildServiceQuery(opts = {}) {
     conditions.push("((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy'))")
   } else if (payment_valid === 'false' || payment_valid === '0') {
     conditions.push("((protocol = 'x402' AND (x402_payment_valid = 0 OR x402_payment_valid IS NULL)) OR (protocol = 'L402' AND health_status != 'healthy'))")
+  }
+  if (l402_compliant === 'true' || l402_compliant === '1') {
+    conditions.push("l402_compliant = 1")
+  } else if (l402_compliant === 'false' || l402_compliant === '0') {
+    conditions.push("l402_compliant = 0")
   }
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''

@@ -416,6 +416,20 @@ try {
   console.warn(`[db] Hostname index note: ${err.message}`)
 }
 
+// Migration: L402 spec compliance columns
+try {
+  db.exec('ALTER TABLE services ADD COLUMN l402_compliant INTEGER')
+  console.log('[db] Added column: l402_compliant')
+} catch {
+  // Column already exists
+}
+try {
+  db.exec('ALTER TABLE services ADD COLUMN l402_degrade_reason TEXT')
+  console.log('[db] Added column: l402_degrade_reason')
+} catch {
+  // Column already exists
+}
+
 // Migration: expand protocol CHECK constraint to include 'MPP'
 try {
   const needsMppMigration = (() => {

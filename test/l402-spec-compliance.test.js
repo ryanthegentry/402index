@@ -374,3 +374,167 @@ describe('Health checker — L402 spec compliance degradation', () => {
     assert.equal(result.healthStatus, 'degraded')
   })
 })
+
+// ─── Health Checker — POST Fallback Does Not Override Spec Compliance ────────
+
+describe('Health checker — POST fallback does not override spec compliance', () => {
+  // Extended simulation: primary GET → classify → L402 compliance → POST fallback
+  // Replicates the full checkService flow from checker.js lines 466-494
+  function simulateWithPostFallback({ primaryHttpStatus, primaryDetection, postFallbackDetection, protocol = 'L402' }) {
+    const { classifyHealthStatus } = await_classifyHealthStatus()
+
+    // Step 1: classify primary GET result
+    const classification = classifyHealthStatus(primaryHttpStatus, null, 0, null, 200)
+
+    // Step 2: L402 compliance check on primary detection (checker.js ~470-484)
+    if ((protocol === 'L402' || protocol === 'MPP') && primaryHttpStatus === 402 && classification.healthStatus === 'healthy') {
+      if (!primaryDetection.valid) {
+        classification.healthStatus = 'degraded'
+        classification.checkStatus = 'degraded'
+      } else if (protocol === 'L402' && primaryDetection.details?.specCompliant === false) {
+        classification.healthStatus = 'degraded'
+        classification.checkStatus = 'degraded'
+        classification.degradeReason = primaryDetection.degradeReason || 'non-standard L402 macaroon format'
+      } else if (protocol === 'L402' && primaryDetection.details?.paymentHashMatch === false) {
+        classification.healthStatus = 'degraded'
+        classification.checkStatus = 'degraded'
+        classification.degradeReason = primaryDetection.degradeReason || 'payment hash mismatch'
+      }
+    }
+
+    // Step 3: POST fallback with spec compliance guard (fixed)
+    const postFallback = postFallbackDetection ? { attempted: true, detection: postFallbackDetection } : null
+    if (postFallback?.attempted && postFallback.detection?.valid) {
+      if (postFallback.detection.protocol === protocol) {
+        const postDetails = postFallback.detection.details
+        if (protocol === 'L402' && postDetails?.specCompliant === false) {
+          classification.healthStatus = 'degraded'
+          classification.checkStatus = 'degraded'
+          classification.degradeReason = postFallback.detection.degradeReason || 'non-standard L402 macaroon format'
+        } else if (protocol === 'L402' && postDetails?.paymentHashMatch === false) {
+          classification.healthStatus = 'degraded'
+          classification.checkStatus = 'degraded'
+          classification.degradeReason = postFallback.detection.degradeReason || 'payment hash mismatch between macaroon and invoice'
+        } else {
+          classification.healthStatus = 'healthy'
+          classification.checkStatus = 'healthy'
+          classification.consecutiveFailures = 0
+        }
+      }
+    }
+
+    return classification
+  }
+
+  // Import classifyHealthStatus lazily to match test module pattern
+  function await_classifyHealthStatus() {
+    // Inline the classification logic for unit test isolation (no DB dependency)
+    return {
+      classifyHealthStatus(httpStatus, errorMessage, prevFailures, historicalP50, responseTimeMs) {
+        if (errorMessage) {
+          const newFailures = (prevFailures || 0) + 1
+          return { healthStatus: newFailures >= 3 ? 'down' : 'unknown', checkStatus: errorMessage === 'timeout' ? 'timeout' : 'error', consecutiveFailures: newFailures }
+        }
+        if (httpStatus === 402) {
+          if (historicalP50 && responseTimeMs > historicalP50 * 2) {
+            return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: 0 }
+          }
+          return { healthStatus: 'healthy', checkStatus: 'healthy', consecutiveFailures: 0 }
+        }
+        if (httpStatus === 405) {
+          return { healthStatus: 'degraded', checkStatus: 'method_not_allowed', consecutiveFailures: prevFailures || 0 }
+        }
+        return { healthStatus: 'degraded', checkStatus: 'degraded', consecutiveFailures: prevFailures || 0 }
+      }
+    }
+  }
+
+  it('POST fallback with non-compliant macaroon → stays degraded (the P0 bug)', () => {
+    // Scenario: GET returns 405, POST returns 402 with JSON macaroon (specCompliant=false)
+    // This is the llm402.ai scenario — POST-only endpoints with JSON macaroons
+    const postDetection = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${JSON_MACAROON}", invoice="${VALID_BOLT11}"`,
+    })
+
+    const result = simulateWithPostFallback({
+      primaryHttpStatus: 405,
+      primaryDetection: { valid: false, details: {} },
+      postFallbackDetection: postDetection,
+    })
+
+    // BUG: currently this returns 'healthy' because POST fallback blindly promotes
+    assert.equal(result.healthStatus, 'degraded', 'non-compliant L402 via POST should NOT be promoted to healthy')
+  })
+
+  it('POST fallback with compliant macaroon → healthy', () => {
+    // Scenario: GET returns 405, POST returns 402 with spec-compliant macaroon
+    const postDetection = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${SPEC_MACAROON}", invoice="${VALID_BOLT11}"`,
+    })
+
+    const result = simulateWithPostFallback({
+      primaryHttpStatus: 405,
+      primaryDetection: { valid: false, details: {} },
+      postFallbackDetection: postDetection,
+    })
+
+    assert.equal(result.healthStatus, 'healthy', 'compliant L402 via POST should be promoted to healthy')
+  })
+
+  it('POST fallback with compliant macaroon but payment hash mismatch → degraded', () => {
+    // Scenario: GET returns 405, POST returns 402 with spec-compliant but mismatched hash
+    const postDetection = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${MISMATCHED_MACAROON}", invoice="${VALID_BOLT11}"`,
+    })
+
+    const result = simulateWithPostFallback({
+      primaryHttpStatus: 405,
+      primaryDetection: { valid: false, details: {} },
+      postFallbackDetection: postDetection,
+    })
+
+    assert.equal(result.healthStatus, 'degraded', 'payment hash mismatch via POST should stay degraded')
+  })
+})
+
+// ─── Varint Overflow Guard ───────────────────────────────────────────────────
+
+describe('readVarint overflow protection', () => {
+  it('macaroon with excessive varint continuation bytes → non-compliant (not a crash)', () => {
+    // Build a malicious V2 TLV macaroon where identifier length varint has 10+ continuation bytes
+    // Each byte has MSB set (0x80 | value), causing the parser to keep reading
+    const parts = []
+    parts.push(Buffer.from([0x02])) // V2 version marker
+    parts.push(Buffer.from([0x02])) // identifier field type
+    // 10 continuation bytes (all with MSB set) — exceeds the 5-byte limit
+    parts.push(Buffer.from([0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80]))
+    // terminator byte (no MSB)
+    parts.push(Buffer.from([0x01]))
+    // Some dummy data
+    parts.push(Buffer.alloc(100, 0x42))
+    const malicious = Buffer.concat(parts).toString('base64')
+
+    const result = isSpecCompliantMacaroon(malicious)
+    // Must NOT crash, hang, or produce garbage — just non-compliant
+    assert.equal(result.compliant, false)
+  })
+
+  it('macaroon with 5-byte varint (max valid) → parses correctly', () => {
+    // Build a V2 TLV macaroon with a varint requiring exactly 5 bytes
+    // Value = 2^28 = 268435456 (needs 5 varint bytes)
+    // varint encoding of 268435456: 0x80, 0x80, 0x80, 0x80, 0x10
+    const parts = []
+    parts.push(Buffer.from([0x02])) // V2 version marker
+    parts.push(Buffer.from([0x02])) // identifier field type
+    // 5-byte varint for length 268435456 — this is way too large for actual data,
+    // so the identifier will be "truncated" and fail the 66-byte check
+    parts.push(Buffer.from([0x80, 0x80, 0x80, 0x80, 0x10]))
+    // Not enough data for this varint length → truncated
+    parts.push(Buffer.alloc(100, 0x42))
+    const edgeCase = Buffer.concat(parts).toString('base64')
+
+    const result = isSpecCompliantMacaroon(edgeCase)
+    // Should not crash — just return non-compliant due to truncation
+    assert.equal(result.compliant, false)
+  })
+})
