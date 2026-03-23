@@ -16,6 +16,36 @@ import { initiateClaim, verifyClaim, editService, revokeClaim, deleteService, bu
 
 const router = Router()
 
+// ─── Per-domain probe serialization ─────────────────────────────────────────
+// Prevents rapid-fire registration probes from DDoS'ing target servers.
+// Each registration for the same hostname waits for the previous one's probe
+// to complete, plus a short inter-probe delay.
+const PROBE_INTER_DELAY_MS = parseInt(process.env.PROBE_INTER_DELAY_MS) || 500
+const domainProbeQueue = new Map() // hostname → Promise<void>
+
+/**
+ * Execute fn() after waiting for any in-flight probe to the same hostname.
+ * Properly chains even under concurrent burst (N requests).
+ */
+async function withProbeQueue(hostname, fn) {
+  const prev = domainProbeQueue.get(hostname) || Promise.resolve()
+
+  let resolve
+  const gate = new Promise(r => { resolve = r })
+  domainProbeQueue.set(hostname, gate)
+
+  try {
+    await prev.catch(() => {})
+    await new Promise(r => setTimeout(r, PROBE_INTER_DELAY_MS))
+    return await fn()
+  } finally {
+    resolve()
+    if (domainProbeQueue.get(hostname) === gate) {
+      domainProbeQueue.delete(hostname)
+    }
+  }
+}
+
 // ─── OpenAPI Spec + Markdown Docs ───────────────────────────────────────────
 
 router.get('/openapi.json', (req, res) => {
@@ -445,18 +475,23 @@ router.post('/register', async (req, res) => {
     // normalizeUrl forces http→https which breaks HTTP-only tunnels (e.g. ngrok --scheme http).
     const probeUrl = body.url.trim()
 
-    // Run verification probe against the raw URL
-    let probe = await verifyEndpoint(probeUrl, protocol, httpMethod, probeBody)
-
-    // If L402 probe failed with 400 or 406, try .well-known auto-discovery
+    // Run verification probe, serialized per-domain to avoid DDoS'ing target servers
+    const probeHostname = parsedUrl.hostname.toLowerCase()
     let discoveredConfig = null
-    if (protocol === 'L402' && !probe.valid && [400, 406].includes(probe.httpStatus)) {
-      discoveredConfig = await discoverProbeConfig(probeUrl)
-      if (discoveredConfig) {
-        console.log(`[register] .well-known discovery found config for ${probeUrl}: method=${discoveredConfig.method}, body=${discoveredConfig.probeBody.substring(0, 100)}`)
-        probe = await verifyEndpoint(probeUrl, protocol, discoveredConfig.method, discoveredConfig.probeBody)
+    let probe = await withProbeQueue(probeHostname, async () => {
+      let result = await verifyEndpoint(probeUrl, protocol, httpMethod, probeBody)
+
+      // If L402 probe failed with 400 or 406, try .well-known auto-discovery
+      if (protocol === 'L402' && !result.valid && [400, 406].includes(result.httpStatus)) {
+        discoveredConfig = await discoverProbeConfig(probeUrl)
+        if (discoveredConfig) {
+          console.log(`[register] .well-known discovery found config for ${probeUrl}: method=${discoveredConfig.method}, body=${discoveredConfig.probeBody.substring(0, 100)}`)
+          result = await verifyEndpoint(probeUrl, protocol, discoveredConfig.method, discoveredConfig.probeBody)
+        }
       }
-    }
+
+      return result
+    })
 
     // Normalize URL for storage: lowercase hostname, strip trailing slashes,
     // but preserve the original scheme so health checks probe the correct protocol.
@@ -544,7 +579,7 @@ router.post('/register', async (req, res) => {
       })
     }
 
-    // Per-domain rate limit: max 20 registrations per domain per hour
+    // Per-domain rate limit: tiered by domain verification status
     const regHostname = parsedUrl.hostname.toLowerCase()
     const domainRegCount = db.prepare(
       `SELECT COUNT(*) as c FROM services
@@ -557,9 +592,17 @@ router.post('/register', async (req, res) => {
       // NOTE: The hostname IS NULL fallback handles rows not yet backfilled.
       // TODO: Remove the NULL fallback after confirming backfill is complete on production.
     ).get({ host: regHostname }).c
-    if (domainRegCount >= 20) {
+
+    const isVerifiedDomain = !!db.prepare(
+      "SELECT 1 FROM domain_claims WHERE domain = ? AND status = 'verified'"
+    ).get(regHostname)
+
+    const domainLimit = isVerifiedDomain ? 100 : 20
+    if (domainRegCount >= domainLimit) {
       return res.status(429).json({
-        error: 'Rate limit: maximum 20 registrations per domain per hour.',
+        error: `Rate limit: maximum ${domainLimit} registrations per domain per hour.${
+          !isVerifiedDomain ? ' Verify your domain for a higher limit (100/hr).' : ''
+        }`,
       })
     }
 
@@ -574,18 +617,13 @@ router.post('/register', async (req, res) => {
       console.log(`[register] Auto-approved golem-gateway registration: ${url}`)
     }
 
-    // Auto-approve if registering domain is verified
-    if (service.status === 'pending') {
-      const verifiedDomain = db.prepare(
-        "SELECT id FROM domain_claims WHERE domain = ? AND status = 'verified'"
-      ).get(regHostname)
-      if (verifiedDomain) {
-        db.prepare(
-          "UPDATE services SET status = 'active', approval_reason = 'domain-verified', updated_at = datetime('now') WHERE id = ?"
-        ).run(service.id)
-        service = { ...service, status: 'active', approval_reason: 'domain-verified' }
-        console.log(`[register] Auto-approved domain-verified registration: ${url}`)
-      }
+    // Auto-approve if registering domain is verified (reuse lookup from rate limit check)
+    if (service.status === 'pending' && isVerifiedDomain) {
+      db.prepare(
+        "UPDATE services SET status = 'active', approval_reason = 'domain-verified', updated_at = datetime('now') WHERE id = ?"
+      ).run(service.id)
+      service = { ...service, status: 'active', approval_reason: 'domain-verified' }
+      console.log(`[register] Auto-approved domain-verified registration: ${url}`)
     }
 
     // Fire-and-forget event distribution (webhooks, Nostr, email — only on genuinely new registrations)
@@ -1243,3 +1281,4 @@ router.post('/services/bulk-delete', (req, res) => {
 })
 
 export default router
+export { domainProbeQueue, PROBE_INTER_DELAY_MS }
