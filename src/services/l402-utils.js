@@ -69,14 +69,15 @@ function readVarint(buf, offset) {
   let value = 0
   let shift = 0
   let bytesRead = 0
-  while (offset + bytesRead < buf.length) {
+  const maxBytes = 5 // varints for values up to 2^35 need at most 5 bytes
+  while (offset + bytesRead < buf.length && bytesRead < maxBytes) {
     const byte = buf[offset + bytesRead]
     bytesRead++
     value |= (byte & 0x7f) << shift
     if ((byte & 0x80) === 0) break
     shift += 7
   }
-  return { value, bytesRead }
+  return { value: value >>> 0, bytesRead } // >>> 0 ensures unsigned 32-bit
 }
 
 /**

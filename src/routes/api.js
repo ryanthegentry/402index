@@ -661,6 +661,13 @@ router.get('/digest', (req, res) => {
   const paymentVerified = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE} AND x402_payment_valid = 1`).get().c
   const domainVerifiedProviders = db.prepare("SELECT COUNT(DISTINCT domain) as c FROM domain_claims WHERE status = 'verified'").get().c
 
+  const l402Compliance = db.prepare(`
+    SELECT
+      SUM(CASE WHEN l402_compliant = 1 THEN 1 ELSE 0 END) as compliant,
+      SUM(CASE WHEN l402_compliant = 0 THEN 1 ELSE 0 END) as non_compliant
+    FROM services WHERE protocol = 'L402' AND ${ACTIVE}
+  `).get()
+
   // ── Registrations ──
   const last24h = db.prepare(`
     SELECT id, name, url, protocol, provider, source, registered_at as created_at
@@ -777,6 +784,8 @@ router.get('/digest', (req, res) => {
       by_health: byHealth,
       payment_verified: paymentVerified,
       domain_verified_providers: domainVerifiedProviders,
+      l402_compliant_count: l402Compliance.compliant || 0,
+      l402_non_compliant_count: l402Compliance.non_compliant || 0,
     },
     registrations: {
       last_24h: last24h,

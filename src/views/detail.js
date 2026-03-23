@@ -110,6 +110,27 @@ export function detailPage(service) {
         </div>
       </div>
 
+      ${service.protocol === 'L402' ? `
+        <div class="detail-section" style="margin-bottom:24px">
+          <h2>L402 Spec Compliance</h2>
+          <div class="detail-row">
+            <span class="detail-label">Status</span>
+            <span class="detail-value">${service.l402_compliant === 1
+              ? '<span style="color:var(--green)">&#10003; Spec Compliant</span>'
+              : service.l402_compliant === 0
+                ? '<span style="color:var(--amber)">&#9888; Non-Compliant</span>'
+                : '<span style="color:var(--text-muted)">Not yet checked</span>'
+            }</span>
+          </div>
+          ${service.l402_compliant === 0 && service.l402_degrade_reason ? `
+          <div class="detail-row">
+            <span class="detail-label">Reason</span>
+            <span class="detail-value" style="color:var(--text-muted)">${escapeHtml(service.l402_degrade_reason)}</span>
+          </div>
+          ` : ''}
+        </div>
+      ` : ''}
+
       ${service.protocol === 'x402' ? `
         <div class="detail-section" style="margin-bottom:24px">
           <h2>x402 Payment Validation</h2>
