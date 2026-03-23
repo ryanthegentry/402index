@@ -430,6 +430,34 @@ try {
   // Column already exists
 }
 
+// Migration: l402_format column (format metadata, replaces compliance pass/fail)
+try {
+  db.exec('ALTER TABLE services ADD COLUMN l402_format TEXT')
+  console.log('[db] Added column: l402_format')
+} catch {
+  // Column already exists
+}
+
+// Backfill l402_format from l402_compliant + l402_degrade_reason
+try {
+  const backfillResult = db.prepare(`
+    UPDATE services SET l402_format = CASE
+      WHEN l402_compliant = 1 THEN 'v2_tlv'
+      WHEN l402_degrade_reason LIKE '%JSON%' OR l402_degrade_reason LIKE '%json%' THEN 'json'
+      WHEN l402_degrade_reason LIKE '%v0 text%' OR l402_degrade_reason LIKE '%libmacaroons%' THEN 'v0_text'
+      WHEN l402_degrade_reason LIKE '%unrecognized%' THEN 'unknown'
+      WHEN l402_compliant = 0 THEN 'unknown'
+      ELSE NULL
+    END
+    WHERE protocol = 'L402' AND l402_format IS NULL AND l402_compliant IS NOT NULL
+  `).run()
+  if (backfillResult.changes > 0) {
+    console.log(`[db] Backfilled l402_format for ${backfillResult.changes} services`)
+  }
+} catch (e) {
+  console.warn('[db] l402_format backfill skipped:', e.message)
+}
+
 // Migration: expand protocol CHECK constraint to include 'MPP'
 try {
   const needsMppMigration = (() => {

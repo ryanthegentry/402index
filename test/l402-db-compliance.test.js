@@ -114,11 +114,11 @@ describe('L402 compliance — query builder filtering', () => {
 
     // Ensure test data exists
     const insert = db.prepare(`
-      INSERT OR REPLACE INTO services (id, name, url, protocol, source, health_status, status, l402_compliant, l402_degrade_reason)
-      VALUES (@id, @name, @url, @protocol, @source, @health_status, 'active', @l402_compliant, @l402_degrade_reason)
+      INSERT OR REPLACE INTO services (id, name, url, protocol, source, health_status, status, l402_compliant, l402_degrade_reason, l402_format)
+      VALUES (@id, @name, @url, @protocol, @source, @health_status, 'active', @l402_compliant, @l402_degrade_reason, @l402_format)
     `)
-    insert.run({ id: '__test_qb_ok__', name: 'QBTest Compliant', url: 'https://qbtest-ok.example.com/v1', protocol: 'L402', source: 'satring', health_status: 'healthy', l402_compliant: 1, l402_degrade_reason: null })
-    insert.run({ id: '__test_qb_bad__', name: 'QBTest NonCompliant', url: 'https://qbtest-bad.example.com/v1', protocol: 'L402', source: 'satring', health_status: 'degraded', l402_compliant: 0, l402_degrade_reason: 'test reason' })
+    insert.run({ id: '__test_qb_ok__', name: 'QBTest Compliant', url: 'https://qbtest-ok.example.com/v1', protocol: 'L402', source: 'satring', health_status: 'healthy', l402_compliant: 1, l402_degrade_reason: null, l402_format: 'v2_tlv' })
+    insert.run({ id: '__test_qb_bad__', name: 'QBTest NonCompliant', url: 'https://qbtest-bad.example.com/v1', protocol: 'L402', source: 'satring', health_status: 'degraded', l402_compliant: 0, l402_degrade_reason: 'test reason', l402_format: 'json' })
   })
 
   after(() => {
@@ -177,42 +177,41 @@ describe('L402 compliance — detail page view', () => {
     detailPage = (await import('../src/views/detail.js')).detailPage
   })
 
-  it('shows compliance section for L402 endpoints', () => {
+  it('shows macaroon format section for L402 endpoints', () => {
     const html = detailPage({
       id: 'test-1', name: 'Test', url: 'https://test.com', protocol: 'L402',
       health_status: 'healthy', consecutive_failures: 0, source: 'satring',
-      l402_compliant: 1, l402_degrade_reason: null,
+      l402_format: 'v2_tlv',
     })
-    assert.ok(html.includes('L402 Spec Compliance'))
-    assert.ok(html.includes('Spec Compliant'))
+    assert.ok(html.includes('Macaroon Format'))
+    assert.ok(html.includes('V2 TLV Binary'))
   })
 
-  it('shows non-compliant with reason for degraded L402 endpoints', () => {
+  it('shows JSON format neutrally for L402 endpoints', () => {
     const html = detailPage({
-      id: 'test-2', name: 'Test NC', url: 'https://test2.com', protocol: 'L402',
-      health_status: 'degraded', consecutive_failures: 0, source: 'satring',
-      l402_compliant: 0, l402_degrade_reason: 'JSON macaroon format (non-standard, spec requires binary)',
+      id: 'test-2', name: 'Test JSON', url: 'https://test2.com', protocol: 'L402',
+      health_status: 'healthy', consecutive_failures: 0, source: 'satring',
+      l402_format: 'json',
     })
-    assert.ok(html.includes('L402 Spec Compliance'))
-    assert.ok(html.includes('Non-Compliant'))
-    assert.ok(html.includes('JSON'))
+    assert.ok(html.includes('Macaroon Format'))
+    assert.ok(!html.includes('Non-Compliant'))
   })
 
-  it('does NOT show compliance section for x402 endpoints', () => {
+  it('does NOT show macaroon format section for x402 endpoints', () => {
     const html = detailPage({
       id: 'test-3', name: 'Test x402', url: 'https://test3.com', protocol: 'x402',
       health_status: 'healthy', consecutive_failures: 0, source: 'bazaar',
       x402_payment_valid: 1, x402_asset_known: 1, x402_facilitator_reachable: 1,
     })
-    assert.ok(!html.includes('L402 Spec Compliance'))
+    assert.ok(!html.includes('Macaroon Format'))
   })
 
-  it('does NOT show compliance section for MPP endpoints', () => {
+  it('does NOT show macaroon format section for MPP endpoints', () => {
     const html = detailPage({
       id: 'test-4', name: 'Test MPP', url: 'https://test4.com', protocol: 'MPP',
       health_status: 'healthy', consecutive_failures: 0, source: 'mpp',
     })
-    assert.ok(!html.includes('L402 Spec Compliance'))
+    assert.ok(!html.includes('Macaroon Format'))
   })
 })
 
@@ -232,7 +231,7 @@ describe('L402 compliance — directory listing privacy', () => {
     const lower = html.toLowerCase()
     assert.ok(!lower.includes('l402_compliant'), 'directory must not contain l402_compliant')
     assert.ok(!lower.includes('l402_degrade_reason'), 'directory must not contain l402_degrade_reason')
-    assert.ok(!lower.includes('spec compliant'), 'directory must not contain "spec compliant"')
-    assert.ok(!lower.includes('non-compliant'), 'directory must not contain "non-compliant"')
+    assert.ok(!lower.includes('l402_format'), 'directory must not contain l402_format')
+    assert.ok(!lower.includes('macaroon format'), 'directory must not contain "macaroon format"')
   })
 })

@@ -370,21 +370,17 @@ describe('detectProtocol — L402 spec compliance integration', () => {
 
 // ─── Health Checker — L402 Spec Compliance Degradation ───────────────────────
 
-describe('Health checker — L402 spec compliance degradation', () => {
-  // Simulate checkService's L402 compliance logic without HTTP layer
+describe('Health checker — L402 format relaxation (BLIP-0026)', () => {
+  // Simulate checkService's relaxed L402 logic without HTTP layer
+  // Per BLIP-0026: format is metadata, only payment hash mismatch degrades
   function simulateHealthCheck(wwwAuthHeader) {
     const detection = detectProtocol({ wwwAuthenticate: wwwAuthHeader })
     const classification = { healthStatus: 'healthy', checkStatus: 'healthy' }
 
-    // Replicate checkService L402 compliance check (existing + new specCompliant check)
     if (detection.protocol === 'L402' && classification.healthStatus === 'healthy') {
       if (!detection.valid) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
-      } else if (detection.details?.specCompliant === false) {
-        classification.healthStatus = 'degraded'
-        classification.checkStatus = 'degraded'
-        classification.degradeReason = detection.degradeReason || 'non-standard L402 macaroon format'
       } else if (detection.details?.paymentHashMatch === false) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
@@ -395,11 +391,11 @@ describe('Health checker — L402 spec compliance degradation', () => {
     return classification
   }
 
-  it('non-compliant macaroon → health degraded', () => {
+  it('non-compliant macaroon format → healthy (format is metadata)', () => {
     const result = simulateHealthCheck(
       `L402 macaroon="${JSON_MACAROON}", invoice="${VALID_BOLT11}"`
     )
-    assert.equal(result.healthStatus, 'degraded')
+    assert.equal(result.healthStatus, 'healthy')
   })
 
   it('spec-compliant macaroon + matching hash → healthy', () => {
@@ -419,24 +415,19 @@ describe('Health checker — L402 spec compliance degradation', () => {
 
 // ─── Health Checker — POST Fallback Does Not Override Spec Compliance ────────
 
-describe('Health checker — POST fallback does not override spec compliance', () => {
-  // Extended simulation: primary GET → classify → L402 compliance → POST fallback
-  // Replicates the full checkService flow from checker.js lines 466-494
+describe('Health checker — POST fallback with relaxed format rules', () => {
+  // Extended simulation: primary GET → classify → L402 validation → POST fallback
+  // Per BLIP-0026: format is metadata, only payment hash mismatch degrades
   function simulateWithPostFallback({ primaryHttpStatus, primaryDetection, postFallbackDetection, protocol = 'L402' }) {
     const { classifyHealthStatus } = await_classifyHealthStatus()
 
-    // Step 1: classify primary GET result
     const classification = classifyHealthStatus(primaryHttpStatus, null, 0, null, 200)
 
-    // Step 2: L402 compliance check on primary detection (checker.js ~470-484)
+    // Relaxed: only degrade for invalid detection or payment hash mismatch
     if ((protocol === 'L402' || protocol === 'MPP') && primaryHttpStatus === 402 && classification.healthStatus === 'healthy') {
       if (!primaryDetection.valid) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
-      } else if (protocol === 'L402' && primaryDetection.details?.specCompliant === false) {
-        classification.healthStatus = 'degraded'
-        classification.checkStatus = 'degraded'
-        classification.degradeReason = primaryDetection.degradeReason || 'non-standard L402 macaroon format'
       } else if (protocol === 'L402' && primaryDetection.details?.paymentHashMatch === false) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
@@ -444,16 +435,12 @@ describe('Health checker — POST fallback does not override spec compliance', (
       }
     }
 
-    // Step 3: POST fallback with spec compliance guard (fixed)
+    // Relaxed POST fallback: only payment hash mismatch degrades
     const postFallback = postFallbackDetection ? { attempted: true, detection: postFallbackDetection } : null
     if (postFallback?.attempted && postFallback.detection?.valid) {
       if (postFallback.detection.protocol === protocol) {
         const postDetails = postFallback.detection.details
-        if (protocol === 'L402' && postDetails?.specCompliant === false) {
-          classification.healthStatus = 'degraded'
-          classification.checkStatus = 'degraded'
-          classification.degradeReason = postFallback.detection.degradeReason || 'non-standard L402 macaroon format'
-        } else if (protocol === 'L402' && postDetails?.paymentHashMatch === false) {
+        if (protocol === 'L402' && postDetails?.paymentHashMatch === false) {
           classification.healthStatus = 'degraded'
           classification.checkStatus = 'degraded'
           classification.degradeReason = postFallback.detection.degradeReason || 'payment hash mismatch between macaroon and invoice'
@@ -468,9 +455,7 @@ describe('Health checker — POST fallback does not override spec compliance', (
     return classification
   }
 
-  // Import classifyHealthStatus lazily to match test module pattern
   function await_classifyHealthStatus() {
-    // Inline the classification logic for unit test isolation (no DB dependency)
     return {
       classifyHealthStatus(httpStatus, errorMessage, prevFailures, historicalP50, responseTimeMs) {
         if (errorMessage) {
@@ -491,9 +476,9 @@ describe('Health checker — POST fallback does not override spec compliance', (
     }
   }
 
-  it('POST fallback with non-compliant macaroon → stays degraded (the P0 bug)', () => {
-    // Scenario: GET returns 405, POST returns 402 with JSON macaroon (specCompliant=false)
-    // This is the llm402.ai scenario — POST-only endpoints with JSON macaroons
+  it('POST fallback with non-compliant macaroon format → healthy (format is metadata)', () => {
+    // Scenario: GET returns 405, POST returns 402 with JSON macaroon
+    // Per BLIP-0026 relaxation: format doesn't degrade health
     const postDetection = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${JSON_MACAROON}", invoice="${VALID_BOLT11}"`,
     })
@@ -504,8 +489,7 @@ describe('Health checker — POST fallback does not override spec compliance', (
       postFallbackDetection: postDetection,
     })
 
-    // BUG: currently this returns 'healthy' because POST fallback blindly promotes
-    assert.equal(result.healthStatus, 'degraded', 'non-compliant L402 via POST should NOT be promoted to healthy')
+    assert.equal(result.healthStatus, 'healthy', 'non-compliant format via POST should be healthy')
   })
 
   it('POST fallback with compliant macaroon → healthy', () => {

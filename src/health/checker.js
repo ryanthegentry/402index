@@ -114,6 +114,7 @@ const updateService = () => stmt('updateService', `
     x402_asset_known = @x402_asset_known,
     l402_compliant = @l402_compliant,
     l402_degrade_reason = @l402_degrade_reason,
+    l402_format = @l402_format,
     updated_at = datetime('now')
   WHERE id = @id
 `)
@@ -395,7 +396,7 @@ async function checkFacilitatorReachable(url) {
 }
 
 /** Persist health check result and update service record. */
-function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown, l402Compliant, l402DegradeReason }) {
+function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown, l402Compliant, l402DegradeReason, l402Format }) {
   try {
     // Read current status before update (for event emission)
     const oldStatus = db.prepare('SELECT health_status FROM services WHERE id = ?').get(serviceId)?.health_status
@@ -430,6 +431,7 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
       x402_asset_known: x402AssetKnown ?? null,
       l402_compliant: l402Compliant ?? null,
       l402_degrade_reason: l402DegradeReason ?? null,
+      l402_format: l402Format ?? null,
     })
 
     // Emit events on health status change (fire-and-forget)
@@ -471,15 +473,12 @@ export async function checkService(service) {
     result.httpStatus, result.errorMessage, prevFailures, historicalP50, result.responseTimeMs
   )
 
-  // L402/MPP compliance check via detection from probeEndpoint
+  // L402/MPP validation: only degrade for invalid detection or payment hash mismatch
+  // Per BLIP-0026, token format is agnostic — format-only issues are metadata, not health degradation
   if ((protocol === 'L402' || protocol === 'MPP') && result.httpStatus === 402 && classification.healthStatus === 'healthy') {
     if (!result.detection.valid) {
       classification.healthStatus = 'degraded'
       classification.checkStatus = 'degraded'
-    } else if (protocol === 'L402' && result.detection.details?.specCompliant === false) {
-      classification.healthStatus = 'degraded'
-      classification.checkStatus = 'degraded'
-      classification.degradeReason = result.detection.degradeReason || 'non-standard L402 macaroon format'
     } else if (protocol === 'L402' && result.detection.details?.paymentHashMatch === false) {
       classification.healthStatus = 'degraded'
       classification.checkStatus = 'degraded'
@@ -488,15 +487,10 @@ export async function checkService(service) {
   }
 
   // POST fallback persistence — if probeEndpoint detected POST works, save it
-  // Guard: spec compliance must pass before promoting to healthy
   if (result.postFallback?.attempted && result.postFallback.detection?.valid) {
     if (result.postFallback.detection.protocol === protocol) {
       const postDetails = result.postFallback.detection.details
-      if (protocol === 'L402' && postDetails?.specCompliant === false) {
-        classification.healthStatus = 'degraded'
-        classification.checkStatus = 'degraded'
-        classification.degradeReason = result.postFallback.detection.degradeReason || 'non-standard L402 macaroon format'
-      } else if (protocol === 'L402' && postDetails?.paymentHashMatch === false) {
+      if (protocol === 'L402' && postDetails?.paymentHashMatch === false) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
         classification.degradeReason = result.postFallback.detection.degradeReason || 'payment hash mismatch between macaroon and invoice'
@@ -589,6 +583,27 @@ export async function checkService(service) {
     x402PaymentValid = 0
   }
 
+  // Extract L402 macaroon format for metadata (no health impact)
+  let l402Format = null
+  if (protocol === 'L402') {
+    const detection = result.postFallback?.detection?.valid
+      ? result.postFallback.detection
+      : result.detection
+    if (detection?.details) {
+      if (detection.details.specCompliant === true) {
+        l402Format = 'v2_tlv'
+      } else if (detection.degradeReason) {
+        if (detection.degradeReason.toLowerCase().includes('json')) {
+          l402Format = 'json'
+        } else if (detection.degradeReason.includes('v0') || detection.degradeReason.includes('libmacaroons')) {
+          l402Format = 'v0_text'
+        } else {
+          l402Format = 'unknown'
+        }
+      }
+    }
+  }
+
   persistHealthResult(id, {
     ...classification,
     httpStatus: result.httpStatus,
@@ -599,8 +614,13 @@ export async function checkService(service) {
     x402PaymentValid,
     x402FacilitatorReachable,
     x402AssetKnown,
-    l402Compliant: protocol === 'L402' ? (classification.degradeReason ? 0 : 1) : null,
-    l402DegradeReason: protocol === 'L402' ? (classification.degradeReason || null) : null,
+    l402Compliant: protocol === 'L402'
+      ? (classification.degradeReason?.includes('payment hash') ? 0 : (l402Format ? 1 : null))
+      : null,
+    l402DegradeReason: protocol === 'L402'
+      ? (classification.degradeReason?.includes('payment hash') ? classification.degradeReason : null)
+      : null,
+    l402Format,
   })
 
   return { id, healthStatus: classification.healthStatus, httpStatus: result.httpStatus }
