@@ -306,7 +306,7 @@ export function apiDocsPage() {
             <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
             <span class="endpoint-path">/api/v1/claim</span>
           </div>
-          <p>Initiate a domain claim. Returns a verification token and instructions for placing a <code>.well-known</code> file.</p>
+          <p>Initiate a domain claim. Returns a verification token (keep secret for API auth) and a verification hash (post publicly at <code>.well-known</code>).</p>
           <table class="params-table">
             <thead>
               <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
@@ -325,7 +325,7 @@ export function apiDocsPage() {
               <tr><th>Status</th><th>Meaning</th></tr>
             </thead>
             <tbody>
-              <tr><td><code>201</code></td><td>New claim created. Returns <code>verification_token</code>, <code>verification_url</code>, and <code>instructions</code>.</td></tr>
+              <tr><td><code>201</code></td><td>New claim created. Returns <code>verification_token</code>, <code>verification_hash</code>, <code>verification_url</code>, and <code>instructions</code>.</td></tr>
               <tr><td><code>200</code></td><td>Existing pending claim updated with a new token.</td></tr>
               <tr><td><code>400</code></td><td>Invalid domain format (includes protocol, path, port, or IP address).</td></tr>
               <tr><td><code>409</code></td><td>Domain already verified by another provider.</td></tr>
@@ -338,7 +338,7 @@ export function apiDocsPage() {
             <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
             <span class="endpoint-path">/api/v1/claim/verify</span>
           </div>
-          <p>Verify a pending domain claim. Fetches the <code>.well-known/402index-verify.txt</code> file from the domain and compares the token.</p>
+          <p>Verify a pending domain claim. Fetches the <code>.well-known/402index-verify.txt</code> file from the domain and compares the SHA-256 hash.</p>
           <table class="params-table">
             <thead>
               <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>

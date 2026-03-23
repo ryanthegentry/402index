@@ -33,8 +33,9 @@ export function verifyPage() {
         <pre>{
   "domain": "api.example.com",
   "verification_token": "a1b2c3d4e5f6...  (64 hex characters)",
+  "verification_hash": "e3b0c44298fc1c14...  (SHA-256 of the token)",
   "verification_url": "https://api.example.com/.well-known/402index-verify.txt",
-  "instructions": "Place a text file at the URL above containing only this token: a1b2c3d4..."
+  "instructions": "Place a text file at the URL above containing only this hash: e3b0c442..."
 }</pre>
         <p>
           Save the <code>verification_token</code> &mdash; this becomes your ongoing credential
@@ -44,25 +45,25 @@ export function verifyPage() {
         <h2>3. Place the verification file</h2>
         <p>
           Create a file at <code>/.well-known/402index-verify.txt</code> on your domain containing
-          <strong>only</strong> the verification token (no extra whitespace, HTML, or JSON &mdash; just
-          the raw token string).
+          <strong>only</strong> the <code>verification_hash</code> (the SHA-256 hash, not the raw token).
+          This ensures the raw token is never exposed publicly.
         </p>
 
         <h3>Express / Node.js</h3>
         <pre>app.get('/.well-known/402index-verify.txt', (req, res) => {
-  res.type('text/plain').send('YOUR_TOKEN_HERE')
+  res.type('text/plain').send('YOUR_VERIFICATION_HASH_HERE')
 })</pre>
 
         <h3>Nginx</h3>
         <pre>location = /.well-known/402index-verify.txt {
-    return 200 'YOUR_TOKEN_HERE';
+    return 200 'YOUR_VERIFICATION_HASH_HERE';
     default_type text/plain;
 }</pre>
 
         <h3>Static hosting (Vercel, Netlify, S3)</h3>
         <p>
           Create the file <code>public/.well-known/402index-verify.txt</code> (or equivalent
-          static directory) with the token as its only content.
+          static directory) with the hash as its only content.
         </p>
 
         <h2>4. Verify</h2>
@@ -79,7 +80,7 @@ export function verifyPage() {
   "services_count": 12
 }</pre>
         <p>
-          We fetch your verification file, compare the token, and mark your domain as verified.
+          We fetch your verification file, compare the hash against the SHA-256 of your stored token, and mark your domain as verified.
           The file must be served directly (no redirects) and must be under 1KB.
         </p>
 
@@ -154,7 +155,7 @@ export function verifyPage() {
 }'</pre>
         <p>
           This invalidates the token immediately. To regain access, start the claim flow
-          again from step 2. You'll need to place a new verification file with the new token.
+          again from step 2. You'll receive a new token and hash, and will need to update your verification file.
         </p>
 
         <p style="margin-top:32px">

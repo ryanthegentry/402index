@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, timingSafeEqual } from 'crypto'
+import { randomBytes, randomUUID, timingSafeEqual, createHash } from 'crypto'
 import db from '../db.js'
 import { isBlockedScheme, resolveAndCheck } from '../health/checker.js'
 
@@ -20,6 +20,21 @@ function stmt(key, sql) {
 function tokensMatch(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false
   return timingSafeEqual(Buffer.from(a), Buffer.from(b))
+}
+
+/**
+ * Compare received .well-known content against the SHA-256 hash of the stored token.
+ * Used for domain verification — providers post the HASH publicly, keep raw token for API auth.
+ * @param {string} receivedContent - Content from .well-known file (may have whitespace)
+ * @param {string} storedToken - Raw token from database
+ * @returns {boolean}
+ */
+export function hashMatchesToken(receivedContent, storedToken) {
+  const expectedHash = createHash('sha256').update(storedToken).digest('hex')
+  const received = (receivedContent || '').trim().toLowerCase()
+  const expected = expectedHash.toLowerCase()
+  if (received.length !== expected.length) return false
+  return timingSafeEqual(Buffer.from(received), Buffer.from(expected))
 }
 
 const MAX_LENGTHS = { name: 200, description: 2000, category: 100, payment_asset: 50, payment_network: 50 }
@@ -76,14 +91,16 @@ export function initiateClaim(domain, contactEmail) {
   }
 
   const token = randomBytes(TOKEN_BYTES).toString('hex')
+  const hash = createHash('sha256').update(token).digest('hex')
   const expiresAt = new Date(Date.now() + CLAIM_EXPIRY_HOURS * 60 * 60 * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
   const data = {
     domain: normalizedDomain,
     verification_token: token,
+    verification_hash: hash,
     verification_url: `https://${normalizedDomain}/.well-known/402index-verify.txt`,
-    instructions: `Place a text file at the URL above containing only this token: ${token}`,
+    instructions: `Place a text file at the URL above containing only this hash: ${hash}`,
   }
 
   if (existing && existing.status === 'pending') {
@@ -212,10 +229,10 @@ export async function verifyClaim(domain, { fetchFn = fetch } = {}) {
     return { error: 'Verification file exceeds maximum size of 1KB', status: 422 }
   }
 
-  // Compare token — constant-time comparison to prevent timing attacks
-  const receivedToken = body.trim()
-  if (!tokensMatch(receivedToken, claim.verification_token)) {
-    return { error: 'Token mismatch. The verification file content does not match the expected token.', status: 422 }
+  // Compare hash — provider posts SHA-256(token), we hash our stored token and compare
+  const receivedContent = body.trim()
+  if (!hashMatchesToken(receivedContent, claim.verification_token)) {
+    return { error: 'Hash mismatch. The verification file must contain the SHA-256 hash of your verification token.', status: 422 }
   }
 
   // Mark as verified (atomic — single UPDATE with status guard)
