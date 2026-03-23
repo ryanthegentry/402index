@@ -2,7 +2,7 @@ const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_m
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
 const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'self-registered', 'sponge', 'well-known', 'discovery'])
 
-export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason'
+export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason, l402_format'
 export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, latency_p50_ms, reliability_score, x402_payment_valid'
 
 const DEFAULT_ORDER = `ORDER BY
@@ -42,6 +42,7 @@ export function buildServiceQuery(opts = {}) {
     payment_asset,
     payment_valid,
     l402_compliant,
+    l402_format,
     sort,
     order,
     rawLimit,
@@ -98,10 +99,15 @@ export function buildServiceQuery(opts = {}) {
   } else if (payment_valid === 'false' || payment_valid === '0') {
     conditions.push("((protocol = 'x402' AND (x402_payment_valid = 0 OR x402_payment_valid IS NULL)) OR (protocol = 'L402' AND health_status != 'healthy'))")
   }
+  if (l402_format) {
+    const sanitized = l402_format.replace(/[^a-z0-9_]/g, '')
+    conditions.push('l402_format = @l402_format')
+    params.l402_format = sanitized
+  }
   if (l402_compliant === 'true' || l402_compliant === '1') {
-    conditions.push("l402_compliant = 1")
+    conditions.push("l402_format IN ('v2_tlv', 'v1_binary')")
   } else if (l402_compliant === 'false' || l402_compliant === '0') {
-    conditions.push("l402_compliant = 0")
+    conditions.push("l402_format IN ('v0_text', 'json', 'unknown')")
   }
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''

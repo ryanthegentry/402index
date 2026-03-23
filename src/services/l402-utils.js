@@ -192,7 +192,7 @@ export function isSpecCompliantMacaroon(macaroonB64) {
 
   // Detect JSON format (llm402.ai style — base64-encoded JSON object)
   if (buf[0] === 0x7B) {
-    return { compliant: false, reason: 'JSON-encoded macaroon (non-standard — spec requires binary V2 TLV, see github.com/lightninglabs/L402)' }
+    return { compliant: false, reason: 'JSON-encoded macaroon (V2 TLV binary recommended — see github.com/lightninglabs/L402)' }
   }
 
   // Try V2 TLV (first byte = 0x02 version marker)
@@ -214,13 +214,13 @@ export function isSpecCompliantMacaroon(macaroonB64) {
       if (/^(location|identifier|cid|signature)\s/.test(rest)) {
         return {
           compliant: false,
-          reason: 'libmacaroons v0 text format (spec requires binary V2 TLV — see github.com/lightninglabs/L402)',
+          reason: 'libmacaroons v0 text format (V2 TLV binary recommended — see github.com/lightninglabs/L402)',
         }
       }
     }
   }
 
-  return { compliant: false, reason: 'unrecognized macaroon format (spec requires binary V2 TLV — see github.com/lightninglabs/L402)' }
+  return { compliant: false, reason: 'unrecognized macaroon format (V2 TLV binary recommended — see github.com/lightninglabs/L402)' }
 }
 
 /**

@@ -661,12 +661,24 @@ router.get('/digest', (req, res) => {
   const paymentVerified = db.prepare(`SELECT COUNT(*) as c FROM services WHERE ${ACTIVE} AND x402_payment_valid = 1`).get().c
   const domainVerifiedProviders = db.prepare("SELECT COUNT(DISTINCT domain) as c FROM domain_claims WHERE status = 'verified'").get().c
 
-  const l402Compliance = db.prepare(`
-    SELECT
-      SUM(CASE WHEN l402_compliant = 1 THEN 1 ELSE 0 END) as compliant,
-      SUM(CASE WHEN l402_compliant = 0 THEN 1 ELSE 0 END) as non_compliant
-    FROM services WHERE protocol = 'L402' AND ${ACTIVE}
-  `).get()
+  const l402Formats = db.prepare(`
+    SELECT l402_format, COUNT(*) as count
+    FROM services
+    WHERE protocol = 'L402' AND l402_format IS NOT NULL AND ${ACTIVE}
+    GROUP BY l402_format
+  `).all()
+
+  const l402FormatCounts = {}
+  let l402CompliantCount = 0
+  let l402NonCompliantCount = 0
+  for (const row of l402Formats) {
+    l402FormatCounts[row.l402_format] = row.count
+    if (row.l402_format === 'v2_tlv' || row.l402_format === 'v1_binary') {
+      l402CompliantCount += row.count
+    } else {
+      l402NonCompliantCount += row.count
+    }
+  }
 
   // ── Registrations ──
   const last24h = db.prepare(`
@@ -784,8 +796,9 @@ router.get('/digest', (req, res) => {
       by_health: byHealth,
       payment_verified: paymentVerified,
       domain_verified_providers: domainVerifiedProviders,
-      l402_compliant_count: l402Compliance.compliant || 0,
-      l402_non_compliant_count: l402Compliance.non_compliant || 0,
+      l402_format_counts: l402FormatCounts,
+      l402_compliant_count: l402CompliantCount,
+      l402_non_compliant_count: l402NonCompliantCount,
     },
     registrations: {
       last_24h: last24h,
