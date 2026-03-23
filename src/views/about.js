@@ -22,7 +22,7 @@ export function aboutPage() {
           We aggregate services from multiple sources:
         </p>
         <p>
-          <strong><a href="https://x402.org/bazaar" target="_blank" rel="noopener">x402 Bazaar</a></strong> — Coinbase's auto-registration directory for x402-enabled endpoints.
+          <strong><a href="https://x402.org" target="_blank" rel="noopener">x402 Bazaar</a></strong> — Coinbase's auto-registration directory for x402-enabled endpoints.
           We poll this hourly and normalize the data into our schema.
         </p>
         <p>
@@ -82,6 +82,12 @@ export function aboutPage() {
           For POST-only endpoints, we send the configured HTTP method. Some providers validate
           the request body before issuing the L402 challenge — for these, we send a per-endpoint
           probe body so the health check reaches the paywall layer.
+          We also classify the token format (V2 TLV binary, V1 binary, V0 libmacaroons text, JSON, or unknown)
+          and surface whether each endpoint is compatible with Lightning Labs' <code>lnget</code> client.
+          Format is informational metadata per
+          <a href="https://github.com/lightningnetwork/lnd/blob/master/docs/blip-0026.md">BLIP-0026</a>'s
+          token-agnostic design — it does not affect health status. Only payment hash mismatch
+          (token doesn't commit to the invoice payment hash) degrades health.
         </p>
 
         <p>

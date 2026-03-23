@@ -394,16 +394,8 @@ describe('L402 format relaxation — POST fallback behavior', () => {
 
 describe('L402 format relaxation — format extraction from detection', () => {
   function extractFormat(detection) {
-    if (!detection?.details) return null
-    if (detection.details.specCompliant === true) {
-      return 'v2_tlv' // V1 also returns specCompliant=true
-    }
-    if (detection.degradeReason) {
-      if (detection.degradeReason.toLowerCase().includes('json')) return 'json'
-      if (detection.degradeReason.includes('v0') || detection.degradeReason.includes('libmacaroons')) return 'v0_text'
-      return 'unknown'
-    }
-    return null
+    if (!detection?.details?.format) return null
+    return detection.details.format
   }
 
   it('V2 TLV macaroon → l402_format=v2_tlv', () => {
@@ -426,31 +418,49 @@ describe('L402 format relaxation — format extraction from detection', () => {
     })
     assert.equal(extractFormat(detection), 'v0_text')
   })
+
+  it('V1 binary macaroon → l402_format=v1_binary (not v2_tlv)', () => {
+    function buildV1Macaroon(identifier, signature) {
+      const parts = []
+      const version = Buffer.alloc(4)
+      version.writeUInt32BE(1, 0)
+      parts.push(version)
+      parts.push(writeVarint(identifier.length))
+      parts.push(identifier)
+      parts.push(signature)
+      return Buffer.concat(parts).toString('base64')
+    }
+    const v1Mac = buildV1Macaroon(MATCHING_ID, VALID_SIGNATURE)
+    const detection = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${v1Mac}", invoice="${VALID_BOLT11}"`,
+    })
+    assert.equal(extractFormat(detection), 'v1_binary')
+  })
 })
 
 // ─── Part 3: Reason strings say "recommended" not "spec requires" ───────────
 
 describe('L402 format relaxation — reason strings', () => {
-  it('JSON macaroon reason says "recommended" not "spec requires"', () => {
+  it('JSON macaroon reason says "macaroon-spec.md" not "spec requires"', () => {
     const result = isSpecCompliantMacaroon(JSON_MACAROON)
     assert.equal(result.compliant, false)
     assert.ok(!result.reason.includes('spec requires'), `should not say "spec requires", got: ${result.reason}`)
-    assert.ok(result.reason.includes('recommended'), `should say "recommended", got: ${result.reason}`)
+    assert.ok(result.reason.includes('macaroon-spec.md'), `should include spec link, got: ${result.reason}`)
   })
 
-  it('V0 text macaroon reason says "recommended" not "spec requires"', () => {
+  it('V0 text macaroon reason says "macaroon-spec.md" not "spec requires"', () => {
     const result = isSpecCompliantMacaroon(V0_BASIC)
     assert.equal(result.compliant, false)
     assert.ok(!result.reason.includes('spec requires'), `should not say "spec requires", got: ${result.reason}`)
-    assert.ok(result.reason.includes('recommended'), `should say "recommended", got: ${result.reason}`)
+    assert.ok(result.reason.includes('macaroon-spec.md'), `should include spec link, got: ${result.reason}`)
   })
 
-  it('unrecognized format reason says "recommended" not "spec requires"', () => {
+  it('unrecognized format reason says "macaroon-spec.md" not "spec requires"', () => {
     const unknown = Buffer.from([0xFF, 0xFE, 0x00, ...Array(30).fill(0x42)]).toString('base64')
     const result = isSpecCompliantMacaroon(unknown)
     assert.equal(result.compliant, false)
     assert.ok(!result.reason.includes('spec requires'), `should not say "spec requires", got: ${result.reason}`)
-    assert.ok(result.reason.includes('recommended'), `should say "recommended", got: ${result.reason}`)
+    assert.ok(result.reason.includes('macaroon-spec.md'), `should include spec link, got: ${result.reason}`)
   })
 })
 

@@ -83,16 +83,17 @@ function readVarint(buf, offset) {
 /**
  * Validate the inner L402 identifier structure (66 bytes: version 0 + payment_hash + token_id).
  */
-function validateL402Identifier(identifier, caveats) {
+function validateL402Identifier(identifier, caveats, format) {
   if (identifier.length < 66) {
-    return { compliant: false, reason: 'identifier too short (need 66 bytes for L402)' }
+    return { compliant: false, format, reason: 'identifier too short (need 66 bytes for L402)' }
   }
   const version = identifier.readUInt16BE(0)
   if (version !== 0) {
-    return { compliant: false, reason: 'unsupported identifier version' }
+    return { compliant: false, format, reason: 'unsupported identifier version' }
   }
   return {
     compliant: true,
+    format,
     paymentHash: Buffer.from(identifier.subarray(2, 34)),
     tokenId: Buffer.from(identifier.subarray(34, 66)),
     caveats,
@@ -137,10 +138,10 @@ function parseV2TLV(buf) {
   }
 
   if (!identifier) {
-    return { compliant: false, reason: 'no identifier found in V2 TLV structure' }
+    return { compliant: false, format: 'v2_tlv', reason: 'no identifier found in V2 TLV structure' }
   }
 
-  return validateL402Identifier(identifier, caveats)
+  return validateL402Identifier(identifier, caveats, 'v2_tlv')
 }
 
 /**
@@ -148,16 +149,16 @@ function parseV2TLV(buf) {
  */
 function parseV1Binary(buf) {
   if (buf.length < 8) {
-    return { compliant: false, reason: 'too short for V1 binary macaroon' }
+    return { compliant: false, format: 'v1_binary', reason: 'too short for V1 binary macaroon' }
   }
   let i = 4 // skip uint32 version
   const { value: idLen, bytesRead } = readVarint(buf, i)
   i += bytesRead
   if (i + idLen > buf.length) {
-    return { compliant: false, reason: 'truncated V1 macaroon identifier' }
+    return { compliant: false, format: 'v1_binary', reason: 'truncated V1 macaroon identifier' }
   }
   const identifier = buf.subarray(i, i + idLen)
-  return validateL402Identifier(identifier, [])
+  return validateL402Identifier(identifier, [], 'v1_binary')
 }
 
 // ─── Exported Functions ──────────────────────────────────────────────────────
@@ -192,7 +193,7 @@ export function isSpecCompliantMacaroon(macaroonB64) {
 
   // Detect JSON format (llm402.ai style — base64-encoded JSON object)
   if (buf[0] === 0x7B) {
-    return { compliant: false, reason: 'JSON-encoded macaroon (V2 TLV binary recommended — see github.com/lightninglabs/L402)' }
+    return { compliant: false, format: 'json', reason: 'JSON-encoded token — not a macaroon (see github.com/lightninglabs/L402/blob/master/macaroon-spec.md)' }
   }
 
   // Try V2 TLV (first byte = 0x02 version marker)
@@ -214,13 +215,14 @@ export function isSpecCompliantMacaroon(macaroonB64) {
       if (/^(location|identifier|cid|signature)\s/.test(rest)) {
         return {
           compliant: false,
-          reason: 'libmacaroons v0 text format (V2 TLV binary recommended — see github.com/lightninglabs/L402)',
+          format: 'v0_text',
+          reason: 'libmacaroons v0 text format — valid macaroon, non-standard serialization (see github.com/lightninglabs/L402/blob/master/macaroon-spec.md)',
         }
       }
     }
   }
 
-  return { compliant: false, reason: 'unrecognized macaroon format (V2 TLV binary recommended — see github.com/lightninglabs/L402)' }
+  return { compliant: false, format: 'unknown', reason: 'unrecognized token format (see github.com/lightninglabs/L402/blob/master/macaroon-spec.md)' }
 }
 
 /**
@@ -258,6 +260,7 @@ export function validateL402Challenge(macaroonB64, invoiceStr) {
       valid,
       specCompliant: false,
       paymentHashMatch: null,
+      format: compliance.format || null,
       degradeReason: compliance.reason || 'non-standard macaroon format',
     }
   }
@@ -265,7 +268,7 @@ export function validateL402Challenge(macaroonB64, invoiceStr) {
   // Try payment hash cross-validation
   const invoiceHash = extractInvoicePaymentHash(invoiceStr)
   if (!invoiceHash) {
-    return { valid, specCompliant: true, paymentHashMatch: null, degradeReason: null }
+    return { valid, specCompliant: true, paymentHashMatch: null, format: compliance.format, degradeReason: null }
   }
 
   const paymentHashMatch = compliance.paymentHash.equals(invoiceHash)
@@ -273,6 +276,7 @@ export function validateL402Challenge(macaroonB64, invoiceStr) {
     valid,
     specCompliant: true,
     paymentHashMatch,
+    format: compliance.format,
     degradeReason: paymentHashMatch ? null : 'payment hash mismatch between macaroon and invoice',
   }
 }

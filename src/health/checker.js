@@ -115,6 +115,7 @@ const updateService = () => stmt('updateService', `
     l402_compliant = @l402_compliant,
     l402_degrade_reason = @l402_degrade_reason,
     l402_format = @l402_format,
+    lnget_compatible = @lnget_compatible,
     updated_at = datetime('now')
   WHERE id = @id
 `)
@@ -396,7 +397,7 @@ async function checkFacilitatorReachable(url) {
 }
 
 /** Persist health check result and update service record. */
-function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown, l402Compliant, l402DegradeReason, l402Format }) {
+function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown, l402Compliant, l402DegradeReason, l402Format, lngetCompatible }) {
   try {
     // Read current status before update (for event emission)
     const oldStatus = db.prepare('SELECT health_status FROM services WHERE id = ?').get(serviceId)?.health_status
@@ -432,6 +433,7 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
       l402_compliant: l402Compliant ?? null,
       l402_degrade_reason: l402DegradeReason ?? null,
       l402_format: l402Format ?? null,
+      lnget_compatible: lngetCompatible ?? null,
     })
 
     // Emit events on health status change (fire-and-forget)
@@ -589,18 +591,8 @@ export async function checkService(service) {
     const detection = result.postFallback?.detection?.valid
       ? result.postFallback.detection
       : result.detection
-    if (detection?.details) {
-      if (detection.details.specCompliant === true) {
-        l402Format = 'v2_tlv'
-      } else if (detection.degradeReason) {
-        if (detection.degradeReason.toLowerCase().includes('json')) {
-          l402Format = 'json'
-        } else if (detection.degradeReason.includes('v0') || detection.degradeReason.includes('libmacaroons')) {
-          l402Format = 'v0_text'
-        } else {
-          l402Format = 'unknown'
-        }
-      }
+    if (detection?.details?.format) {
+      l402Format = detection.details.format
     }
   }
 
@@ -614,13 +606,12 @@ export async function checkService(service) {
     x402PaymentValid,
     x402FacilitatorReachable,
     x402AssetKnown,
-    l402Compliant: protocol === 'L402'
-      ? (classification.degradeReason?.includes('payment hash') ? 0 : (l402Format ? 1 : null))
-      : null,
+    l402Compliant: null, // deprecated — format tracked in l402_format, degradation in health_status
     l402DegradeReason: protocol === 'L402'
       ? (classification.degradeReason?.includes('payment hash') ? classification.degradeReason : null)
       : null,
     l402Format,
+    lngetCompatible: protocol === 'L402' ? (l402Format === 'v2_tlv' ? 1 : (l402Format ? 0 : null)) : null,
   })
 
   return { id, healthStatus: classification.healthStatus, httpStatus: result.httpStatus }

@@ -416,6 +416,9 @@ try {
   console.warn(`[db] Hostname index note: ${err.message}`)
 }
 
+// DEPRECATED: l402_compliant is no longer written by the health checker (since f3d9a1a relaxation).
+// Kept for backward-compat reads. Format data lives in l402_format column.
+// Payment hash issues tracked via health_status='degraded' + l402_degrade_reason.
 // Migration: L402 spec compliance columns
 try {
   db.exec('ALTER TABLE services ADD COLUMN l402_compliant INTEGER')
@@ -456,6 +459,24 @@ try {
   }
 } catch (e) {
   console.warn('[db] l402_format backfill skipped:', e.message)
+}
+
+// Migration: lnget interop flag
+try {
+  db.exec('ALTER TABLE services ADD COLUMN lnget_compatible INTEGER')
+  console.log('[db] Added lnget_compatible column')
+  // Backfill from l402_format
+  db.exec(`
+    UPDATE services SET lnget_compatible = CASE
+      WHEN protocol != 'L402' THEN NULL
+      WHEN l402_format = 'v2_tlv' THEN 1
+      WHEN l402_format IS NOT NULL THEN 0
+      ELSE NULL
+    END
+  `)
+  console.log('[db] Backfilled lnget_compatible from l402_format')
+} catch (e) {
+  if (!e.message.includes('duplicate column')) throw e
 }
 
 // Migration: expand protocol CHECK constraint to include 'MPP'

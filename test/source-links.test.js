@@ -33,7 +33,7 @@ describe('sourceLink', () => {
   it('maps all known sources correctly', () => {
     const expected = {
       satring: 'satring.com',
-      bazaar: 'x402.org/bazaar',
+      bazaar: 'x402.org',
       l402apps: 'l402apps.com',
       sponge: 'paysponge.com',
       mpp: 'mpp.dev',

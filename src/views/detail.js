@@ -124,6 +124,21 @@ export function detailPage(service) {
               : '<span style="color:var(--text-muted)">Not yet detected</span>'
             }</span>
           </div>
+          ${service.lnget_compatible !== null && service.lnget_compatible !== undefined ? `
+          <div class="detail-row">
+            <span class="detail-label">lnget Compatible</span>
+            <span class="detail-value">
+              ${service.lnget_compatible === 1
+                ? '<span class="health-dot health-healthy"></span> Yes'
+                : '<span class="health-dot health-degraded"></span> No — ' + (
+                    service.l402_format === 'json' ? 'JSON token (not a macaroon)'
+                    : service.l402_format === 'v0_text' ? 'V0 text format (parser support pending)'
+                    : 'non-standard format'
+                  )
+              }
+            </span>
+          </div>
+          ` : ''}
           ${service.l402_degrade_reason && service.l402_degrade_reason.includes('payment hash') ? `
           <div class="detail-row">
             <span class="detail-label">Issue</span>
