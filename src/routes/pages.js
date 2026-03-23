@@ -117,7 +117,7 @@ Base URL: https://402index.io/api/v1
 API_SPEC: https://402index.io/api/v1/openapi.json
 API_DOCS_MD: https://402index.io/api/v1/docs.md
 
-- GET /api/v1/services — Search and filter endpoints. Params: protocol, category, health, source, q, sort, limit, offset
+- GET /api/v1/services — Search and filter endpoints. Params: protocol, category, health, source, q, sort, limit, offset, l402_format, lnget_compatible
 - GET /api/v1/services/:id — Full service details with health check history
 - GET /api/v1/categories — Category tree with counts
 - GET /api/v1/health — System health, sync status, provider counts

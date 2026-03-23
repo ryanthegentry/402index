@@ -86,6 +86,7 @@ export function detectProtocol(httpResult) {
           invoiceValid,
           specCompliant: validation.specCompliant,
           paymentHashMatch: validation.paymentHashMatch,
+          format: validation.format || null,
         },
         rawHeaders: { 'WWW-Authenticate': wwwAuthenticate },
       }

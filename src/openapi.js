@@ -27,6 +27,8 @@ export const openapiSpec = {
           { name: 'sort', in: 'query', schema: { type: 'string', enum: ['name', 'price', 'latency', 'uptime', 'reliability'] }, description: 'Sort field' },
           { name: 'order', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] }, description: 'Sort order' },
           { name: 'payment_valid', in: 'query', schema: { type: 'boolean' }, description: 'Only x402 services with verified payment requirements' },
+          { name: 'l402_format', in: 'query', schema: { type: 'string', enum: ['v2_tlv', 'v1_binary', 'v0_text', 'json', 'unknown'] }, description: 'Filter L402 endpoints by macaroon token format' },
+          { name: 'lnget_compatible', in: 'query', schema: { type: 'boolean' }, description: 'Filter L402 endpoints by lnget client compatibility' },
           { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 200, default: 50 }, description: 'Results per page' },
           { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0 }, description: 'Pagination offset' },
         ],
@@ -591,6 +593,8 @@ export const openapiSpec = {
           x402_payment_valid: { type: ['integer', 'null'] },
           x402_facilitator_reachable: { type: ['integer', 'null'] },
           x402_asset_known: { type: ['integer', 'null'] },
+          l402_format: { type: ['string', 'null'], enum: ['v2_tlv', 'v1_binary', 'v0_text', 'json', 'unknown', null], description: 'L402 macaroon token format. See github.com/lightninglabs/L402/blob/master/macaroon-spec.md' },
+          lnget_compatible: { type: ['integer', 'null'], enum: [1, 0, null], description: 'Whether this endpoint works with Lightning Labs lnget client (1=yes, 0=no, null=not L402)' },
         },
       },
       HealthCheck: {

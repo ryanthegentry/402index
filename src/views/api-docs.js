@@ -41,6 +41,8 @@ export function apiDocsPage() {
               <tr><td>max_price_usd</td><td>number</td><td>Maximum price in USD</td></tr>
               <tr><td>payment_asset</td><td>string</td><td>Filter by payment asset (e.g. <code>BTC</code>, <code>USDC</code>)</td></tr>
               <tr><td>payment_valid</td><td>boolean</td><td>Only x402 services with verified payment requirements: <code>true</code></td></tr>
+              <tr><td>l402_format</td><td>string</td><td>Filter L402 endpoints by macaroon format: <code>v2_tlv</code>, <code>v1_binary</code>, <code>v0_text</code>, <code>json</code>, <code>unknown</code></td></tr>
+              <tr><td>lnget_compatible</td><td>boolean</td><td>Filter L402 endpoints by <code>lnget</code> client compatibility: <code>true</code> or <code>false</code></td></tr>
               <tr><td>sort</td><td>string</td><td>Sort by: <code>name</code>, <code>price</code>, <code>latency</code>, <code>uptime</code>, <code>reliability</code></td></tr>
               <tr><td>order</td><td>string</td><td>Sort order: <code>asc</code> or <code>desc</code></td></tr>
               <tr><td>limit</td><td>integer</td><td>Results per page (default 50, max 200)</td></tr>
@@ -258,7 +260,9 @@ export function apiDocsPage() {
               reliability_score: 92.5,
               x402_payment_valid: null,
               x402_facilitator_reachable: null,
-              x402_asset_known: null
+              x402_asset_known: null,
+              l402_format: 'v2_tlv',
+              lnget_compatible: 1
             }
           ],
           total: 7595,

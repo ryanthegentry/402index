@@ -2,7 +2,7 @@ const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_m
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
 const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'self-registered', 'sponge', 'well-known', 'discovery'])
 
-export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason, l402_format'
+export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason, l402_format, lnget_compatible'
 export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, latency_p50_ms, reliability_score, x402_payment_valid'
 
 const DEFAULT_ORDER = `ORDER BY
@@ -43,6 +43,7 @@ export function buildServiceQuery(opts = {}) {
     payment_valid,
     l402_compliant,
     l402_format,
+    lnget_compatible,
     sort,
     order,
     rawLimit,
@@ -103,6 +104,11 @@ export function buildServiceQuery(opts = {}) {
     const sanitized = l402_format.replace(/[^a-z0-9_]/g, '')
     conditions.push('l402_format = @l402_format')
     params.l402_format = sanitized
+  }
+  if (lnget_compatible === 'true' || lnget_compatible === '1') {
+    conditions.push('lnget_compatible = 1')
+  } else if (lnget_compatible === 'false' || lnget_compatible === '0') {
+    conditions.push('lnget_compatible = 0')
   }
   if (l402_compliant === 'true' || l402_compliant === '1') {
     conditions.push("l402_format IN ('v2_tlv', 'v1_binary')")

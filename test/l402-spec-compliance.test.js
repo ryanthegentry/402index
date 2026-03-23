@@ -187,6 +187,7 @@ describe('isSpecCompliantMacaroon — identifier validation', () => {
   it('valid V2 TLV macaroon with 66-byte identifier → compliant', () => {
     const result = isSpecCompliantMacaroon(SPEC_MACAROON)
     assert.equal(result.compliant, true)
+    assert.equal(result.format, 'v2_tlv')
     assert.ok(result.paymentHash)
     assert.equal(result.paymentHash.toString('hex'), VALID_BOLT11_PAYMENT_HASH)
   })
@@ -194,6 +195,7 @@ describe('isSpecCompliantMacaroon — identifier validation', () => {
   it('JSON macaroon (llm402.ai style) → non-compliant', () => {
     const result = isSpecCompliantMacaroon(JSON_MACAROON)
     assert.equal(result.compliant, false)
+    assert.equal(result.format, 'json')
     assert.ok(result.reason.toLowerCase().includes('json'))
   })
 
@@ -238,6 +240,7 @@ describe('isSpecCompliantMacaroon — V2/V1 envelope', () => {
     const mac = buildV2Macaroon(MATCHING_ID, VALID_SIGNATURE, { location: 'lsat' })
     const result = isSpecCompliantMacaroon(mac)
     assert.equal(result.compliant, true)
+    assert.equal(result.format, 'v2_tlv')
   })
 
   it('V2 with caveats → compliant + caveats extracted', () => {
@@ -246,6 +249,7 @@ describe('isSpecCompliantMacaroon — V2/V1 envelope', () => {
     })
     const result = isSpecCompliantMacaroon(mac)
     assert.equal(result.compliant, true)
+    assert.equal(result.format, 'v2_tlv')
     assert.ok(result.caveats)
     assert.ok(result.caveats.length >= 2)
     assert.ok(result.caveats.includes('services=lspd:alice:read'))
@@ -254,6 +258,7 @@ describe('isSpecCompliantMacaroon — V2/V1 envelope', () => {
   it('V1 format with valid 66-byte identifier → compliant (V1 fallback)', () => {
     const result = isSpecCompliantMacaroon(V1_VALID_MACAROON)
     assert.equal(result.compliant, true)
+    assert.equal(result.format, 'v1_binary')
     assert.equal(result.paymentHash.toString('hex'), VALID_BOLT11_PAYMENT_HASH)
   })
 
@@ -346,6 +351,7 @@ describe('detectProtocol — L402 spec compliance integration', () => {
     assert.equal(result.protocol, 'L402')
     assert.equal(result.valid, true)
     assert.equal(result.details.specCompliant, true)
+    assert.equal(result.details.format, 'v2_tlv')
   })
 
   it('non-compliant macaroon → specCompliant=false + degradeReason set', () => {
@@ -355,6 +361,7 @@ describe('detectProtocol — L402 spec compliance integration', () => {
     assert.equal(result.protocol, 'L402')
     assert.equal(result.valid, true) // charset check still passes
     assert.equal(result.details.specCompliant, false)
+    assert.equal(result.details.format, 'json')
     assert.ok(result.degradeReason)
   })
 
@@ -571,20 +578,22 @@ describe('V0 libmacaroons text format detection', () => {
   it('V0 text macaroon → detected with specific V0 reason (not "unrecognized")', () => {
     const result = isSpecCompliantMacaroon(V0_BASIC)
     assert.equal(result.compliant, false)
+    assert.equal(result.format, 'v0_text')
     assert.ok(result.reason.includes('v0'), `expected reason to mention "v0", got: ${result.reason}`)
     assert.ok(!result.reason.includes('unrecognized'), `should NOT say "unrecognized", got: ${result.reason}`)
-    assert.ok(result.reason.includes('V2 TLV'), `expected actionable fix guidance mentioning V2 TLV, got: ${result.reason}`)
   })
 
   it('V0 text with caveats → still detected as V0', () => {
     const result = isSpecCompliantMacaroon(V0_WITH_CAVEATS)
     assert.equal(result.compliant, false)
+    assert.equal(result.format, 'v0_text')
     assert.ok(result.reason.includes('v0'), `expected V0-specific reason, got: ${result.reason}`)
   })
 
   it('V0 text with full URL location → detected as V0', () => {
     const result = isSpecCompliantMacaroon(V0_WITH_URL)
     assert.equal(result.compliant, false)
+    assert.equal(result.format, 'v0_text')
     assert.ok(result.reason.includes('v0'), `expected V0-specific reason, got: ${result.reason}`)
   })
 
@@ -594,6 +603,7 @@ describe('V0 libmacaroons text format detection', () => {
     const b64 = buf.toString('base64')
     const result = isSpecCompliantMacaroon(b64)
     assert.equal(result.compliant, false)
+    assert.equal(result.format, 'unknown')
     assert.ok(!result.reason.includes('v0'), `should NOT classify random 0x30 data as V0, got: ${result.reason}`)
   })
 })
@@ -601,10 +611,11 @@ describe('V0 libmacaroons text format detection', () => {
 // ─── Actionable Degrade Reasons ─────────────────────────────────────────────
 
 describe('Actionable degrade reasons', () => {
-  it('JSON macaroon reason includes V2 TLV fix guidance and spec link', () => {
+  it('JSON macaroon reason includes spec link', () => {
     const result = isSpecCompliantMacaroon(JSON_MACAROON)
     assert.equal(result.compliant, false)
-    assert.ok(result.reason.includes('V2 TLV'), `expected V2 TLV guidance, got: ${result.reason}`)
+    assert.equal(result.format, 'json')
+    assert.ok(result.reason.includes('macaroon-spec.md'), `expected spec link, got: ${result.reason}`)
     assert.ok(result.reason.includes('L402'), `expected spec link, got: ${result.reason}`)
   })
 
@@ -623,8 +634,9 @@ describe('Actionable degrade reasons', () => {
   it('truly unknown format → unrecognized fallback with spec link', () => {
     const result = isSpecCompliantMacaroon(TRULY_UNKNOWN_MACAROON)
     assert.equal(result.compliant, false)
+    assert.equal(result.format, 'unknown')
     assert.ok(result.reason.includes('unrecognized'), `expected "unrecognized", got: ${result.reason}`)
-    assert.ok(result.reason.includes('V2 TLV'), `expected spec guidance, got: ${result.reason}`)
+    assert.ok(result.reason.includes('macaroon-spec.md'), `expected spec guidance, got: ${result.reason}`)
   })
 })
 
@@ -637,6 +649,7 @@ describe('detectProtocol — V0 text format integration', () => {
     })
     assert.equal(result.protocol, 'L402')
     assert.equal(result.details.specCompliant, false)
+    assert.equal(result.details.format, 'v0_text')
     assert.ok(result.degradeReason.includes('v0'), `expected V0-specific degrade reason, got: ${result.degradeReason}`)
   })
 })

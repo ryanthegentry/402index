@@ -29,7 +29,7 @@ export function formatPrice(service, btcUsdRate) {
 
 const SOURCE_URLS = {
   satring: 'https://satring.com',
-  bazaar: 'https://x402.org/bazaar',
+  bazaar: 'https://x402.org',
   l402apps: 'https://l402apps.com',
   sponge: 'https://paysponge.com',
   mpp: 'https://mpp.dev',
