@@ -9,6 +9,7 @@ describe('classifyHealthStatus', () => {
       assert.equal(result.healthStatus, 'unknown')
       assert.equal(result.checkStatus, 'timeout')
       assert.equal(result.consecutiveFailures, 1)
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
 
     it('returns down after 3 consecutive failures', () => {
@@ -16,6 +17,7 @@ describe('classifyHealthStatus', () => {
       assert.equal(result.healthStatus, 'down')
       assert.equal(result.checkStatus, 'error')
       assert.equal(result.consecutiveFailures, 3)
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
 
     it('returns unknown on second failure', () => {
@@ -43,15 +45,55 @@ describe('classifyHealthStatus', () => {
       assert.equal(result.consecutiveFailures, 0)
     })
 
-    it('returns degraded for 402 with high latency', () => {
-      const result = classifyHealthStatus(402, null, 0, 100, 250)
+    it('returns degraded for 402 with high latency (3rd consecutive spike)', () => {
+      const result = classifyHealthStatus(402, null, 0, 100, 250, 2)
       assert.equal(result.healthStatus, 'degraded')
       assert.equal(result.checkStatus, 'degraded')
+      assert.equal(result.consecutiveLatencySpikes, 3)
     })
 
     it('returns healthy for 402 with acceptable latency', () => {
-      const result = classifyHealthStatus(402, null, 0, 100, 180)
+      const result = classifyHealthStatus(402, null, 0, 100, 180, 0)
       assert.equal(result.healthStatus, 'healthy')
+      assert.equal(result.consecutiveLatencySpikes, 0)
+    })
+
+    it('returns healthy on first latency spike (1 of 3)', () => {
+      const result = classifyHealthStatus(402, null, 0, 100, 250, 0)
+      assert.equal(result.healthStatus, 'healthy')
+      assert.equal(result.checkStatus, 'healthy')
+      assert.equal(result.consecutiveLatencySpikes, 1)
+      assert.equal(result.consecutiveFailures, 0)
+    })
+
+    it('returns healthy on second latency spike (2 of 3)', () => {
+      const result = classifyHealthStatus(402, null, 0, 100, 250, 1)
+      assert.equal(result.healthStatus, 'healthy')
+      assert.equal(result.checkStatus, 'healthy')
+      assert.equal(result.consecutiveLatencySpikes, 2)
+    })
+
+    it('returns degraded on third consecutive latency spike', () => {
+      const result = classifyHealthStatus(402, null, 0, 100, 250, 2)
+      assert.equal(result.healthStatus, 'degraded')
+      assert.equal(result.checkStatus, 'degraded')
+      assert.equal(result.consecutiveLatencySpikes, 3)
+    })
+
+    it('resets latency spike counter on normal-speed 402', () => {
+      const result = classifyHealthStatus(402, null, 0, 100, 150, 2)
+      assert.equal(result.healthStatus, 'healthy')
+      assert.equal(result.consecutiveLatencySpikes, 0)
+    })
+
+    it('resets latency spike counter on error', () => {
+      const result = classifyHealthStatus(null, 'timeout', 0, 100, null, 2)
+      assert.equal(result.consecutiveLatencySpikes, 0)
+    })
+
+    it('resets latency spike counter on 5xx', () => {
+      const result = classifyHealthStatus(500, null, 0, 100, 200, 2)
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
   })
 
@@ -60,6 +102,7 @@ describe('classifyHealthStatus', () => {
       const result = classifyHealthStatus(200, null, 0, null, 100)
       assert.equal(result.healthStatus, 'degraded')
       assert.equal(result.checkStatus, 'degraded')
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
 
     it('preserves previous failure count on 200', () => {
@@ -74,6 +117,7 @@ describe('classifyHealthStatus', () => {
       assert.equal(result.healthStatus, 'degraded')
       assert.equal(result.checkStatus, 'down')
       assert.equal(result.consecutiveFailures, 1)
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
 
     it('returns down after 3 consecutive 5xx errors', () => {
@@ -88,6 +132,7 @@ describe('classifyHealthStatus', () => {
       const result = classifyHealthStatus(429, null, 0, null, 100)
       assert.equal(result.healthStatus, 'degraded')
       assert.equal(result.checkStatus, 'rate_limited')
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
 
     it('preserves previous failure count on 429', () => {
@@ -101,6 +146,7 @@ describe('classifyHealthStatus', () => {
       const result = classifyHealthStatus(405, null, 0, null, 100)
       assert.equal(result.healthStatus, 'degraded')
       assert.equal(result.checkStatus, 'method_not_allowed')
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
 
     it('preserves previous failure count on 405', () => {
@@ -114,6 +160,7 @@ describe('classifyHealthStatus', () => {
       const result = classifyHealthStatus(406, null, 0, null, 100)
       assert.equal(result.healthStatus, 'degraded')
       assert.equal(result.checkStatus, 'not_acceptable')
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
 
     it('preserves previous failure count on 406', () => {
@@ -127,11 +174,13 @@ describe('classifyHealthStatus', () => {
       const result = classifyHealthStatus(301, null, 0, null, 100)
       assert.equal(result.healthStatus, 'degraded')
       assert.equal(result.checkStatus, 'degraded')
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
 
     it('returns degraded for 4xx (non-402/429/405) responses', () => {
       const result = classifyHealthStatus(403, null, 0, null, 100)
       assert.equal(result.healthStatus, 'degraded')
+      assert.equal(result.consecutiveLatencySpikes, 0)
     })
   })
 })

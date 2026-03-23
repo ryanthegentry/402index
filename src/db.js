@@ -461,6 +461,14 @@ try {
   console.warn('[db] l402_format backfill skipped:', e.message)
 }
 
+// Migration: consecutive latency spike counter (buffer before degrading on slow 402s)
+try {
+  db.exec('ALTER TABLE services ADD COLUMN consecutive_latency_spikes INTEGER DEFAULT 0')
+  console.log('[db] Added column: consecutive_latency_spikes')
+} catch (e) {
+  if (!e.message.includes('duplicate column')) throw e
+}
+
 // Migration: lnget interop flag
 try {
   db.exec('ALTER TABLE services ADD COLUMN lnget_compatible INTEGER')
