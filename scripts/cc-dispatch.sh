@@ -27,6 +27,7 @@
 REPO="${GITHUB_DEFAULT_REPO:-ryanthegentry/402index}"
 REPO_DIR="${REPO_DIR:-$HOME/projects/402index}"
 LOG_DIR="${LOG_DIR:-$HOME/agent-state/dispatch-logs}"
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-$(cd "$REPO_DIR" 2>/dev/null && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo master)}"
 DRY_RUN=false
 WATCH=false
 POLL_INTERVAL=300
@@ -147,13 +148,13 @@ dispatch_implement() {
     local branch="fix/issue-${issue_number}"
 
     cd "$REPO_DIR" || { err "Can't cd to $REPO_DIR"; return 1; }
-    git checkout main && git pull origin main
+    git checkout "$DEFAULT_BRANCH" && git pull origin "$DEFAULT_BRANCH"
 
     # Create or switch to feature branch
     git checkout -b "$branch" 2>/dev/null || git checkout "$branch"
 
     local main_sha
-    main_sha=$(git rev-parse main)
+    main_sha=$(git rev-parse "$DEFAULT_BRANCH")
 
     # Build prompt — agent personas have their own system prompts
     local cc_prompt
@@ -187,7 +188,7 @@ When done, summarize what you changed and why."
     if [ $cc_exit -ne 0 ]; then
         err "CC exited with code ${cc_exit} for issue #${issue_number}"
         rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
-        git checkout main
+        git checkout "$DEFAULT_BRANCH"
         return 1
     fi
 
@@ -207,7 +208,7 @@ When done, summarize what you changed and why."
         gh issue comment "$issue_number" --repo "$REPO" \
             --body "CC analyzed the issue but made no code changes. May need manual intervention."
         rollback_issue "$issue_number" "$dispatch_label"
-        git checkout main
+        git checkout "$DEFAULT_BRANCH"
         return 0
     fi
 
@@ -238,7 +239,7 @@ Closes #${issue_number}
 
 ---
 *Dispatched by cc-dispatch.sh at $(date '+%Y-%m-%d %H:%M:%S')*" \
-        --head "$branch" --base main)
+        --head "$branch" --base "$DEFAULT_BRANCH")
 
     if [ -n "$pr_url" ]; then
         log "PR created: ${pr_url}"
@@ -253,7 +254,7 @@ Closes #${issue_number}
         err "Failed to create PR for issue #${issue_number}"
     fi
 
-    git checkout main
+    git checkout "$DEFAULT_BRANCH"
 }
 
 # ── Review-issue mode: CC reviews spec, posts issue comment ───────
