@@ -1,3 +1,15 @@
+import crypto from 'crypto'
+
+function constantTimeEqual(a, b) {
+  const bufA = Buffer.from(String(a))
+  const bufB = Buffer.from(String(b))
+  if (bufA.length !== bufB.length) {
+    crypto.timingSafeEqual(bufA, bufA)
+    return false
+  }
+  return crypto.timingSafeEqual(bufA, bufB)
+}
+
 /**
  * Admin authentication middleware.
  * Checks Authorization: Bearer <token> against ADMIN_SECRET env var.
@@ -14,7 +26,7 @@ export function adminAuth(req, res, next) {
   }
 
   const token = auth.slice(7)
-  if (token !== secret) {
+  if (!constantTimeEqual(token, secret)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
@@ -38,7 +50,7 @@ export function digestAuth(req, res, next) {
   }
 
   const token = auth.slice(7)
-  if (token !== secret) {
+  if (!constantTimeEqual(token, secret)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
