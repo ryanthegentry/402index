@@ -46,6 +46,27 @@ describe('layout', () => {
     assert.ok(html.includes('<style>'))
     assert.ok(html.includes('--bg:'))
   })
+
+  it('escapes HTML in meta description to prevent XSS', () => {
+    const xss = '"><script>alert(document.cookie)</script>'
+    const html = layout('Test', '<p>Hello</p>', { description: xss })
+    assert.ok(!html.includes('<script>alert('), 'description must be escaped in meta tags')
+    assert.ok(html.includes('&lt;script&gt;'), 'angle brackets should be escaped')
+    assert.ok(html.includes('&quot;'), 'quotes should be escaped')
+  })
+
+  it('escapes HTML in ogTitle to prevent XSS', () => {
+    const xss = '"><img src=x onerror=alert(1)>'
+    const html = layout('Test', '', { ogTitle: xss })
+    assert.ok(!html.includes('<img src=x'), 'ogTitle must not contain unescaped HTML tags')
+    assert.ok(html.includes('&lt;img'), 'angle brackets should be escaped in ogTitle')
+  })
+
+  it('escapes HTML in ogUrl to prevent XSS', () => {
+    const xss = '"><script>alert(1)</script>'
+    const html = layout('Test', '', { ogUrl: xss })
+    assert.ok(!html.includes('<script>alert'), 'ogUrl must be escaped in meta tags')
+  })
 })
 
 describe('aboutPage', () => {
