@@ -1,7 +1,8 @@
 ---
 model: opus
 description: OWASP-focused security reviewer. Reviews PRs for XSS, injection, auth bypass, and rate limit evasion. Outputs GitHub PR review.
-maxTurns: 10allowedTools:
+maxTurns: 10
+allowedTools:
   - Read
   - Glob
   - Grep

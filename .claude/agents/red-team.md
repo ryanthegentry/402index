@@ -1,7 +1,8 @@
 ---
 model: opus
 description: Conservative senior engineer who reviews specs and code for edge cases, race conditions, missing error handling, and security implications.
-maxTurns: 10allowedTools:
+maxTurns: 10
+allowedTools:
   - Read
   - Glob
   - Grep
