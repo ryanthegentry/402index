@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import db from '../db.js'
+import db, { logQuery } from '../db.js'
 import { queryServices, PAGE_COLUMNS, API_COLUMNS } from '../queries/services.js'
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { homePage } from '../views/home.js'
@@ -267,6 +267,7 @@ router.get('/stats-dev', (req, res) => {
 
 // Directory page (formerly /)
 router.get('/directory', (req, res) => {
+  const startTime = Date.now()
   const { protocol, category, health, source, q, featured, sort, payment_valid, limit: rawLimit, offset: rawOffset } = req.query
   const filters = { protocol, category, health, source, q, featured: featured === 'true', sort, payment_valid: payment_valid === 'true' }
 
@@ -283,6 +284,14 @@ router.get('/directory', (req, res) => {
 
   const btcUsdRate = getCachedBtcUsdRate()
   res.send(homePage({ services, total, limit, offset, filters, stats, categories, btcUsdRate }))
+
+  logQuery({
+    queryText: q || null,
+    filters: JSON.stringify({ protocol, category, health, source, featured, sort, payment_valid }),
+    resultCount: total,
+    responseTimeMs: Date.now() - startTime,
+    userAgent: req.get('User-Agent') || null,
+  })
 })
 
 // Service detail
