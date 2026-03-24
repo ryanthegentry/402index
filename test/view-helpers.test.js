@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { escapeHtml, escapeXml, healthDot, protocolBadge, formatPrice, formatSchema } from '../src/views/helpers.js'
+import { escapeHtml, escapeXml, healthDot, protocolBadge, formatPrice, formatSchema, safeJsonEmbed } from '../src/views/helpers.js'
 
 describe('escapeHtml', () => {
   it('escapes HTML special characters', () => {
@@ -110,6 +110,36 @@ describe('formatPrice', () => {
   it('returns dash for no price', () => {
     const result = formatPrice({})
     assert.ok(result.includes('—'))
+  })
+})
+
+describe('safeJsonEmbed', () => {
+  it('escapes </script> breakout in string values', () => {
+    const malicious = { name: '</script><script>alert(1)</script>' }
+    const result = safeJsonEmbed(malicious)
+    assert.ok(!result.includes('</script>'), 'output must not contain literal </script>')
+    assert.ok(result.includes('\\u003c/script>'))
+    // Must still parse back to the original data
+    assert.deepEqual(JSON.parse(result), malicious)
+  })
+
+  it('escapes < in nested objects', () => {
+    const data = { a: { b: '<img src=x onerror=alert(1)>' } }
+    const result = safeJsonEmbed(data)
+    assert.ok(!result.includes('<img'))
+    assert.deepEqual(JSON.parse(result), data)
+  })
+
+  it('handles arrays', () => {
+    const data = [{ name: '</script>' }]
+    const result = safeJsonEmbed(data)
+    assert.ok(!result.includes('</script>'))
+    assert.deepEqual(JSON.parse(result), data)
+  })
+
+  it('handles safe data unchanged except for < escaping', () => {
+    const data = { hello: 'world', count: 42 }
+    assert.equal(safeJsonEmbed(data), JSON.stringify(data))
   })
 })
 

@@ -1,5 +1,5 @@
 import { layout } from './layout.js'
-import { escapeHtml } from './helpers.js'
+import { escapeHtml, safeJsonEmbed } from './helpers.js'
 
 export function statsPage({ scoreboard, latency, categoryGap }) {
   // Pre-compute latency bar HTML
@@ -131,8 +131,8 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
   <script>
   (function() {
     // ─── Scoreboard ─────────────────────────────────────────────────────
-    var providerData = ${JSON.stringify(scoreboard.providers)}
-    var endpointData = ${JSON.stringify(scoreboard.endpoints)}
+    var providerData = ${safeJsonEmbed(scoreboard.providers)}
+    var endpointData = ${safeJsonEmbed(scoreboard.endpoints)}
     var currentView = 'provider'
     var currentProtocol = ''
 
