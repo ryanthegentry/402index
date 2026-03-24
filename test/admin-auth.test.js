@@ -4,7 +4,13 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { adminAuth } from '../src/middleware/admin-auth.js'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { adminAuth, digestAuth } from '../src/middleware/admin-auth.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const sourceCode = readFileSync(join(__dirname, '../src/middleware/admin-auth.js'), 'utf8')
 
 function mockReqRes(authHeader) {
   const req = { headers: {} }
@@ -66,5 +72,58 @@ describe('adminAuth middleware', () => {
     let called = false
     adminAuth(req, res, () => { called = true })
     assert.ok(called, 'next() should have been called')
+  })
+
+  it('uses timing-safe comparison to prevent timing attacks', () => {
+    assert.ok(
+      sourceCode.includes('timingSafeEqual'),
+      'adminAuth must use crypto.timingSafeEqual instead of === or !=='
+    )
+    assert.ok(
+      !sourceCode.match(/token\s*!==\s*secret/),
+      'must not use direct string comparison (token !== secret)'
+    )
+  })
+})
+
+describe('digestAuth middleware', () => {
+  const originalKey = process.env.DIGEST_API_KEY
+
+  afterEach(() => {
+    if (originalKey !== undefined) {
+      process.env.DIGEST_API_KEY = originalKey
+    } else {
+      delete process.env.DIGEST_API_KEY
+    }
+  })
+
+  it('returns 503 when DIGEST_API_KEY not set', () => {
+    delete process.env.DIGEST_API_KEY
+    const { req, res, getStatus, getBody } = mockReqRes('Bearer test')
+    digestAuth(req, res, () => { throw new Error('should not call next') })
+    assert.equal(getStatus(), 503)
+    assert.equal(getBody().error, 'Digest API not configured')
+  })
+
+  it('returns 401 when token does not match', () => {
+    process.env.DIGEST_API_KEY = 'digest-secret'
+    const { req, res, getStatus, getBody } = mockReqRes('Bearer wrong')
+    digestAuth(req, res, () => { throw new Error('should not call next') })
+    assert.equal(getStatus(), 401)
+  })
+
+  it('calls next() when token matches', () => {
+    process.env.DIGEST_API_KEY = 'digest-secret'
+    const { req, res } = mockReqRes('Bearer digest-secret')
+    let called = false
+    digestAuth(req, res, () => { called = true })
+    assert.ok(called)
+  })
+
+  it('uses timing-safe comparison to prevent timing attacks', () => {
+    assert.ok(
+      sourceCode.includes('timingSafeEqual'),
+      'digestAuth must use crypto.timingSafeEqual'
+    )
   })
 })
