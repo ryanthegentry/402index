@@ -1,12 +1,12 @@
 import { styles } from './styles.js'
-import { escapeHtml } from './helpers.js'
+import { escapeHtml, safeJsonEmbed } from './helpers.js'
 
 export function layout(title, content, meta = {}) {
   const description = escapeHtml(meta.description || 'Protocol-agnostic directory of paid APIs (L402, x402, MPP) for AI agents. Indexed, verified, and searchable.')
   const ogTitle = escapeHtml(meta.ogTitle || (title === '402 Index' ? '402 Index' : `${title} — 402 Index`))
   const ogUrl = escapeHtml(meta.ogUrl || 'https://402index.io')
   const canonicalTag = meta.canonical ? `\n  <link rel="canonical" href="https://402index.io${meta.canonical}" />` : ''
-  const jsonLdTag = meta.jsonLd ? `\n  <script type="application/ld+json">${JSON.stringify(meta.jsonLd)}</script>` : ''
+  const jsonLdTag = meta.jsonLd ? `\n  <script type="application/ld+json">${safeJsonEmbed(meta.jsonLd)}</script>` : ''
   const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ? `\n  <meta name="google-site-verification" content="${process.env.GOOGLE_SITE_VERIFICATION}" />` : ''
   const plausibleScript = process.env.PLAUSIBLE_DOMAIN ? `\n  <script defer data-domain="${process.env.PLAUSIBLE_DOMAIN}" src="https://plausible.io/js/script.js"></script>` : ''
   return `<!DOCTYPE html>
