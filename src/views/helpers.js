@@ -3,6 +3,10 @@ export function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+export function safeJsonEmbed(data) {
+  return JSON.stringify(data).replace(/</g, '\\u003c')
+}
+
 export function escapeXml(str) {
   if (str == null) return ''
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
