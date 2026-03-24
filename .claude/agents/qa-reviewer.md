@@ -1,7 +1,7 @@
 ---
 model: sonnet
 description: QA reviewer. Checks test coverage, edge cases, and regression risk. Verifies the fix addresses the issue spec. Outputs GitHub PR review.
-allowedTools:
+maxTurns: 15allowedTools:
   - Read
   - Glob
   - Grep
