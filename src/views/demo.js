@@ -1,5 +1,5 @@
 import { layout } from './layout.js'
-import { escapeHtml } from './helpers.js'
+import { escapeHtml, safeJsonEmbed } from './helpers.js'
 
 function formatNumber(n) {
   return Number(n).toLocaleString('en-US')
@@ -416,7 +416,7 @@ Content-Type: application/json
     })
 
     // Initial view: show curated featured endpoints (server-rendered data)
-    var featuredData = ${JSON.stringify(featuredServices)}
+    var featuredData = ${safeJsonEmbed(featuredServices)}
     var showingFeatured = true
 
     function showFeatured() {
@@ -441,7 +441,7 @@ Content-Type: application/json
 
     // ─── Flow Protocol Toggle ──────────────────────────────────────────
 
-    var flowData = ${JSON.stringify({
+    var flowData = ${safeJsonEmbed({
       L402: {
         header: probe.flow.protocolHeaders.L402 || 'WWW-Authenticate: L402 macaroon="<token>", invoice="lnbc..."',
         payTitle: 'Agent Pays Invoice',
