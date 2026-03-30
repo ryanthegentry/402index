@@ -6,11 +6,12 @@
 # the appropriate Claude Code agent persona.
 #
 # Labels → Agents:
-#   ready-for-cc        → generic CC (no agent)     → creates branch + PR
+#   ready-for-chore     → generic CC (no agent)     → creates branch + PR
 #   ready-for-impl      → implementer agent         → creates branch + PR
-#   ready-for-red-team  → red-team agent            → posts issue comment
+#   ready-for-red-team  → red-team agent            → posts findings on the issue (pre-impl spec review)
 #   ready-for-security  → security-reviewer agent   → posts PR review
 #   ready-for-qa        → qa-reviewer agent         → posts PR review
+#   ready-for-revision  → implementer agent         → pushes fixes to existing PR
 #
 # Usage:
 #   ./cc-dispatch.sh                    # One-shot: process all ready issues
@@ -31,14 +32,16 @@ DEFAULT_BRANCH="${DEFAULT_BRANCH:-$(cd "$REPO_DIR" 2>/dev/null && git symbolic-r
 DRY_RUN=false
 WATCH=false
 POLL_INTERVAL=300
+MAX_REVISIONS=3
 
 # All dispatch labels the script watches for
 DISPATCH_LABELS=(
-    ready-for-cc
+    ready-for-chore
     ready-for-impl
     ready-for-red-team
     ready-for-security
     ready-for-qa
+    ready-for-revision
 )
 
 # ── Label → config mappings ──────────────────────────────────────
@@ -46,39 +49,48 @@ DISPATCH_LABELS=(
 
 get_agent() {
     case "$1" in
-        ready-for-cc)       echo "" ;;
+        ready-for-chore)       echo "" ;;
         ready-for-impl)     echo "implementer" ;;
         ready-for-red-team) echo "red-team" ;;
         ready-for-security) echo "security-reviewer" ;;
         ready-for-qa)       echo "qa-reviewer" ;;
+        ready-for-revision) echo "implementer" ;;
     esac
 }
 
 get_mode() {
     case "$1" in
-        ready-for-cc|ready-for-impl)     echo "implement" ;;
+        ready-for-chore|ready-for-impl)  echo "implement" ;;
         ready-for-red-team)              echo "review-issue" ;;
         ready-for-security|ready-for-qa) echo "review-pr" ;;
+        ready-for-revision)              echo "revise" ;;
     esac
 }
 
 get_done_label() {
     case "$1" in
-        ready-for-cc|ready-for-impl) echo "needs-review" ;;
-        ready-for-red-team)          echo "red-team-complete" ;;
+        ready-for-chore|ready-for-impl) echo "needs-review" ;;
+        ready-for-red-team)             echo "red-team-complete" ;;
         ready-for-security|ready-for-qa) echo "" ;;
+        ready-for-revision)             echo "" ;;
     esac
 }
 
 # Pipeline chaining: after a stage completes, what label triggers next?
-# ready-for-impl → (done) → ready-for-red-team → (done) → ready-for-security
-# → (done) → ready-for-qa → (done) → ready-to-merge
+#
+# Flow: Issue → Red-team (spec review) → [HUMAN GATE] → Implementer → Security → QA → Merge
+#       If security/QA request changes: → Revision → Security → QA → Merge
+#
+# Red-team reviews the spec and stops. Ryan + Cowork synthesize red-team
+# findings into the issue body, then manually label ready-for-impl.
+# From there, implementation → reviews → merge is fully automated.
 get_next_stage_label() {
     case "$1" in
-        ready-for-cc|ready-for-impl) echo "ready-for-red-team" ;;
-        ready-for-red-team)          echo "ready-for-security" ;;
-        ready-for-security)          echo "ready-for-qa" ;;
-        ready-for-qa)                echo "ready-to-merge" ;;
+        ready-for-red-team)                echo "" ;;  # HUMAN GATE: Ryan synthesizes findings
+        ready-for-chore|ready-for-impl)    echo "ready-for-security" ;;
+        ready-for-security)                echo "ready-for-qa" ;;
+        ready-for-qa)                      echo "ready-to-merge" ;;
+        ready-for-revision)                echo "ready-for-security" ;;
     esac
 }
 
@@ -93,6 +105,16 @@ chain_next_stage() {
         log "Chaining: #${issue_number} → ${next_label}"
         gh issue edit "$issue_number" --repo "$REPO" --add-label "$next_label"
     fi
+}
+
+# Detect whether the latest bot review on a PR was APPROVED or CHANGES_REQUESTED
+# Filters to 402index-bot reviews only — ignores human reviews and stale reviews
+detect_review_verdict() {
+    local pr_number="$1"
+    local latest_state
+    latest_state=$(gh pr view "$pr_number" --repo "$REPO" --json reviews \
+        --jq '[.reviews[] | select(.author.login == "402index-bot")] | last | .state' 2>/dev/null)
+    echo "${latest_state:-COMMENTED}"
 }
 
 # ── Parse args ─────────────────────────────────────────────────────
@@ -118,6 +140,26 @@ ensure_deps() {
         command -v "$cmd" &>/dev/null || { err "$cmd not found on PATH"; exit 1; }
     done
     gh auth status &>/dev/null || { err "gh not authenticated. Run: gh auth login"; exit 1; }
+}
+
+ensure_labels() {
+    local labels=(
+        "ready-for-chore:FBCA04:Dispatch: generic chore"
+        "ready-for-impl:FBCA04:Dispatch: implementation"
+        "ready-for-red-team:D93F0B:Dispatch: red-team review"
+        "ready-for-security:D93F0B:Dispatch: security review"
+        "ready-for-qa:D93F0B:Dispatch: QA review"
+        "ready-for-revision:D93F0B:Dispatch: revision (address review feedback)"
+        "ready-to-merge:0E8A16:Pipeline complete — ready for human merge"
+        "in-progress:1D76DB:Agent working"
+        "needs-review:0075CA:Implementation complete — needs review"
+        "red-team-complete:0075CA:Red-team review complete"
+        "needs-manual-review:B60205:Revision limit reached — needs human review"
+    )
+    for entry in "${labels[@]}"; do
+        IFS=: read -r name color desc <<< "$entry"
+        gh label create "$name" --repo "$REPO" --color "$color" --description "$desc" --force 2>/dev/null
+    done
 }
 
 # Find the open PR associated with an issue number.
@@ -206,8 +248,9 @@ When done, summarize what you changed and why."
     fi
 
     log "Starting CC implement session (logging to ${logfile})"
+    local cc_output
     # shellcheck disable=SC2086
-    echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile"
+    cc_output=$(echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile")
     local cc_exit=$?
 
     if [ $cc_exit -ne 0 ]; then
@@ -250,20 +293,32 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
     git push -u origin "$branch"
 
+    # Extract the implementer's summary from CC output (last ~80 lines before git noise)
+    local cc_summary
+    cc_summary=$(echo "$cc_output" | grep -v '^\[' | grep -v '^Enumerating\|^Counting\|^Compressing\|^Writing\|^Delta\|^Total\|^remote:\|^To github\|^branch\|^ \*' | tail -80)
+    # Truncate to ~4000 chars to stay within GitHub's limits
+    cc_summary="${cc_summary:0:4000}"
+
     local pr_url
     pr_url=$(gh pr create --repo "$REPO" \
         --title "fix: #${issue_number} — ${issue_title}" \
-        --body "## Summary
-Automated fix for #${issue_number}.
+        --body "$(cat <<PRBODY
+## Summary
 
-## Changes
-See diff below. Generated by CC dispatch pipeline.
+Automated fix for #${issue_number}: ${issue_title}
+
+## What changed
+
+${cc_summary}
 
 ## Linked Issue
+
 Closes #${issue_number}
 
 ---
-*Dispatched by cc-dispatch.sh at $(date '+%Y-%m-%d %H:%M:%S')*" \
+*Dispatched by cc-dispatch.sh at $(date '+%Y-%m-%d %H:%M:%S')*
+PRBODY
+)" \
         --head "$branch" --base "$DEFAULT_BRANCH")
 
     if [ -n "$pr_url" ]; then
@@ -283,12 +338,18 @@ Closes #${issue_number}
     git checkout "$DEFAULT_BRANCH"
 }
 
-# ── Review-issue mode: CC reviews spec, posts issue comment ───────
+# ── Review-issue mode: CC reviews spec, posts findings on the issue (pre-impl spec review) ──
 dispatch_review_issue() {
     local issue_number="$1" issue_title="$2" issue_body="$3"
     local agent_flag="$4" dispatch_label="$5" done_label="$6" logfile="$7"
 
     cd "$REPO_DIR" || { err "Can't cd to $REPO_DIR"; return 1; }
+
+    # Defensive: check if a PR already exists (e.g., someone labeled ready-for-red-team
+    # after a PR was created). We still post to the issue regardless, but include this
+    # info in the prompt so the agent knows.
+    local pr_number
+    pr_number=$(find_pr_for_issue "$issue_number")
 
     local cc_prompt="Review GitHub issue #${issue_number}: ${issue_title}
 
@@ -298,8 +359,9 @@ ${issue_body}
 Follow your review protocol. Post findings as a comment on issue #${issue_number} in repo ${REPO}."
 
     log "Starting CC review-issue session (logging to ${logfile})"
+    local cc_output
     # shellcheck disable=SC2086
-    echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile"
+    cc_output=$(echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile")
     local cc_exit=$?
 
     if [ $cc_exit -ne 0 ]; then
@@ -307,6 +369,16 @@ Follow your review protocol. Post findings as a comment on issue #${issue_number
         rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
         return 1
     fi
+
+    # Always post CC output to the issue unconditionally
+    local tmpfile
+    tmpfile=$(mktemp)
+    echo "$cc_output" | grep -v '^\[' | tail -100 > "$tmpfile"
+    if [ -s "$tmpfile" ]; then
+        head -c 4000 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
+        gh issue comment "$issue_number" --repo "$REPO" --body-file "$tmpfile" 2>/dev/null
+    fi
+    rm -f "$tmpfile"
 
     gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress"
     if [[ -n "$done_label" ]]; then
@@ -338,16 +410,49 @@ dispatch_review_pr() {
 
     log "Found PR #${pr_number} for issue #${issue_number}"
 
+    # Collect prior review context: PR comments + formal reviews
+    local prior_pr
+    prior_pr=$(gh pr view "$pr_number" --repo "$REPO" --json comments,reviews \
+        --jq '([.comments[] | "**\(.author.login)** (comment):\n\(.body)"] + [.reviews[] | select(.body != "") | "**\(.author.login)** (review, \(.state)):\n\(.body)"]) | join("\n\n---\n\n")' 2>/dev/null)
+
+    # Collect issue comments (where red-team posted findings)
+    local prior_issue
+    prior_issue=$(gh issue view "$issue_number" --repo "$REPO" --json comments \
+        --jq '[.comments[] | "**\(.author.login)** (issue comment):\n\(.body)"] | join("\n\n---\n\n")' 2>/dev/null)
+
+    local review_context=""
+    if [[ -n "$prior_pr" || -n "$prior_issue" ]]; then
+        review_context="
+PRIOR REVIEW CONTEXT:"
+        if [[ -n "$prior_issue" ]]; then
+            review_context="${review_context}
+
+ISSUE COMMENTS (including red-team findings):
+${prior_issue}"
+        fi
+        if [[ -n "$prior_pr" ]]; then
+            review_context="${review_context}
+
+PR COMMENTS AND REVIEWS:
+${prior_pr}"
+        fi
+        review_context="${review_context}
+
+Consider these findings in your review. Do not duplicate work already covered, but verify the claims and check for anything missed."
+    fi
+
     local cc_prompt="Review PR #${pr_number} which addresses issue #${issue_number}: ${issue_title}
 
 ISSUE SPEC:
 ${issue_body}
+${review_context}
 
 Follow your review protocol. PR #${pr_number} in repo ${REPO}."
 
     log "Starting CC review-pr session (logging to ${logfile})"
+    local cc_output
     # shellcheck disable=SC2086
-    echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile"
+    cc_output=$(echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile")
     local cc_exit=$?
 
     if [ $cc_exit -ne 0 ]; then
@@ -356,14 +461,144 @@ Follow your review protocol. PR #${pr_number} in repo ${REPO}."
         return 1
     fi
 
-    # Just remove in-progress — the review itself (APPROVE/REQUEST_CHANGES) is the output
+    # Always post CC output to the PR unconditionally
+    local tmpfile
+    tmpfile=$(mktemp)
+    echo "$cc_output" | grep -v '^\[' | tail -100 > "$tmpfile"
+    if [ -s "$tmpfile" ]; then
+        head -c 4000 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
+        gh pr comment "$pr_number" --repo "$REPO" --body-file "$tmpfile" 2>/dev/null
+    fi
+    rm -f "$tmpfile"
+
+    # Remove in-progress label
     gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress"
     if [[ -n "$done_label" ]]; then
         gh issue edit "$issue_number" --repo "$REPO" --add-label "$done_label"
     fi
-    chain_next_stage "$issue_number" "$dispatch_label"
+
+    # Detect review verdict and chain accordingly
+    local verdict
+    verdict=$(detect_review_verdict "$pr_number")
+
+    if [[ "$verdict" == "APPROVED" ]]; then
+        chain_next_stage "$issue_number" "$dispatch_label"
+    elif [[ "$verdict" == "CHANGES_REQUESTED" ]]; then
+        log "Reviewer requested changes on PR #${pr_number} — routing to revision"
+        gh issue edit "$issue_number" --repo "$REPO" --add-label "ready-for-revision"
+    else
+        log "Reviewer verdict unclear (${verdict}) — routing to revision for safety"
+        gh issue edit "$issue_number" --repo "$REPO" --add-label "ready-for-revision"
+    fi
 
     log "PR review complete for issue #${issue_number} (PR #${pr_number})"
+}
+
+# ── Revise mode: read review feedback, push fixes to existing PR ──
+dispatch_revise() {
+    local issue_number="$1" issue_title="$2" issue_body="$3"
+    local agent_flag="$4" dispatch_label="$5" done_label="$6" logfile="$7"
+
+    cd "$REPO_DIR" || { err "Can't cd to $REPO_DIR"; return 1; }
+
+    # Find the existing PR
+    local pr_number
+    pr_number=$(find_pr_for_issue "$issue_number")
+    if [[ -z "$pr_number" ]]; then
+        err "No open PR found for issue #${issue_number} — cannot revise"
+        rollback_issue "$issue_number" "$dispatch_label"
+        return 1
+    fi
+
+    # Check revision count (count how many times ready-for-revision was applied)
+    local revision_count
+    revision_count=$(gh api "repos/${REPO}/issues/${issue_number}/events" \
+        --jq '[.[] | select(.event == "labeled" and .label.name == "ready-for-revision")] | length' 2>/dev/null || echo "0")
+
+    if [[ "$revision_count" -ge "$MAX_REVISIONS" ]]; then
+        log "Max revisions (${MAX_REVISIONS}) reached for issue #${issue_number} — bailing to manual review"
+        gh issue edit "$issue_number" --repo "$REPO" \
+            --remove-label "in-progress" --add-label "needs-manual-review"
+        gh issue comment "$issue_number" --repo "$REPO" \
+            --body "⚠️ Max revision cycles (${MAX_REVISIONS}) reached. Needs human review."
+        return 0
+    fi
+
+    log "Revision cycle ${revision_count}/${MAX_REVISIONS} for PR #${pr_number}"
+
+    # Get the branch name from the PR
+    local branch
+    branch=$(gh pr view "$pr_number" --repo "$REPO" --json headRefName -q '.headRefName')
+
+    # Checkout the existing branch and pull latest
+    git fetch origin "$branch"
+    git checkout "$branch"
+    git pull origin "$branch"
+
+    # Collect ALL review feedback: formal reviews + comments + issue comments
+    local review_feedback
+    review_feedback=$(gh pr view "$pr_number" --repo "$REPO" --json comments,reviews \
+        --jq '([.reviews[] | select(.body != "") | "**\(.author.login)** (\(.state)):\n\(.body)"] + [.comments[] | "**\(.author.login)** (comment):\n\(.body)"]) | join("\n\n---\n\n")' 2>/dev/null)
+
+    local cc_prompt="You are revising PR #${pr_number} for issue #${issue_number}: ${issue_title}
+
+ISSUE SPEC:
+${issue_body}
+
+REVIEWER FEEDBACK (address ALL of these):
+${review_feedback}
+
+INSTRUCTIONS:
+1. Read the reviewer feedback above carefully. Understand every finding.
+2. For each finding, write or update a test that would catch the issue.
+3. Implement the fixes.
+4. Run npm test — all tests must pass.
+5. Commit with message: fix: address review feedback for #${issue_number} (revision ${revision_count})
+6. Do NOT create a new PR. Push to the existing branch.
+
+This is revision ${revision_count} of ${MAX_REVISIONS}. If you cannot fully address all findings, comment on the PR explaining what remains and why."
+
+    log "Starting CC revise session (logging to ${logfile})"
+    local cc_output
+    # shellcheck disable=SC2086
+    cc_output=$(echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile")
+    local cc_exit=$?
+
+    if [ $cc_exit -ne 0 ]; then
+        err "CC revise failed (exit ${cc_exit}) for issue #${issue_number}"
+        rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
+        git checkout "$DEFAULT_BRANCH"
+        return 1
+    fi
+
+    # Stage and commit any uncommitted changes
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        git add -A
+        git commit -m "fix: address review feedback for #${issue_number} (revision ${revision_count})
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>"
+    fi
+
+    # Push to the existing branch (no new PR needed)
+    git push origin "$branch"
+
+    # Post revision summary to PR
+    local tmpfile
+    tmpfile=$(mktemp)
+    echo "$cc_output" | grep -v '^\[' | tail -100 > "$tmpfile"
+    if [ -s "$tmpfile" ]; then
+        head -c 4000 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
+        gh pr comment "$pr_number" --repo "$REPO" --body-file "$tmpfile" 2>/dev/null
+    fi
+    rm -f "$tmpfile"
+
+    gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress"
+
+    # Chain back to security review
+    chain_next_stage "$issue_number" "$dispatch_label"
+
+    git checkout "$DEFAULT_BRANCH"
+    log "Revision complete for issue #${issue_number} (PR #${pr_number})"
 }
 
 # ── Core dispatch (routes to the right mode) ──────────────────────
@@ -402,6 +637,10 @@ dispatch_issue() {
     case "$mode" in
         implement)
             dispatch_implement "$issue_number" "$issue_title" "$issue_body" \
+                "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
+            ;;
+        revise)
+            dispatch_revise "$issue_number" "$issue_title" "$issue_body" \
                 "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
             ;;
         review-issue)
@@ -445,6 +684,7 @@ run_once() {
 
 # ── Entry point ────────────────────────────────────────────────────
 ensure_deps
+ensure_labels
 
 if $WATCH; then
     log "Watch mode: polling every ${POLL_INTERVAL}s (${#DISPATCH_LABELS[@]} labels). Ctrl-C to stop."
