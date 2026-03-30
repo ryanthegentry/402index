@@ -47,13 +47,18 @@ const upsert = () => stmt('upsert', `
 
 const findExisting = () => stmt('findExisting', 'SELECT id FROM services WHERE url = ? AND protocol = ?')
 
+const FETCH_HEADERS = {
+  'User-Agent': '402index/1.0 (+https://402index.io)',
+  'Accept': 'application/json',
+}
+
 async function fetchPage(page) {
-  const res = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`)
+  const res = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`, { headers: FETCH_HEADERS })
 
   if (res.status === 429) {
     console.log(`[satring] Rate limited at page ${page}, waiting ${RATE_LIMIT_WAIT_MS / 1000}s...`)
     await sleep(RATE_LIMIT_WAIT_MS)
-    const retry = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`)
+    const retry = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`, { headers: FETCH_HEADERS })
     if (!retry.ok) {
       console.error(`[satring] Retry failed with ${retry.status} at page ${page}`)
       return null

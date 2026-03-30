@@ -88,7 +88,7 @@ export function buildServiceQuery(opts = {}) {
     conditions.push('payment_asset = @payment_asset')
     params.payment_asset = payment_asset
   }
-  if (q) {
+  if (q && q !== '*') {
     conditions.push("(name LIKE @q OR description LIKE @q OR url LIKE @q)")
     params.q = `%${q}%`
   }

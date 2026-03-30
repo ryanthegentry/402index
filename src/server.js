@@ -81,6 +81,17 @@ app.use('/api/v1/digest', digestAuth, digestLimiter)
 // Admin routes: JSON body parsing + auth
 app.use('/api/v1/admin', express.json({ limit: '10kb' }), adminAuth)
 
+// ─── API Request Logging ────────────────────────────────────────────────────
+app.use('/api/v1', (req, res, next) => {
+  const start = Date.now()
+  res.on('finish', () => {
+    const ip = req.ip || req.socket.remoteAddress
+    const ua = req.get('user-agent') || '-'
+    console.log(`[api] ${req.method} ${req.originalUrl} ${res.statusCode} ua=${ua} ip=${ip} ${Date.now() - start}ms`)
+  })
+  next()
+})
+
 app.use('/api/v1', apiRoutes)
 app.use('/', pageRoutes)
 

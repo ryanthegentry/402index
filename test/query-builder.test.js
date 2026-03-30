@@ -80,6 +80,16 @@ describe('buildServiceQuery', () => {
     assert.equal(result.params.max_price_usd, 0.01)
   })
 
+  it('treats q=* as match-all (no text search condition)', () => {
+    const result = buildServiceQuery({ q: '*', protocol: 'L402', health: 'healthy' })
+    // Wildcard * should NOT add a LIKE condition — it means "give me everything"
+    assert.ok(!result.where.includes('LIKE @q'), 'q=* should not add LIKE filter')
+    assert.equal(result.params.q, undefined, 'q=* should not set @q param')
+    // But protocol and health filters should still be present
+    assert.ok(result.where.includes('protocol = @protocol'))
+    assert.ok(result.where.includes('health_status = @health'))
+  })
+
   it('builds q filter as LIKE across name, description, and url', () => {
     const result = buildServiceQuery({ q: 'weather' })
     assert.ok(result.where.includes('name LIKE @q'))
