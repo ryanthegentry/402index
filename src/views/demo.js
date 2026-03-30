@@ -303,12 +303,14 @@ Content-Type: application/json
     }
 
     function healthDotHtml(status) {
-      return '<span class="health-dot health-' + (status || 'unknown') + '"></span>' + (status || 'unknown')
+      const s = escapeHtmlClient(status || 'unknown')
+      return '<span class="health-dot health-' + s + '"></span>' + s
     }
 
     function protocolBadgeHtml(protocol) {
+      const safe = escapeHtmlClient(protocol)
       const cls = protocol === 'x402' ? 'badge-x402' : protocol === 'L402' ? 'badge-l402' : protocol === 'MPP' ? 'badge-mpp' : 'badge-both'
-      return '<span class="badge ' + cls + '">' + protocol + '</span>'
+      return '<span class="badge ' + cls + '">' + safe + '</span>'
     }
 
     function renderResults(data) {

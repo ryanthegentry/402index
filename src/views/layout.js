@@ -7,8 +7,8 @@ export function layout(title, content, meta = {}) {
   const ogUrl = escapeHtml(meta.ogUrl || 'https://402index.io')
   const canonicalTag = meta.canonical ? `\n  <link rel="canonical" href="https://402index.io${meta.canonical}" />` : ''
   const jsonLdTag = meta.jsonLd ? `\n  <script type="application/ld+json">${safeJsonEmbed(meta.jsonLd)}</script>` : ''
-  const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ? `\n  <meta name="google-site-verification" content="${process.env.GOOGLE_SITE_VERIFICATION}" />` : ''
-  const plausibleScript = process.env.PLAUSIBLE_DOMAIN ? `\n  <script defer data-domain="${process.env.PLAUSIBLE_DOMAIN}" src="https://plausible.io/js/script.js"></script>` : ''
+  const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ? `\n  <meta name="google-site-verification" content="${escapeHtml(process.env.GOOGLE_SITE_VERIFICATION)}" />` : ''
+  const plausibleScript = process.env.PLAUSIBLE_DOMAIN ? `\n  <script defer data-domain="${escapeHtml(process.env.PLAUSIBLE_DOMAIN)}" src="https://plausible.io/js/script.js"></script>` : ''
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,7 +28,7 @@ export function layout(title, content, meta = {}) {
   <meta property="og:site_name" content="402 Index">
   <meta name="twitter:title" content="${ogTitle}">
   <meta name="twitter:description" content="${description}">${googleVerification}${canonicalTag}${jsonLdTag}${plausibleScript}
-  <title>${title === '402 Index' ? '402 Index' : `${title} — 402 Index`}</title>
+  <title>${title === '402 Index' ? '402 Index' : `${escapeHtml(title)} — 402 Index`}</title>
   <style>${styles}</style>
 </head>
 <body>

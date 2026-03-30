@@ -6,7 +6,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   const totalPages = Math.ceil(total / limit)
 
   const rows = services.map(s => `
-    <tr onclick="location.href='/service/${s.id}'">
+    <tr onclick="location.href='/service/${escapeHtml(s.id)}'">
       <td>
         <span class="svc-name">${escapeHtml(s.name)}</span>
         <span class="svc-url">${escapeHtml(s.url)}</span>

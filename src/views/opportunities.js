@@ -38,7 +38,7 @@ export function opportunitiesPage({ opportunities, protocol }) {
 
   const sections = Object.entries(grouped).map(([type, opps]) => `
     <section class="opp-section">
-      <h2>${TYPE_LABELS[type] || type}</h2>
+      <h2>${escapeHtml(TYPE_LABELS[type] || type)}</h2>
       <p class="opp-desc">${TYPE_DESCRIPTIONS[type] || ''}</p>
       <div class="opp-grid">
         ${opps.map(o => opportunityCard(o)).join('')}
