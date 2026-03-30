@@ -937,7 +937,7 @@ const getRecent = () => stmt('getRecent', `
 
 const searchServices = () => stmt('searchServices', `
   SELECT ${ADMIN_COLUMNS} FROM services
-  WHERE name LIKE @q OR url LIKE @q OR provider LIKE @q OR category LIKE @q
+  WHERE (name LIKE @q OR url LIKE @q OR provider LIKE @q OR category LIKE @q) ESCAPE '\\\\'
   ORDER BY registered_at DESC
   LIMIT @limit
 `)
@@ -972,7 +972,8 @@ router.get('/admin/search', (req, res) => {
     return res.status(400).json({ error: 'q param is required' })
   }
   const limit = Math.min(parseInt(req.query.limit) || 20, 100)
-  const services = searchServices().all({ q: `%${q}%`, limit })
+  const escaped = q.replace(/[%_\\]/g, '\\$&')
+  const services = searchServices().all({ q: `%${escaped}%`, limit })
   res.json({ services, total: services.length })
 })
 
