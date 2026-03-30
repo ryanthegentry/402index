@@ -70,6 +70,31 @@ get_done_label() {
     esac
 }
 
+# Pipeline chaining: after a stage completes, what label triggers next?
+# ready-for-impl → (done) → ready-for-red-team → (done) → ready-for-security
+# → (done) → ready-for-qa → (done) → ready-to-merge
+get_next_stage_label() {
+    case "$1" in
+        ready-for-cc|ready-for-impl) echo "ready-for-red-team" ;;
+        ready-for-red-team)          echo "ready-for-security" ;;
+        ready-for-security)          echo "ready-for-qa" ;;
+        ready-for-qa)                echo "ready-to-merge" ;;
+    esac
+}
+
+# After a dispatch stage completes successfully, auto-chain to next stage
+chain_next_stage() {
+    local issue_number="$1"
+    local current_label="$2"
+    local next_label
+    next_label=$(get_next_stage_label "$current_label")
+
+    if [[ -n "$next_label" ]]; then
+        log "Chaining: #${issue_number} → ${next_label}"
+        gh issue edit "$issue_number" --repo "$REPO" --add-label "$next_label"
+    fi
+}
+
 # ── Parse args ─────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -250,6 +275,7 @@ Closes #${issue_number}
         fi
         gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress"
         gh issue comment "$issue_number" --repo "$REPO" --body "PR opened: ${pr_url}"
+        chain_next_stage "$issue_number" "$dispatch_label"
     else
         err "Failed to create PR for issue #${issue_number}"
     fi
@@ -286,6 +312,7 @@ Follow your review protocol. Post findings as a comment on issue #${issue_number
     if [[ -n "$done_label" ]]; then
         gh issue edit "$issue_number" --repo "$REPO" --add-label "$done_label"
     fi
+    chain_next_stage "$issue_number" "$dispatch_label"
 
     log "Review complete for issue #${issue_number}"
 }
@@ -334,6 +361,7 @@ Follow your review protocol. PR #${pr_number} in repo ${REPO}."
     if [[ -n "$done_label" ]]; then
         gh issue edit "$issue_number" --repo "$REPO" --add-label "$done_label"
     fi
+    chain_next_stage "$issue_number" "$dispatch_label"
 
     log "PR review complete for issue #${issue_number} (PR #${pr_number})"
 }

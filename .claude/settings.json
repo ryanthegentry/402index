@@ -21,5 +21,30 @@
       "Bash(cp *)"
     ],
     "additionalDirectories": ["../../projects/golem"]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '## Project Context'; cat \"$HOME/workspace/agent-state/projects/402index/continuation.md\" 2>/dev/null || true; echo '---'; tail -50 \"$HOME/workspace/agent-state/projects/402index/status.md\" 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Loading project context..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Check if all tasks from the original request are complete. If the agent was asked to implement something, verify tests pass by checking the session history for npm test results. If something is incomplete, respond with {\"decision\": \"block\", \"reason\": \"what remains\"}. If everything is done, respond with {\"decision\": \"approve\"}.",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }
