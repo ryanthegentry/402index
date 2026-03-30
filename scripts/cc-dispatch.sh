@@ -29,6 +29,7 @@ REPO="${GITHUB_DEFAULT_REPO:-ryanthegentry/402index}"
 REPO_DIR="${REPO_DIR:-$HOME/projects/402index}"
 LOG_DIR="${LOG_DIR:-$HOME/agent-state/dispatch-logs}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-$(cd "$REPO_DIR" 2>/dev/null && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo master)}"
+BOT_TOKEN_FILE="${BOT_TOKEN_FILE:-$HOME/.bot-token}"
 DRY_RUN=false
 WATCH=false
 POLL_INTERVAL=300
@@ -69,10 +70,11 @@ get_mode() {
 
 get_done_label() {
     case "$1" in
-        ready-for-chore|ready-for-impl) echo "needs-review" ;;
-        ready-for-red-team)             echo "red-team-complete" ;;
+        ready-for-chore)                 echo "needs-review" ;;
+        ready-for-impl)                  echo "" ;;  # chaining handles next step
+        ready-for-red-team)              echo "red-team-complete" ;;
         ready-for-security|ready-for-qa) echo "" ;;
-        ready-for-revision)             echo "" ;;
+        ready-for-revision)              echo "" ;;
     esac
 }
 
@@ -107,14 +109,68 @@ chain_next_stage() {
     fi
 }
 
-# Detect whether the latest bot review on a PR was APPROVED or CHANGES_REQUESTED
-# Filters to 402index-bot reviews only — ignores human reviews and stale reviews
-detect_review_verdict() {
-    local pr_number="$1"
+# Parse review verdict from CC output text.
+# The script tells agents to output VERDICT:APPROVE or VERDICT:REQUEST_CHANGES.
+# Falls back to keyword matching if no explicit verdict marker found.
+# Falls back to GitHub API as last resort.
+parse_verdict_from_output() {
+    local cc_output="$1"
+    local pr_number="$2"
+
+    # Priority 1: explicit verdict marker (most reliable — deterministic grep)
+    if echo "$cc_output" | grep -q 'VERDICT:APPROVE'; then
+        echo "APPROVED"
+        return
+    fi
+    if echo "$cc_output" | grep -q 'VERDICT:REQUEST_CHANGES'; then
+        echo "CHANGES_REQUESTED"
+        return
+    fi
+
+    # Priority 2: keyword matching on review headers (agents format with these)
+    if echo "$cc_output" | grep -qi 'APPROVED\|Security Review: APPROVED\|QA Review: APPROVED'; then
+        # Make sure it's not "CHANGES REQUESTED" which also contains "APPROVED" substring? No it doesn't. Safe.
+        if echo "$cc_output" | grep -qi 'CHANGES REQUESTED\|REQUEST_CHANGES\|CHANGES_REQUESTED'; then
+            echo "CHANGES_REQUESTED"
+            return
+        fi
+        echo "APPROVED"
+        return
+    fi
+    if echo "$cc_output" | grep -qi 'CHANGES REQUESTED\|REQUEST_CHANGES\|CHANGES_REQUESTED'; then
+        echo "CHANGES_REQUESTED"
+        return
+    fi
+
+    # Priority 3: check GitHub API for formal review (agent might have posted one)
     local latest_state
     latest_state=$(gh pr view "$pr_number" --repo "$REPO" --json reviews \
         --jq '[.reviews[] | select(.author.login == "402index-bot")] | last | .state' 2>/dev/null)
     echo "${latest_state:-COMMENTED}"
+}
+
+# Submit a formal PR review on behalf of the bot.
+# This is deterministic — the script always posts the review, not the agent.
+submit_review() {
+    local pr_number="$1"
+    local verdict="$2"
+    local review_body="$3"
+
+    case "$verdict" in
+        APPROVED)
+            gh pr review "$pr_number" --repo "$REPO" --approve \
+                --body "$review_body" 2>/dev/null
+            ;;
+        CHANGES_REQUESTED)
+            gh pr review "$pr_number" --repo "$REPO" --request-changes \
+                --body "$review_body" 2>/dev/null
+            ;;
+        *)
+            # Unknown verdict — post as comment, don't approve or reject
+            gh pr review "$pr_number" --repo "$REPO" --comment \
+                --body "$review_body" 2>/dev/null
+            ;;
+    esac
 }
 
 # ── Parse args ─────────────────────────────────────────────────────
@@ -140,6 +196,15 @@ ensure_deps() {
         command -v "$cmd" &>/dev/null || { err "$cmd not found on PATH"; exit 1; }
     done
     gh auth status &>/dev/null || { err "gh not authenticated. Run: gh auth login"; exit 1; }
+
+    # Export bot token so claude --print subprocesses use the bot identity for gh commands
+    if [[ -f "$BOT_TOKEN_FILE" ]]; then
+        export GH_TOKEN
+        GH_TOKEN=$(cat "$BOT_TOKEN_FILE")
+        log "Bot token loaded from ${BOT_TOKEN_FILE}"
+    else
+        log "WARNING: Bot token not found at ${BOT_TOKEN_FILE} — agents will use default gh auth"
+    fi
 }
 
 ensure_labels() {
@@ -447,7 +512,15 @@ ISSUE SPEC:
 ${issue_body}
 ${review_context}
 
-Follow your review protocol. PR #${pr_number} in repo ${REPO}."
+Follow your review protocol. Analyze the code thoroughly.
+
+IMPORTANT — OUTPUT FORMAT:
+Do NOT run gh pr review yourself. Instead, output your verdict as a marker line:
+  VERDICT:APPROVE        — if the code is safe and correct
+  VERDICT:REQUEST_CHANGES — if there are security, correctness, or coverage issues
+
+The dispatch script will submit the formal GitHub review on your behalf.
+Include your full analysis above the verdict line. PR #${pr_number} in repo ${REPO}."
 
     log "Starting CC review-pr session (logging to ${logfile})"
     local cc_output
@@ -461,13 +534,20 @@ Follow your review protocol. PR #${pr_number} in repo ${REPO}."
         return 1
     fi
 
-    # Always post CC output to the PR unconditionally
+    # Parse verdict from CC output (deterministic — no reliance on agent running gh commands)
+    local verdict
+    verdict=$(parse_verdict_from_output "$cc_output" "$pr_number")
+    log "Parsed verdict: ${verdict}"
+
+    # Extract clean review body from CC output
     local tmpfile
     tmpfile=$(mktemp)
-    echo "$cc_output" | grep -v '^\[' | tail -100 > "$tmpfile"
+    echo "$cc_output" | grep -v '^\[' | grep -v '^VERDICT:' | tail -100 > "$tmpfile"
     if [ -s "$tmpfile" ]; then
         head -c 4000 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
-        gh pr comment "$pr_number" --repo "$REPO" --body-file "$tmpfile" 2>/dev/null
+        # Script submits the formal review — not the agent
+        submit_review "$pr_number" "$verdict" "$(cat "$tmpfile")"
+        log "Formal review submitted: ${verdict}"
     fi
     rm -f "$tmpfile"
 
@@ -477,10 +557,7 @@ Follow your review protocol. PR #${pr_number} in repo ${REPO}."
         gh issue edit "$issue_number" --repo "$REPO" --add-label "$done_label"
     fi
 
-    # Detect review verdict and chain accordingly
-    local verdict
-    verdict=$(detect_review_verdict "$pr_number")
-
+    # Chain based on parsed verdict
     if [[ "$verdict" == "APPROVED" ]]; then
         chain_next_stage "$issue_number" "$dispatch_label"
     elif [[ "$verdict" == "CHANGES_REQUESTED" ]]; then

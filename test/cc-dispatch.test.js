@@ -107,7 +107,7 @@ describe('cc-dispatch.sh', () => {
   describe('get_done_label()', () => {
     const expected = {
       'ready-for-chore': 'needs-review',
-      'ready-for-impl': 'needs-review',
+      'ready-for-impl': '',
       'ready-for-red-team': 'red-team-complete',
       'ready-for-security': '',
       'ready-for-qa': '',
@@ -281,27 +281,27 @@ describe('cc-dispatch.sh', () => {
   // ── dispatch_review_pr posts to PR ───────────────────────────────
 
   describe('dispatch_review_pr', () => {
-    it('posts to PR via gh pr comment', () => {
+    it('posts review via submit_review (script-side, not agent-side)', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       const fnStart = content.indexOf('dispatch_review_pr()')
       const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
 
       assert.ok(
-        fnBody.includes('gh pr comment'),
-        'dispatch_review_pr must post to PR via gh pr comment'
+        fnBody.includes('submit_review'),
+        'dispatch_review_pr must use submit_review for deterministic review posting'
       )
     })
 
-    it('uses --body-file for posting', () => {
+    it('parses verdict from CC output (not GitHub API)', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       const fnStart = content.indexOf('dispatch_review_pr()')
       const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
 
       assert.ok(
-        fnBody.includes('--body-file'),
-        'dispatch_review_pr must use --body-file for safe posting'
+        fnBody.includes('parse_verdict_from_output'),
+        'dispatch_review_pr must parse verdict from CC output'
       )
     })
 
@@ -345,11 +345,35 @@ describe('cc-dispatch.sh', () => {
   // ── dispatch_review_pr verdict detection ─────────────────────────
 
   describe('review verdict detection', () => {
-    it('detect_review_verdict function exists', () => {
+    it('parse_verdict_from_output returns APPROVED for VERDICT:APPROVE marker', () => {
+      const result = callFn('parse_verdict_from_output', 'Some review text\nVERDICT:APPROVE', '999')
+      assert.equal(result, 'APPROVED')
+    })
+
+    it('parse_verdict_from_output returns CHANGES_REQUESTED for VERDICT:REQUEST_CHANGES marker', () => {
+      const result = callFn('parse_verdict_from_output', 'Some review text\nVERDICT:REQUEST_CHANGES', '999')
+      assert.equal(result, 'CHANGES_REQUESTED')
+    })
+
+    it('parse_verdict_from_output falls back to keyword matching', () => {
+      const result = callFn('parse_verdict_from_output', 'QA Review: APPROVED\nAll tests pass.', '999')
+      assert.equal(result, 'APPROVED')
+    })
+
+    it('parse_verdict_from_output prefers REQUEST_CHANGES over APPROVED in keyword fallback', () => {
+      const result = callFn('parse_verdict_from_output', 'Some things APPROVED but also CHANGES REQUESTED for demo.js', '999')
+      assert.equal(result, 'CHANGES_REQUESTED')
+    })
+
+    it('parse_verdict_from_output and submit_review functions exist', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       assert.ok(
-        content.includes('detect_review_verdict'),
-        'detect_review_verdict function must exist for conditional chaining'
+        content.includes('parse_verdict_from_output'),
+        'parse_verdict_from_output function must exist for verdict parsing'
+      )
+      assert.ok(
+        content.includes('submit_review'),
+        'submit_review function must exist for deterministic review posting'
       )
     })
 
