@@ -20,11 +20,11 @@ function serviceItem(s) {
   const category = s.category ? `    <category>${escapeXml(s.category)}</category>\n` : ''
   return `  <item>
     <title>${escapeXml(s.name)}</title>
-    <link>https://402index.io/service/${s.id}</link>
-    <guid isPermaLink="true">https://402index.io/service/${s.id}</guid>
+    <link>https://402index.io/service/${escapeXml(s.id)}</link>
+    <guid isPermaLink="true">https://402index.io/service/${escapeXml(s.id)}</guid>
     <pubDate>${rfcDate(s.registered_at)}</pubDate>
     <description>${escapeXml(desc)}</description>
-${category}    <l402:endpoint url="${escapeXml(s.url)}" method="${s.http_method || 'GET'}"/>
+${category}    <l402:endpoint url="${escapeXml(s.url)}" method="${escapeXml(s.http_method || 'GET')}"/>
     <l402:protocol type="${escapeXml(s.protocol)}" health="${escapeXml(s.health_status)}" reliability="${s.reliability_score || 0}"/>
     <l402:price sats="${s.price_sats != null ? s.price_sats : ''}" usd="${s.price_usd != null ? s.price_usd : ''}"/>
   </item>`

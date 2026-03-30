@@ -13,12 +13,13 @@ export function escapeXml(str) {
 }
 
 export function healthDot(status) {
-  return `<span class="health-dot health-${status}"></span>${status}`
+  const s = escapeHtml(status)
+  return `<span class="health-dot health-${s}"></span>${s}`
 }
 
 export function protocolBadge(protocol) {
   const cls = protocol === 'x402' ? 'badge-x402' : protocol === 'L402' ? 'badge-l402' : protocol === 'MPP' ? 'badge-mpp' : 'badge-both'
-  return `<span class="badge ${cls}">${protocol}</span>`
+  return `<span class="badge ${cls}">${escapeHtml(protocol)}</span>`
 }
 
 export function formatPrice(service, btcUsdRate) {

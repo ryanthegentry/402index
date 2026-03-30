@@ -67,6 +67,17 @@ describe('healthDot', () => {
     const result = healthDot('unknown')
     assert.ok(result.includes('health-unknown'))
   })
+
+  it('escapes XSS payload in status text', () => {
+    const result = healthDot('<img src=x onerror=alert(1)>')
+    assert.ok(!result.includes('<img'), 'status text must be escaped')
+    assert.ok(result.includes('&lt;img'))
+  })
+
+  it('escapes XSS payload in status class name', () => {
+    const result = healthDot('"><script>alert(1)</script>')
+    assert.ok(!result.includes('<script>'), 'status in class must be escaped')
+  })
 })
 
 describe('protocolBadge', () => {
@@ -85,6 +96,12 @@ describe('protocolBadge', () => {
   it('renders both badge for other protocols', () => {
     const result = protocolBadge('both')
     assert.ok(result.includes('badge-both'))
+  })
+
+  it('escapes XSS payload in protocol text', () => {
+    const result = protocolBadge('<script>alert(1)</script>')
+    assert.ok(!result.includes('<script>'), 'protocol text must be escaped')
+    assert.ok(result.includes('&lt;script&gt;'))
   })
 })
 
