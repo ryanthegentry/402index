@@ -80,3 +80,17 @@ fix: <what was fixed> (#<issue-number>)
 ```
 
 Do NOT push. Leave that to the user.
+
+## Revision Mode
+
+When your prompt says "You are revising PR #..." this is a REVISION, not a new implementation:
+
+1. You are on an existing feature branch with existing code changes
+2. Read the reviewer feedback in the prompt — it contains security and QA findings
+3. Address EVERY finding. Do not skip any.
+4. Write/update tests for each finding before fixing the code
+5. Run `npm test` — all tests must pass
+6. Commit with the revision message format specified in the prompt
+7. Do NOT create a new branch or PR — just commit and the script will push
+
+If a reviewer finding is unclear or seems incorrect, explain your reasoning in a code comment and note it in your commit message.
