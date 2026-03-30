@@ -148,7 +148,7 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
 
     function protocolBadges(protocols) {
       return protocols.map(function(p) {
-        return '<span class="badge badge-' + p.toLowerCase() + '">' + p + '</span>'
+        return '<span class="badge badge-' + escapeH(p.toLowerCase()) + '">' + escapeH(p) + '</span>'
       }).join(' ')
     }
 
@@ -203,11 +203,11 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
             '<td class="rank">' + (i + 1) + '</td>' +
             '<td class="endpoint-name"><a href="/service/' + escapeH(e.id) + '">' + escapeH(e.name) + '</a></td>' +
             '<td class="provider-name">' + escapeH(provider) + '</td>' +
-            '<td><span class="badge badge-' + e.protocol.toLowerCase() + '">' + e.protocol + '</span></td>' +
+            '<td><span class="badge badge-' + escapeH(e.protocol.toLowerCase()) + '">' + escapeH(e.protocol) + '</span></td>' +
             '<td style="color:' + reliabilityColor(e.reliability_score) + '">' + e.reliability_score + '</td>' +
             '<td class="reliability-bar-cell">' + reliabilityBar(e.reliability_score) + '</td>' +
             '<td>' + (e.latency_p50_ms != null ? e.latency_p50_ms + 'ms' : '—') + '</td>' +
-            '<td><span class="health-dot health-' + (e.health_status || 'unknown') + '"></span>' + (e.health_status || 'unknown') + '</td>' +
+            '<td><span class="health-dot health-' + escapeH(e.health_status || 'unknown') + '"></span>' + escapeH(e.health_status || 'unknown') + '</td>' +
             '<td>' + price + '</td>' +
             '</tr>'
         }).join('')

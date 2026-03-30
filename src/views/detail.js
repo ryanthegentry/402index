@@ -4,7 +4,7 @@ import { escapeHtml, healthDot, protocolBadge, formatPrice, formatSchema, source
 export function detailPage(service) {
   const healthRows = (service.health_checks || []).map(h => `
     <tr>
-      <td>${h.checked_at}</td>
+      <td>${escapeHtml(h.checked_at)}</td>
       <td>${healthDot(h.status)}</td>
       <td>${h.http_status || '—'}</td>
       <td>${h.response_time_ms != null ? h.response_time_ms + 'ms' : '—'}</td>
@@ -73,7 +73,7 @@ export function detailPage(service) {
           </div>
           <div class="detail-row">
             <span class="detail-label">Indexed</span>
-            <span class="detail-value">${service.registered_at || '—'}</span>
+            <span class="detail-value">${escapeHtml(service.registered_at) || '—'}</span>
           </div>
         </div>
 
@@ -97,15 +97,15 @@ export function detailPage(service) {
           </div>
           <div class="detail-row">
             <span class="detail-label">Last Checked</span>
-            <span class="detail-value">${service.last_checked || 'Never'}</span>
+            <span class="detail-value">${escapeHtml(service.last_checked) || 'Never'}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">Last Healthy</span>
-            <span class="detail-value">${service.last_seen_healthy || 'Never'}</span>
+            <span class="detail-value">${escapeHtml(service.last_seen_healthy) || 'Never'}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">Consecutive Failures</span>
-            <span class="detail-value">${service.consecutive_failures}</span>
+            <span class="detail-value">${escapeHtml(String(service.consecutive_failures))}</span>
           </div>
         </div>
       </div>
@@ -200,8 +200,8 @@ export function detailPage(service) {
     </div>
   `, {
     description: metaDesc,
-    canonical: `/service/${service.id}`,
+    canonical: `/service/${escapeHtml(service.id)}`,
     jsonLd,
-    ogUrl: `https://402index.io/service/${service.id}`,
+    ogUrl: `https://402index.io/service/${escapeHtml(service.id)}`,
   })
 }
