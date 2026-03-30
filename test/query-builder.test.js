@@ -117,6 +117,20 @@ describe('buildServiceQuery', () => {
       'WHERE should OR across name, description, and url')
   })
 
+  it('escapes LIKE metacharacters % and _ in q parameter', () => {
+    const r1 = buildServiceQuery({ q: '100%' })
+    // % inside the search term must be escaped so it doesn't act as a wildcard
+    assert.equal(r1.params.q, '%100\\%%')
+    assert.ok(r1.where.includes("ESCAPE '\\\\'"), 'WHERE should include ESCAPE clause')
+
+    const r2 = buildServiceQuery({ q: 'test_value' })
+    assert.equal(r2.params.q, '%test\\_value%')
+    assert.ok(r2.where.includes("ESCAPE '\\\\'"), 'WHERE should include ESCAPE clause')
+
+    const r3 = buildServiceQuery({ q: '%_combo_%' })
+    assert.equal(r3.params.q, '%\\%\\_combo\\_\\%%')
+  })
+
   it('builds featured filter for "true" and "1"', () => {
     const r1 = buildServiceQuery({ featured: 'true' })
     assert.ok(r1.where.includes('featured = 1'))
