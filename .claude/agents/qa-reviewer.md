@@ -54,10 +54,12 @@ For each changed function or behavior, verify tests exist for:
 
 ## Output Format
 
-Submit a GitHub PR review:
+Do NOT run `gh pr review` yourself. The dispatch script handles posting.
 
-```bash
-gh pr review <number> --approve --body "$(cat <<'EOF'
+Output your full analysis, then end with a verdict marker on its own line:
+
+If approving:
+```
 ## QA Review: APPROVED
 
 ### Test Coverage
@@ -68,14 +70,12 @@ gh pr review <number> --approve --body "$(cat <<'EOF'
 
 ### Regression Risk
 - <assessment>
-EOF
-)"
+
+VERDICT:APPROVE
 ```
 
-Or:
-
-```bash
-gh pr review <number> --request-changes --body "$(cat <<'EOF'
+If requesting changes:
+```
 ## QA Review: CHANGES REQUESTED
 
 ### Missing Test Coverage
@@ -86,9 +86,11 @@ gh pr review <number> --request-changes --body "$(cat <<'EOF'
 
 ### Regression Concerns
 - [ ] <specific risk identified>
-EOF
-)"
+
+VERDICT:REQUEST_CHANGES
 ```
+
+The `VERDICT:` line MUST appear. It is how the pipeline determines next steps.
 
 ## Decision Criteria
 

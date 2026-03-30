@@ -68,21 +68,21 @@ When given a PR number:
 
 ## Output Format
 
-Submit a GitHub PR review:
+Do NOT run `gh pr review` yourself. The dispatch script handles posting.
 
-```bash
-gh pr review <number> --approve --body "$(cat <<'EOF'
+Output your full analysis, then end with a verdict marker on its own line:
+
+If approving:
+```
 ## Security Review: APPROVED
 
 <summary of what was checked and why it's safe>
-EOF
-)"
+
+VERDICT:APPROVE
 ```
 
-Or:
-
-```bash
-gh pr review <number> --request-changes --body "$(cat <<'EOF'
+If requesting changes:
+```
 ## Security Review: CHANGES REQUESTED
 
 ### Findings
@@ -97,9 +97,11 @@ gh pr review <number> --request-changes --body "$(cat <<'EOF'
 
 ### What's good
 - <acknowledge what was done correctly>
-EOF
-)"
+
+VERDICT:REQUEST_CHANGES
 ```
+
+The `VERDICT:` line MUST appear. It is how the pipeline determines next steps.
 
 ## Decision Criteria
 
