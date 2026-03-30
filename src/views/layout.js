@@ -28,7 +28,7 @@ export function layout(title, content, meta = {}) {
   <meta property="og:site_name" content="402 Index">
   <meta name="twitter:title" content="${ogTitle}">
   <meta name="twitter:description" content="${description}">${googleVerification}${canonicalTag}${jsonLdTag}${plausibleScript}
-  <title>${title === '402 Index' ? '402 Index' : `${title} — 402 Index`}</title>
+  <title>${title === '402 Index' ? '402 Index' : `${escapeHtml(title)} — 402 Index`}</title>
   <style>${styles}</style>
 </head>
 <body>

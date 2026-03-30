@@ -262,6 +262,22 @@ describe('demoPage — x402 label', () => {
   })
 })
 
+// ─── Client-side XSS prevention ──────────────────────────────────────────────
+
+describe('demoPage — client-side XSS prevention', () => {
+  it('healthDotHtml uses escapeHtmlClient for status', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    // Verify the client-side healthDotHtml function applies escapeHtmlClient
+    assert.ok(html.includes('escapeHtmlClient(status'), 'healthDotHtml must escape status via escapeHtmlClient')
+  })
+
+  it('protocolBadgeHtml uses escapeHtmlClient for protocol', () => {
+    const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
+    // Verify the client-side protocolBadgeHtml function applies escapeHtmlClient
+    assert.ok(html.includes('escapeHtmlClient(protocol)'), 'protocolBadgeHtml must escape protocol via escapeHtmlClient')
+  })
+})
+
 // ─── CSS and responsive ───────────────────────────────────────────────────────
 
 describe('demoPage — CSS and structure', () => {

@@ -6,6 +6,7 @@ import { apiDocsPage } from '../src/views/api-docs.js'
 import { homePage } from '../src/views/home.js'
 import { detailPage } from '../src/views/detail.js'
 import { adminPage } from '../src/views/admin.js'
+import { opportunitiesPage } from '../src/views/opportunities.js'
 
 describe('layout', () => {
   it('renders valid HTML with title and content', () => {
@@ -66,6 +67,13 @@ describe('layout', () => {
     const xss = '"><script>alert(1)</script>'
     const html = layout('Test', '', { ogUrl: xss })
     assert.ok(!html.includes('<script>alert'), 'ogUrl must be escaped in meta tags')
+  })
+
+  it('escapes XSS payload in title tag', () => {
+    const xss = '</title><script>alert(1)</script>'
+    const html = layout(xss, '<p>content</p>')
+    assert.ok(!html.includes('</title><script>'), 'title tag must not allow breakout')
+    assert.ok(html.includes('&lt;/title&gt;'), 'title should have escaped angle brackets')
   })
 })
 
@@ -303,6 +311,16 @@ describe('detailPage', () => {
     })
     assert.ok(html.includes('href="https://satring.com"'), 'detail source should link to satring.com')
   })
+
+  it('escapes consecutive_failures to prevent XSS', () => {
+    const html = detailPage({
+      name: 'Test', url: 'https://example.com', protocol: 'L402',
+      health_status: 'healthy', source: 'satring',
+      consecutive_failures: '<img src=x onerror=alert(1)>', health_checks: [],
+    })
+    assert.ok(!html.includes('<img src=x'), 'consecutive_failures must be escaped')
+    assert.ok(html.includes('&lt;img'), 'angle brackets should be entity-encoded')
+  })
 })
 
 describe('adminPage', () => {
@@ -326,5 +344,24 @@ describe('adminPage', () => {
     const html = adminPage()
     assert.ok(html.includes('payment_asset'), 'admin card should reference payment_asset')
     assert.ok(html.includes('payment_network'), 'admin card should reference payment_network')
+  })
+})
+
+describe('opportunitiesPage — XSS', () => {
+  it('escapes unknown type key that falls through TYPE_LABELS', () => {
+    const html = opportunitiesPage({
+      opportunities: [{
+        type: '<script>alert(1)</script>',
+        category: 'test',
+        healthy_endpoints: 1,
+        total_endpoints: 2,
+        protocol_coverage: { L402: 1, x402: 1 },
+        provider_count: 1,
+        suggestion: 'test',
+      }],
+      protocol: null,
+    })
+    assert.ok(!html.includes('<script>alert(1)</script>'), 'type fallback must be escaped')
+    assert.ok(html.includes('&lt;script&gt;'), 'type should be entity-encoded')
   })
 })

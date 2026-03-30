@@ -105,7 +105,7 @@ export function detailPage(service) {
           </div>
           <div class="detail-row">
             <span class="detail-label">Consecutive Failures</span>
-            <span class="detail-value">${service.consecutive_failures}</span>
+            <span class="detail-value">${escapeHtml(String(service.consecutive_failures))}</span>
           </div>
         </div>
       </div>
