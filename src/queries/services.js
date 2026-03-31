@@ -90,7 +90,7 @@ export function buildServiceQuery(opts = {}) {
   }
   if (q && q !== '*') {
     const escaped = q.replace(/[%_\\]/g, '\\$&')
-    conditions.push("(name LIKE @q OR description LIKE @q OR url LIKE @q) ESCAPE '\\\\'")
+    conditions.push("(name LIKE @q ESCAPE '\\' OR description LIKE @q ESCAPE '\\' OR url LIKE @q ESCAPE '\\')")
     params.q = `%${escaped}%`
   }
   if (featured === 'true' || featured === '1') {

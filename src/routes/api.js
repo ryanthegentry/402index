@@ -61,18 +61,23 @@ router.get('/docs.md', (req, res) => {
 
 router.get('/services', (req, res) => {
   const startTime = Date.now()
-  const { limit: rawLimit, offset: rawOffset, ...filters } = req.query
-  const result = queryServices(db, { ...filters, rawLimit, rawOffset }, API_COLUMNS)
-  res.json(result)
+  try {
+    const { limit: rawLimit, offset: rawOffset, ...filters } = req.query
+    const result = queryServices(db, { ...filters, rawLimit, rawOffset }, API_COLUMNS)
+    res.json(result)
 
-  const { q, ...filterParams } = filters
-  logQuery({
-    queryText: q || null,
-    filters: JSON.stringify(filterParams),
-    resultCount: result.total,
-    responseTimeMs: Date.now() - startTime,
-    userAgent: req.get('User-Agent') || null,
-  })
+    const { q, ...filterParams } = filters
+    logQuery({
+      queryText: q || null,
+      filters: JSON.stringify(filterParams),
+      resultCount: result.total,
+      responseTimeMs: Date.now() - startTime,
+      userAgent: req.get('User-Agent') || null,
+    })
+  } catch (err) {
+    console.error('GET /api/v1/services error:', err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
 })
 
 // GET /api/v1/services/:id
@@ -937,7 +942,7 @@ const getRecent = () => stmt('getRecent', `
 
 const searchServices = () => stmt('searchServices', `
   SELECT ${ADMIN_COLUMNS} FROM services
-  WHERE (name LIKE @q OR url LIKE @q OR provider LIKE @q OR category LIKE @q) ESCAPE '\\\\'
+  WHERE (name LIKE @q ESCAPE '\\' OR url LIKE @q ESCAPE '\\' OR provider LIKE @q ESCAPE '\\' OR category LIKE @q ESCAPE '\\')
   ORDER BY registered_at DESC
   LIMIT @limit
 `)
