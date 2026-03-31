@@ -118,6 +118,8 @@ describe('buildServiceQuery', () => {
       'WHERE should OR across name, description, and url')
   })
 
+  // String-level ESCAPE assertions: fast unit regression checks.
+  // The integration tests below (line ~190+) are the authoritative correctness tests.
   it('escapes LIKE metacharacters % and _ in q parameter', () => {
     const r1 = buildServiceQuery({ q: '100%' })
     // % inside the search term must be escaped so it doesn't act as a wildcard
@@ -130,6 +132,10 @@ describe('buildServiceQuery', () => {
 
     const r3 = buildServiceQuery({ q: '%_combo_%' })
     assert.equal(r3.params.q, '%\\%\\_combo\\_\\%%')
+
+    // Backslash itself must be escaped (doubled) so it doesn't act as ESCAPE char
+    const r4 = buildServiceQuery({ q: 'path\\file' })
+    assert.equal(r4.params.q, '%path\\\\file%')
   })
 
   it('builds featured filter for "true" and "1"', () => {
@@ -210,6 +216,33 @@ describe('buildServiceQuery', () => {
     ).all({ ...params, limit, offset })
     assert.equal(rows.length, 1)
     assert.equal(rows[0].name, '100% Uptime API')
+  })
+
+  it('q query with backslash in service name executes correctly', () => {
+    const db = Database(':memory:')
+    db.exec(`CREATE TABLE services (
+      id INTEGER PRIMARY KEY, name TEXT, description TEXT, url TEXT,
+      protocol TEXT, status TEXT, provider_deleted INTEGER DEFAULT 0,
+      price_sats REAL, price_usd REAL, payment_asset TEXT, payment_network TEXT,
+      category TEXT, provider TEXT, source TEXT, featured INTEGER DEFAULT 0,
+      health_status TEXT, uptime_30d REAL, latency_p50_ms INTEGER,
+      last_checked TEXT, registered_at TEXT, http_method TEXT,
+      reliability_score REAL, x402_payment_valid INTEGER,
+      x402_facilitator_reachable INTEGER, x402_asset_known INTEGER,
+      l402_compliant INTEGER, l402_degrade_reason TEXT, l402_format TEXT,
+      lnget_compatible INTEGER
+    )`)
+    db.exec(`INSERT INTO services (name, description, url, protocol, status, health_status)
+      VALUES ('foo\\bar API', 'backslash test', 'https://example.com', 'L402', 'active', 'healthy')`)
+    db.exec(`INSERT INTO services (name, description, url, protocol, status, health_status)
+      VALUES ('foobar API', 'no backslash', 'https://other.com', 'L402', 'active', 'healthy')`)
+
+    const { where, params, limit, offset, orderBy } = buildServiceQuery({ q: 'foo\\bar' })
+    const rows = db.prepare(
+      `SELECT name FROM services ${where} ${orderBy} LIMIT @limit OFFSET @offset`
+    ).all({ ...params, limit, offset })
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].name, 'foo\\bar API')
   })
 
   it('builds payment_asset filter', () => {
