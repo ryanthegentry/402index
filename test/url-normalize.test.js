@@ -37,4 +37,28 @@ describe('normalizeUrl', () => {
   it('handles empty string', () => {
     assert.equal(normalizeUrl(''), '')
   })
+
+  it('rejects javascript: protocol', () => {
+    assert.equal(normalizeUrl('javascript:alert(1)'), null)
+  })
+
+  it('rejects data: protocol', () => {
+    assert.equal(normalizeUrl('data:text/html,<script>alert(1)</script>'), null)
+  })
+
+  it('rejects ftp: protocol', () => {
+    assert.equal(normalizeUrl('ftp://example.com/file'), null)
+  })
+
+  it('allows https: protocol', () => {
+    assert.equal(normalizeUrl('https://example.com/api'), 'https://example.com/api')
+  })
+
+  it('allows http: protocol (upgrades to https)', () => {
+    assert.equal(normalizeUrl('http://example.com/api'), 'https://example.com/api')
+  })
+
+  it('allows http: with preserveScheme', () => {
+    assert.equal(normalizeUrl('http://example.com/api', { preserveScheme: true }), 'http://example.com/api')
+  })
 })

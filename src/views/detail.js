@@ -1,5 +1,5 @@
 import { layout } from './layout.js'
-import { escapeHtml, healthDot, protocolBadge, formatPrice, formatSchema, sourceLink } from './helpers.js'
+import { escapeHtml, safeHref, healthDot, protocolBadge, formatPrice, formatSchema, sourceLink } from './helpers.js'
 
 export function detailPage(service) {
   const healthRows = (service.health_checks || []).map(h => `
@@ -36,7 +36,7 @@ export function detailPage(service) {
       <div class="detail-header">
         <p style="margin-bottom:12px"><a href="/">&larr; Back to directory</a></p>
         <h1>${escapeHtml(service.name)}</h1>
-        <a href="${escapeHtml(service.url)}" class="detail-url" target="_blank">${escapeHtml(service.url)}</a>
+        <a href="${safeHref(service.url)}" class="detail-url" target="_blank">${escapeHtml(service.url)}</a>
       </div>
 
       <div class="detail-grid">
