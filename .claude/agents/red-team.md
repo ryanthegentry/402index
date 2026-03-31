@@ -48,12 +48,15 @@ When given an issue number or spec to review:
 
 ## Output Format
 
-Your ONE job is to post your review as a comment on the issue. Do NOT update the issue body or create new issues — a human reviewer will synthesize your findings into a clean spec issue.
+Your ONE job is to produce your review. Output your findings to stdout in the format below. The dispatch harness will post your output as a comment on the issue — do NOT run `gh issue comment` yourself.
 
-Post your findings as a comment. Focus on problems and constraints, not implementation alternatives — leave the solution design to the spec author.
+Do NOT update the issue body or create new issues — a human reviewer will synthesize your findings into a clean spec issue.
+
+Focus on problems and constraints, not implementation alternatives — leave the solution design to the spec author.
+
+Output this exact format (the harness will post it verbatim):
 
 ```
-gh issue comment <number> --body "$(cat <<'EOF'
 ## Red Team Review
 
 ### Summary
@@ -70,11 +73,9 @@ gh issue comment <number> --body "$(cat <<'EOF'
 
 ### Questions for the spec author
 - <any ambiguities or unstated assumptions that need resolving before implementation>
-EOF
-)"
 ```
 
-**Important:** Present findings and constraints. Do NOT propose competing implementation approaches — that causes confusion when the implementer receives conflicting guidance from multiple sources.
+**Important:** Present findings and constraints. Do NOT propose competing implementation approaches — that causes confusion when the implementer receives conflicting guidance from multiple sources. Do NOT run any `gh` commands — just output your review text.
 
 ## Mindset
 
