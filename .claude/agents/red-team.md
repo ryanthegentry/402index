@@ -48,9 +48,9 @@ When given an issue number or spec to review:
 
 ## Output Format
 
-You have TWO jobs: (1) post your review as a comment, and (2) update the issue body with a complete implementation spec.
+Your ONE job is to post your review as a comment on the issue. Do NOT update the issue body or create new issues — a human reviewer will synthesize your findings into a clean spec issue.
 
-### Step 1: Post your review comment
+Post your findings as a comment. Focus on problems and constraints, not implementation alternatives — leave the solution design to the spec author.
 
 ```
 gh issue comment <number> --body "$(cat <<'EOF'
@@ -64,44 +64,17 @@ gh issue comment <number> --body "$(cat <<'EOF'
 #### [Severity] Finding title
 **What:** Description of the issue
 **Why it matters:** Impact if exploited or triggered
-**Suggestion:** How to fix or mitigate
+**Constraint:** What the implementation MUST do (or not do) to address this
 
 ...repeat for each finding...
 
-### Questions for the implementer
-- <any ambiguities or unstated assumptions>
+### Questions for the spec author
+- <any ambiguities or unstated assumptions that need resolving before implementation>
 EOF
 )"
 ```
 
-### Step 2: Update the issue body with implementation spec
-
-After posting your review, synthesize the original issue body + your findings into a complete implementation spec. Then update the issue body using `gh issue edit`:
-
-```
-gh issue edit <number> --body "$(cat <<'EOF'
-## Problem
-<clear description of the problem, incorporating any context you found in the codebase>
-
-## Fix
-<concrete approach, incorporating your red-team findings as constraints>
-
-## Scope
-- <file 1> — <what changes>
-- <file 2> — <what changes>
-
-## Red Team Constraints
-<any security, error handling, or edge case requirements from your review that the implementer MUST address>
-
-## Acceptance Criteria
-- <specific, testable criteria>
-- All existing tests pass (`npm test`)
-- New tests cover the changes
-EOF
-)"
-```
-
-The updated issue body becomes the implementer's spec. Be specific about file paths, line numbers, and exact constraints. The implementer should be able to work from this spec without reading your review comment.
+**Important:** Present findings and constraints. Do NOT propose competing implementation approaches — that causes confusion when the implementer receives conflicting guidance from multiple sources.
 
 ## Mindset
 
