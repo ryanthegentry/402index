@@ -82,16 +82,21 @@ router.get('/services', (req, res) => {
 
 // GET /api/v1/services/:id
 router.get('/services/:id', (req, res) => {
-  const service = db.prepare("SELECT * FROM services WHERE id = ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)").get(req.params.id)
-  if (!service) {
-    return res.status(404).json({ error: 'Service not found' })
+  try {
+    const service = db.prepare("SELECT * FROM services WHERE id = ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)").get(req.params.id)
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found' })
+    }
+
+    const health_checks = db.prepare(
+      'SELECT id, checked_at, status, response_time_ms, http_status, error_message FROM health_checks WHERE service_id = ? ORDER BY checked_at DESC LIMIT 20'
+    ).all(req.params.id)
+
+    res.json({ ...service, health_checks })
+  } catch (err) {
+    console.error('GET /api/v1/services/:id error:', err)
+    res.status(500).json({ error: 'Internal Server Error' })
   }
-
-  const health_checks = db.prepare(
-    'SELECT id, checked_at, status, response_time_ms, http_status, error_message FROM health_checks WHERE service_id = ? ORDER BY checked_at DESC LIMIT 20'
-  ).all(req.params.id)
-
-  res.json({ ...service, health_checks })
 })
 
 // CSV export (L402-gated)
@@ -160,6 +165,7 @@ router.get('/export.csv', async (req, res) => {
 
 // GET /api/v1/health
 router.get('/health', (req, res) => {
+  try {
   const ACTIVE_FILTER = "WHERE (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
 
   const total = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER}`).get().c
@@ -244,17 +250,27 @@ router.get('/health', (req, res) => {
     last_mpp_sync: lastMppSync,
     last_health_check_run: lastHealthCheck,
   })
+  } catch (err) {
+    console.error('GET /api/v1/health error:', err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
 })
 
 // GET /api/v1/stats/snapshots
 router.get('/stats/snapshots', (req, res) => {
-  const days = Math.min(Math.max(1, parseInt(req.query.days) || 30), 365)
-  const snapshots = getSnapshots(db, days)
-  res.json({ snapshots, count: snapshots.length })
+  try {
+    const days = Math.min(Math.max(1, parseInt(req.query.days) || 30), 365)
+    const snapshots = getSnapshots(db, days)
+    res.json({ snapshots, count: snapshots.length })
+  } catch (err) {
+    console.error('GET /api/v1/stats/snapshots error:', err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
 })
 
 // GET /api/v1/categories
 router.get('/categories', (req, res) => {
+  try {
   const rows = db.prepare(
     `SELECT category, protocol, COUNT(*) as count
      FROM services
@@ -285,6 +301,10 @@ router.get('/categories', (req, res) => {
   }
 
   res.json({ categories: tree })
+  } catch (err) {
+    console.error('GET /api/v1/categories error:', err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
 })
 
 // Lazy-initialized prepared statements for registration
@@ -680,6 +700,7 @@ function classifyAgent(ua) {
 }
 
 router.get('/digest', (req, res) => {
+  try {
   const ACTIVE = "(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
 
   // ── Totals ──
@@ -868,6 +889,10 @@ router.get('/digest', (req, res) => {
       recovered_24h: recovered,
     },
   })
+  } catch (err) {
+    console.error('GET /api/v1/digest error:', err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
 })
 
 // ─── Demo Endpoints ──────────────────────────────────────────────────────────
@@ -876,9 +901,14 @@ import { buildProbeSample } from './pages.js'
 import { validateProbeUrl, runProbeSteps } from '../services/probe-live.js'
 
 router.get('/demo/probe-sample', (req, res) => {
-  const protocol = req.query.protocol || 'L402'
-  const sample = buildProbeSample(db, protocol)
-  res.json(sample)
+  try {
+    const protocol = req.query.protocol || 'L402'
+    const sample = buildProbeSample(db, protocol)
+    res.json(sample)
+  } catch (err) {
+    console.error('GET /api/v1/demo/probe-sample error:', err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
 })
 
 // SSE live probe — streams health check steps in real time
@@ -1149,8 +1179,13 @@ router.post('/admin/vacuum', (req, res) => {
 // ─── Opportunities ─────────────────────────────────────────────────────────────
 
 router.get('/opportunities', (req, res) => {
-  const opportunities = findOpportunities(db, { protocol: req.query.protocol })
-  res.json({ opportunities, total: opportunities.length })
+  try {
+    const opportunities = findOpportunities(db, { protocol: req.query.protocol })
+    res.json({ opportunities, total: opportunities.length })
+  } catch (err) {
+    console.error('GET /api/v1/opportunities error:', err)
+    res.status(500).json({ error: 'Internal Server Error' })
+  }
 })
 
 // ─── Webhooks ──────────────────────────────────────────────────────────────────
