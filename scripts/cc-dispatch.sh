@@ -466,9 +466,22 @@ Follow your review protocol. Post findings as a comment on issue #${issue_number
         return 1
     fi
 
-    # Red-team agent posts its own comment + updates issue body directly.
-    # No need for the script to double-post. Log CC output for debugging only.
-    log "CC output for issue #${issue_number} saved to ${logfile}"
+    # Agent generates the review; script posts it as a comment.
+    # (Agent runs in --print mode and cannot reliably execute gh commands itself.)
+    if [[ -n "$cc_output" ]]; then
+        log "Posting review comment on issue #${issue_number}"
+        local post_err tmpfile
+        tmpfile=$(mktemp)
+        printf '%s' "$cc_output" > "$tmpfile"
+        post_err=$(gh issue comment "$issue_number" --repo "$REPO" \
+            --body-file "$tmpfile" 2>&1)
+        if [[ $? -ne 0 ]]; then
+            err "Failed to post review on issue #${issue_number}: ${post_err}"
+        fi
+        rm -f "$tmpfile"
+    else
+        err "CC produced empty output for issue #${issue_number}"
+    fi
 
     gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress"
     if [[ -n "$done_label" ]]; then

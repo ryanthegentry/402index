@@ -235,17 +235,21 @@ describe('cc-dispatch.sh', () => {
   // ── dispatch_review_issue posts to ISSUE ─────────────────────────
 
   describe('dispatch_review_issue', () => {
-    it('delegates posting to the agent — no script-side gh issue comment', () => {
+    it('script posts agent output as issue comment via --body-file', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       // Extract dispatch_review_issue function body
       const fnStart = content.indexOf('dispatch_review_issue()')
       const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
 
-      // Script must NOT post its own comment — agent posts review + updates issue body
+      // Script must post the agent's output (agent can't reliably post in --print mode)
       assert.ok(
-        !fnBody.includes('gh issue comment'),
-        'dispatch_review_issue must not double-post (agent handles its own posting)'
+        fnBody.includes('gh issue comment'),
+        'dispatch_review_issue must post agent output as issue comment'
+      )
+      assert.ok(
+        fnBody.includes('--body-file'),
+        'dispatch_review_issue must use --body-file for safe posting'
       )
     })
 
@@ -513,16 +517,21 @@ describe('cc-dispatch.sh', () => {
   // ── Empty output guard ───────────────────────────────────────────
 
   describe('empty output guard', () => {
-    it('dispatch_review_issue delegates posting to agent (no tmpfile pattern)', () => {
+    it('dispatch_review_issue posts via --body-file and guards empty output', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       const fnStart = content.indexOf('dispatch_review_issue()')
       const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
 
-      // Agent handles its own posting — script should not have tmpfile posting logic
+      // Script posts agent output via tmpfile (agent can't reliably post in --print mode)
       assert.ok(
-        !fnBody.includes('--body-file'),
-        'dispatch_review_issue must not have script-side posting (agent handles it)'
+        fnBody.includes('--body-file'),
+        'dispatch_review_issue must use --body-file for posting'
+      )
+      // Must guard against empty output
+      assert.ok(
+        fnBody.includes('CC produced empty output'),
+        'dispatch_review_issue must guard against empty agent output'
       )
     })
 
