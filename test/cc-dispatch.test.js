@@ -548,6 +548,176 @@ describe('cc-dispatch.sh', () => {
     })
   })
 
+  // ── Commit status check (dispatch/review) ────────────────────────
+
+  describe('set_review_status()', () => {
+    it('function exists in the script', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(content.includes('set_review_status()'), 'set_review_status() function must exist')
+    })
+
+    it('uses dispatch/review as context string', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('set_review_status()')
+      const fnEnd = content.indexOf('\n}', fnStart) + 2
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('dispatch/review'),
+        'set_review_status must use dispatch/review as status context'
+      )
+    })
+
+    it('uses || true to avoid blocking pipeline', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('set_review_status()')
+      const fnEnd = content.indexOf('\n}', fnStart) + 2
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('|| true'),
+        'set_review_status must use || true to avoid blocking pipeline on API failure'
+      )
+    })
+
+    it('calls gh api repos/.../statuses/...', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('set_review_status()')
+      const fnEnd = content.indexOf('\n}', fnStart) + 2
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('gh api') && fnBody.includes('statuses'),
+        'set_review_status must call GitHub statuses API via gh api'
+      )
+    })
+  })
+
+  describe('dispatch_review_pr status calls', () => {
+    it('sets pending status before CC runs', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // pending must appear before claude --print
+      const pendingIdx = fnBody.indexOf('set_review_status')
+      const claudeIdx = fnBody.indexOf('claude --print')
+      assert.ok(pendingIdx !== -1, 'dispatch_review_pr must call set_review_status')
+      assert.ok(pendingIdx < claudeIdx, 'pending status must be set before CC runs')
+    })
+
+    it('sets failure status and review-failed label when CC crashes', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // Find the CC exit check block
+      const exitBlock = fnBody.slice(fnBody.indexOf('cc_exit'))
+      assert.ok(
+        exitBlock.includes('set_review_status') && exitBlock.includes('failure'),
+        'dispatch_review_pr must set failure status when CC crashes'
+      )
+      assert.ok(
+        exitBlock.includes('review-failed'),
+        'dispatch_review_pr must add review-failed label when CC crashes'
+      )
+    })
+
+    it('sets success status after successful review', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // success status should appear after submit_review
+      const submitIdx = fnBody.indexOf('submit_review')
+      const afterSubmit = fnBody.slice(submitIdx)
+      assert.ok(
+        afterSubmit.includes('success'),
+        'dispatch_review_pr must set success status after review submission'
+      )
+    })
+
+    it('sets error status if submit_review fails', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('error') && fnBody.includes('set_review_status'),
+        'dispatch_review_pr must set error status if submit_review fails'
+      )
+    })
+  })
+
+  // ── review-failed label ─────────────────────────────────────────
+
+  describe('review-failed label', () => {
+    it('is created in ensure_labels()', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const ensureLabelsSection = content.slice(content.indexOf('ensure_labels()'))
+      assert.ok(
+        ensureLabelsSection.includes('review-failed'),
+        'ensure_labels must create review-failed label'
+      )
+    })
+
+    it('is added to PR (not issue) on CC crash', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('gh pr edit') && fnBody.includes('review-failed'),
+        'review-failed label must be added to PR via gh pr edit'
+      )
+    })
+  })
+
+  // ── Reviewer prompt augmentation ────────────────────────────────
+
+  describe('reviewer prompt augmentation', () => {
+    it('includes integration test requirement for src/queries/ changes', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('src/queries/') && fnBody.includes('integration test'),
+        'reviewer prompt must require integration tests for query-layer changes'
+      )
+    })
+
+    it('includes TDD compliance check instruction', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('TDD') && fnBody.includes('test'),
+        'reviewer prompt must include TDD compliance check instruction'
+      )
+    })
+
+    it('augmentation appears after existing prompt, before VERDICT format', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      const additionalIdx = fnBody.indexOf('ADDITIONAL REVIEW REQUIREMENTS')
+      const verdictIdx = fnBody.indexOf('VERDICT')
+      assert.ok(additionalIdx !== -1, 'must have ADDITIONAL REVIEW REQUIREMENTS section')
+      assert.ok(additionalIdx < verdictIdx, 'additional requirements must appear before VERDICT format')
+    })
+  })
+
   // ── Comment accuracy ─────────────────────────────────────────────
 
   describe('comment accuracy', () => {
