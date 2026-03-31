@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { escapeHtml, escapeXml, healthDot, protocolBadge, formatPrice, formatSchema, safeJsonEmbed } from '../src/views/helpers.js'
+import { escapeHtml, escapeXml, healthDot, protocolBadge, formatPrice, formatSchema, safeJsonEmbed, safeHref } from '../src/views/helpers.js'
 
 describe('escapeHtml', () => {
   it('escapes HTML special characters', () => {
@@ -157,6 +157,52 @@ describe('safeJsonEmbed', () => {
   it('handles safe data unchanged except for < escaping', () => {
     const data = { hello: 'world', count: 42 }
     assert.equal(safeJsonEmbed(data), JSON.stringify(data))
+  })
+})
+
+describe('safeHref', () => {
+  it('returns escaped URL for https', () => {
+    assert.equal(safeHref('https://example.com'), 'https://example.com')
+  })
+
+  it('returns escaped URL for http', () => {
+    assert.equal(safeHref('http://example.com'), 'http://example.com')
+  })
+
+  it('blocks javascript: protocol', () => {
+    assert.equal(safeHref('javascript:alert(1)'), '#')
+  })
+
+  it('blocks JavaScript: (case-insensitive)', () => {
+    assert.equal(safeHref('JavaScript:alert(1)'), '#')
+  })
+
+  it('blocks data: protocol', () => {
+    assert.equal(safeHref('data:text/html,<script>alert(1)</script>'), '#')
+  })
+
+  it('blocks vbscript: protocol', () => {
+    assert.equal(safeHref('vbscript:msgbox("xss")'), '#')
+  })
+
+  it('returns # for null', () => {
+    assert.equal(safeHref(null), '#')
+  })
+
+  it('returns # for undefined', () => {
+    assert.equal(safeHref(undefined), '#')
+  })
+
+  it('returns # for empty string', () => {
+    assert.equal(safeHref(''), '#')
+  })
+
+  it('returns # for invalid URL', () => {
+    assert.equal(safeHref('not-a-url'), '#')
+  })
+
+  it('escapes HTML entities in URL', () => {
+    assert.equal(safeHref('https://example.com/a?b=1&c=2'), 'https://example.com/a?b=1&amp;c=2')
   })
 })
 

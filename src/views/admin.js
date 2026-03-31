@@ -340,6 +340,15 @@ export function adminPage() {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
     }
 
+    function safeHref(url) {
+      if (!url) return '#'
+      try {
+        var p = new URL(url).protocol
+        if (p === 'https:' || p === 'http:') return escHtml(url)
+      } catch (e) { /* invalid URL */ }
+      return '#'
+    }
+
     // ─── Tab switching ──────────────────────────────────────────────────────
 
     var tabLoaded = { pending: false, recent: false, domains: false, failed: false, traffic: false }
@@ -383,7 +392,7 @@ export function adminPage() {
       return '<div class="reg-card" id="card-' + escHtml(s.id) + '">'
         + '<div class="reg-card-header"><div>'
         + '<div class="reg-card-title">' + escHtml(s.name) + '</div>'
-        + '<a class="reg-card-url" href="' + escHtml(s.url) + '" target="_blank" rel="noopener">' + escHtml(s.url) + '</a>'
+        + '<a class="reg-card-url" href="' + safeHref(s.url) + '" target="_blank" rel="noopener">' + escHtml(s.url) + '</a>'
         + '</div></div>'
         + '<div class="reg-card-meta">'
         + '<div><strong>Protocol:</strong> ' + escHtml(s.protocol) + '</div>'
@@ -419,7 +428,7 @@ export function adminPage() {
         + '<div class="reg-card-header">'
         + '<div>'
         + '<div class="reg-card-title">' + escHtml(s.name) + '</div>'
-        + '<a class="reg-card-url" href="' + escHtml(s.url) + '" target="_blank" rel="noopener">' + escHtml(s.url) + '</a>'
+        + '<a class="reg-card-url" href="' + safeHref(s.url) + '" target="_blank" rel="noopener">' + escHtml(s.url) + '</a>'
         + '</div>'
         + '<span class="status-badge ' + badgeClass + '">' + escHtml(status) + '</span>'
         + '</div>'

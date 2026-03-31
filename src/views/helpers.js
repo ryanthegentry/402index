@@ -7,6 +7,15 @@ export function safeJsonEmbed(data) {
   return JSON.stringify(data).replace(/</g, '\\u003c')
 }
 
+export function safeHref(url) {
+  if (!url) return '#'
+  try {
+    const { protocol } = new URL(url)
+    if (protocol === 'https:' || protocol === 'http:') return escapeHtml(url)
+  } catch { /* invalid URL */ }
+  return '#'
+}
+
 export function escapeXml(str) {
   if (str == null) return ''
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')

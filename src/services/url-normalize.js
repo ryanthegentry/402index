@@ -20,6 +20,8 @@ export function normalizeUrl(rawUrl, opts = {}) {
   if (!rawUrl || typeof rawUrl !== 'string') return rawUrl
   try {
     const url = new URL(rawUrl)
+    // reject non-web protocols (defense-in-depth)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
     // http → https (unless caller explicitly preserves scheme)
     if (!opts.preserveScheme && url.protocol === 'http:') url.protocol = 'https:'
     // lowercase hostname
