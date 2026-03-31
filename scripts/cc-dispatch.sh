@@ -302,6 +302,13 @@ dispatch_implement() {
     local agent_flag="$4" dispatch_label="$5" done_label="$6" logfile="$7"
     local branch="fix/issue-${issue_number}"
 
+    # Check if this spec issue supersedes an original issue
+    local superseded_issue=""
+    superseded_issue=$(echo "$issue_body" | grep -oE 'Supersedes #[0-9]+' | head -1 | grep -oE '[0-9]+')
+    if [[ -n "$superseded_issue" ]]; then
+        log "Spec issue #${issue_number} supersedes original issue #${superseded_issue}"
+    fi
+
     cd "$REPO_DIR" || { err "Can't cd to $REPO_DIR"; return 1; }
     git checkout "$DEFAULT_BRANCH" && git pull origin "$DEFAULT_BRANCH"
 
@@ -401,7 +408,8 @@ ${cc_summary}
 
 ## Linked Issue
 
-Closes #${issue_number}
+Closes #${issue_number}${superseded_issue:+
+Closes #${superseded_issue}}
 
 ---
 *Dispatched by cc-dispatch.sh at $(date '+%Y-%m-%d %H:%M:%S')*
