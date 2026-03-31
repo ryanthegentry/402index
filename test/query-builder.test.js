@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import Database from 'better-sqlite3'
 import { buildServiceQuery, PAGE_COLUMNS } from '../src/queries/services.js'
 
 describe('buildServiceQuery', () => {
@@ -113,7 +114,7 @@ describe('buildServiceQuery', () => {
   it('q filter uses OR across all three fields', () => {
     const result = buildServiceQuery({ q: 'lightningenable' })
     // Should be a single OR group matching name, description, and url
-    assert.ok(result.where.includes('name LIKE @q OR description LIKE @q OR url LIKE @q'),
+    assert.ok(result.where.includes("name LIKE @q ESCAPE '\\' OR description LIKE @q ESCAPE '\\' OR url LIKE @q ESCAPE '\\'"),
       'WHERE should OR across name, description, and url')
   })
 
@@ -121,11 +122,11 @@ describe('buildServiceQuery', () => {
     const r1 = buildServiceQuery({ q: '100%' })
     // % inside the search term must be escaped so it doesn't act as a wildcard
     assert.equal(r1.params.q, '%100\\%%')
-    assert.ok(r1.where.includes("ESCAPE '\\\\'"), 'WHERE should include ESCAPE clause')
+    assert.ok(r1.where.includes("ESCAPE '\\'"), 'WHERE should include ESCAPE clause')
 
     const r2 = buildServiceQuery({ q: 'test_value' })
     assert.equal(r2.params.q, '%test\\_value%')
-    assert.ok(r2.where.includes("ESCAPE '\\\\'"), 'WHERE should include ESCAPE clause')
+    assert.ok(r2.where.includes("ESCAPE '\\'"), 'WHERE should include ESCAPE clause')
 
     const r3 = buildServiceQuery({ q: '%_combo_%' })
     assert.equal(r3.params.q, '%\\%\\_combo\\_\\%%')
@@ -156,6 +157,59 @@ describe('buildServiceQuery', () => {
     assert.equal(result.params.protocol, 'x402')
     assert.equal(result.params.health, 'healthy')
     assert.equal(result.params.source, 'bazaar')
+  })
+
+  it('q query executes against SQLite without syntax error', () => {
+    // Integration test: the LIKE ESCAPE clause must be valid SQL
+        const db = Database(':memory:')
+    db.exec(`CREATE TABLE services (
+      id INTEGER PRIMARY KEY, name TEXT, description TEXT, url TEXT,
+      protocol TEXT, status TEXT, provider_deleted INTEGER DEFAULT 0,
+      price_sats REAL, price_usd REAL, payment_asset TEXT, payment_network TEXT,
+      category TEXT, provider TEXT, source TEXT, featured INTEGER DEFAULT 0,
+      health_status TEXT, uptime_30d REAL, latency_p50_ms INTEGER,
+      last_checked TEXT, registered_at TEXT, http_method TEXT,
+      reliability_score REAL, x402_payment_valid INTEGER,
+      x402_facilitator_reachable INTEGER, x402_asset_known INTEGER,
+      l402_compliant INTEGER, l402_degrade_reason TEXT, l402_format TEXT,
+      lnget_compatible INTEGER
+    )`)
+    db.exec(`INSERT INTO services (name, description, url, protocol, status, health_status)
+      VALUES ('PayPerQ Image Generation', 'AI image gen', 'https://ppq.ai/api', 'MPP', 'active', 'healthy')`)
+    db.exec(`INSERT INTO services (name, description, url, protocol, status, health_status)
+      VALUES ('Other Service', 'unrelated', 'https://other.com', 'L402', 'active', 'healthy')`)
+
+    const { where, params, limit, offset, orderBy } = buildServiceQuery({ q: 'image generation' })
+    const rows = db.prepare(
+      `SELECT name FROM services ${where} ${orderBy} LIMIT @limit OFFSET @offset`
+    ).all({ ...params, limit, offset })
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].name, 'PayPerQ Image Generation')
+  })
+
+  it('q query with LIKE metacharacters executes without error', () => {
+        const db = Database(':memory:')
+    db.exec(`CREATE TABLE services (
+      id INTEGER PRIMARY KEY, name TEXT, description TEXT, url TEXT,
+      protocol TEXT, status TEXT, provider_deleted INTEGER DEFAULT 0,
+      price_sats REAL, price_usd REAL, payment_asset TEXT, payment_network TEXT,
+      category TEXT, provider TEXT, source TEXT, featured INTEGER DEFAULT 0,
+      health_status TEXT, uptime_30d REAL, latency_p50_ms INTEGER,
+      last_checked TEXT, registered_at TEXT, http_method TEXT,
+      reliability_score REAL, x402_payment_valid INTEGER,
+      x402_facilitator_reachable INTEGER, x402_asset_known INTEGER,
+      l402_compliant INTEGER, l402_degrade_reason TEXT, l402_format TEXT,
+      lnget_compatible INTEGER
+    )`)
+    db.exec(`INSERT INTO services (name, description, url, protocol, status, health_status)
+      VALUES ('100% Uptime API', 'test', 'https://example.com', 'L402', 'active', 'healthy')`)
+
+    const { where, params, limit, offset, orderBy } = buildServiceQuery({ q: '100%' })
+    const rows = db.prepare(
+      `SELECT name FROM services ${where} ${orderBy} LIMIT @limit OFFSET @offset`
+    ).all({ ...params, limit, offset })
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].name, '100% Uptime API')
   })
 
   it('builds payment_asset filter', () => {
