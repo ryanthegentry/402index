@@ -19,6 +19,12 @@ Use this skill when:
 - You encounter an HTTP 402 Payment Required response
 - The user mentions 402index, L402, x402, MPP, or Lightning payments
 
+## Agent Behavior Notes
+
+- **Run payment commands synchronously.** Do NOT background lnget or mppx calls. Image generation takes 60-90s — wait for the result inline.
+- **`--no-pay` only works for L402 endpoints, NOT for MPP.** To preview MPP costs, check the price in the 402index listing before paying. Do not use `--no-pay` with `--prefer-scheme payment`.
+- **If search returns errors, skip to the known-good endpoints below.** Do not retry with different query variations — use the Tested Quick Start or category-based search instead.
+
 ## Quick Start
 
 ```
@@ -28,7 +34,6 @@ Use this skill when:
 4. Pay       →  Execute payment with the right tool
 5. Consume   →  Parse and use the response
 ```
-
 ## Step 1: Discover — Find the Right Endpoint
 
 ### Option A: MCP Server (preferred — structured data, token-efficient)
@@ -68,6 +73,16 @@ curl -s https://402index.io/llms.txt
 ```
 
 Returns a machine-readable summary of the directory — useful for initial orientation.
+
+### If search returns errors
+
+If text search (`q=`) returns 500 errors, use category-based search instead:
+
+```
+search_services({ category: "ai/image-generation", health: "healthy" })
+```
+
+Or skip discovery entirely and use a known-good endpoint from the Tested Quick Start section above.
 
 ## Step 2: Evaluate the Endpoint
 
@@ -158,7 +173,7 @@ lnget -X POST \
 
 **Key flags:**
 - `--max-cost <sats>` — hard spending limit per request (default: 1000)
-- `--no-pay` — preview the 402 challenge without paying (see cost first)
+- `--no-pay` — preview the 402 challenge without paying (L402 only — does NOT work for MPP)
 - `--payment-timeout <duration>` — extend for slow endpoints (default: 60s)
 - `-q` — quiet mode, outputs only the response body (ideal for piping)
 - `--json` — structured output including payment metadata
@@ -240,8 +255,9 @@ echo "$response" | jq -r '.choices[0].message.content // .response // .text'
 
 **Always enforce spending limits.** The default behavior should be safe:
 
-1. **Preview before paying** — Use `--no-pay` to see what it costs before committing:
+1. **Preview before paying (L402 only)** — Use `--no-pay` to see what it costs before committing. **Warning:** `--no-pay` only works for L402 endpoints. It does NOT prevent payment on MPP endpoints — lnget will still pay. For MPP, check the price in the 402index listing instead.
    ```bash
+   # L402 endpoints only:
    lnget --no-pay --json "https://api.example.com/data" | jq '.invoice_amount_sat'
    ```
 
@@ -351,8 +367,10 @@ curl -sL "$image_url" -o /tmp/generated-logo.png
 | lnget fails on MPP endpoint | Missing scheme flag | Add `--prefer-scheme payment` |
 | "exceeds max cost" exit code 2 | Price > --max-cost | Increase `--max-cost` or use `--no-pay` to preview |
 | "payment failed" exit code 3 | Insufficient balance or routing failure | Check `lnget ln status` and wallet balance |
+| `--no-pay` still paid on MPP | `--no-pay` only suppresses L402 payments | For MPP endpoints, check the 402index listing price instead. Do not use `--no-pay` with `--prefer-scheme payment` |
+| 402 Index search returns 500 | Text search (`q=`) intermittently errors | Use category-based search (`category=ai/image-generation`) or skip to Tested Quick Start |
 | 402 Index returns no results | Filters too narrow | Broaden search: remove protocol/category filter, try different query terms |
-| Endpoint shows "degraded" | Paywall works but challenge may be malformed | Try it anyway with `--no-pay` first; if challenge parses, it may still work |
+| Endpoint shows "degraded" | Paywall works but challenge may be malformed | Try it anyway — if challenge parses, it may still work |
 | mppx "no account" error | Tempo wallet not created | Run `npx mppx account create` then `npx mppx account fund` |
 
 ## Token Caching
