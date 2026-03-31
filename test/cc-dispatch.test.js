@@ -718,6 +718,62 @@ describe('cc-dispatch.sh', () => {
     })
   })
 
+  // ── Review status edge cases ─────────────────────────────────────
+
+  describe('review status edge cases', () => {
+    it('submit_review() ends with $review_ok', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('submit_review()')
+      const fnEnd = content.indexOf('\n}', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+      const lines = fnBody.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'))
+      const lastLine = lines[lines.length - 1].trim()
+      assert.strictEqual(lastLine, '$review_ok', 'last executable line of submit_review() must be $review_ok')
+    })
+
+    it('submit_review() initializes review_ok=false', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('submit_review()')
+      const fnEnd = content.indexOf('\n}', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+      assert.ok(fnBody.includes('review_ok=false'), 'submit_review() must initialize review_ok=false')
+    })
+
+    it('empty review body aborts the review chain', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+      // Find the else branch of [ -s "$tmpfile" ]
+      const sCheckIdx = fnBody.indexOf('[ -s "$tmpfile" ]')
+      const elseBranch = fnBody.slice(sCheckIdx)
+      const elseIdx = elseBranch.indexOf('else')
+      const fiIdx = elseBranch.indexOf('\n    fi', elseIdx)
+      const elseBlock = elseBranch.slice(elseIdx, fiIdx)
+      assert.ok(
+        elseBlock.includes('rollback_issue') || elseBlock.includes('return'),
+        'empty review body else branch must abort via rollback_issue or return'
+      )
+    })
+
+    it('empty review body cleans up tmpfile before returning', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+      const sCheckIdx = fnBody.indexOf('[ -s "$tmpfile" ]')
+      const elseBranch = fnBody.slice(sCheckIdx)
+      const elseIdx = elseBranch.indexOf('else')
+      const fiIdx = elseBranch.indexOf('\n    fi', elseIdx)
+      const elseBlock = elseBranch.slice(elseIdx, fiIdx)
+      const rmIdx = elseBlock.indexOf('rm -f "$tmpfile"')
+      const returnIdx = elseBlock.indexOf('return')
+      assert.ok(rmIdx !== -1, 'else branch must rm -f "$tmpfile"')
+      assert.ok(returnIdx !== -1, 'else branch must return')
+      assert.ok(rmIdx < returnIdx, 'rm -f "$tmpfile" must appear before return')
+    })
+  })
+
   // ── Comment accuracy ─────────────────────────────────────────────
 
   describe('comment accuracy', () => {
