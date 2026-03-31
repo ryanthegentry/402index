@@ -458,15 +458,9 @@ Follow your review protocol. Post findings as a comment on issue #${issue_number
         return 1
     fi
 
-    # Always post CC output to the issue unconditionally
-    local tmpfile
-    tmpfile=$(mktemp)
-    echo "$cc_output" | grep -v '^\[' | tail -100 > "$tmpfile"
-    if [ -s "$tmpfile" ]; then
-        head -c 4000 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
-        gh issue comment "$issue_number" --repo "$REPO" --body-file "$tmpfile" 2>/dev/null
-    fi
-    rm -f "$tmpfile"
+    # Red-team agent posts its own comment + updates issue body directly.
+    # No need for the script to double-post. Log CC output for debugging only.
+    log "CC output for issue #${issue_number} saved to ${logfile}"
 
     gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress"
     if [[ -n "$done_label" ]]; then

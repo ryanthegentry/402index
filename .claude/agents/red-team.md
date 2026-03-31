@@ -48,7 +48,9 @@ When given an issue number or spec to review:
 
 ## Output Format
 
-Post a GitHub comment on the issue with your findings:
+You have TWO jobs: (1) post your review as a comment, and (2) update the issue body with a complete implementation spec.
+
+### Step 1: Post your review comment
 
 ```
 gh issue comment <number> --body "$(cat <<'EOF'
@@ -71,6 +73,35 @@ gh issue comment <number> --body "$(cat <<'EOF'
 EOF
 )"
 ```
+
+### Step 2: Update the issue body with implementation spec
+
+After posting your review, synthesize the original issue body + your findings into a complete implementation spec. Then update the issue body using `gh issue edit`:
+
+```
+gh issue edit <number> --body "$(cat <<'EOF'
+## Problem
+<clear description of the problem, incorporating any context you found in the codebase>
+
+## Fix
+<concrete approach, incorporating your red-team findings as constraints>
+
+## Scope
+- <file 1> — <what changes>
+- <file 2> — <what changes>
+
+## Red Team Constraints
+<any security, error handling, or edge case requirements from your review that the implementer MUST address>
+
+## Acceptance Criteria
+- <specific, testable criteria>
+- All existing tests pass (`npm test`)
+- New tests cover the changes
+EOF
+)"
+```
+
+The updated issue body becomes the implementer's spec. Be specific about file paths, line numbers, and exact constraints. The implementer should be able to work from this spec without reading your review comment.
 
 ## Mindset
 
