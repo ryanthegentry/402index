@@ -158,29 +158,39 @@ submit_review() {
     local verdict="$2"
     local review_body="$3"
     local review_ok=false
+    local review_err=""
 
     if [[ -n "$BOT_TOKEN" ]]; then
         case "$verdict" in
             APPROVED)
-                GH_TOKEN="$BOT_TOKEN" gh pr review "$pr_number" --repo "$REPO" --approve \
-                    --body "$review_body" 2>/dev/null && review_ok=true
+                review_err=$(GH_TOKEN="$BOT_TOKEN" gh pr review "$pr_number" --repo "$REPO" --approve \
+                    --body "$review_body" 2>&1) && review_ok=true
                 ;;
             CHANGES_REQUESTED)
-                GH_TOKEN="$BOT_TOKEN" gh pr review "$pr_number" --repo "$REPO" --request-changes \
-                    --body "$review_body" 2>/dev/null && review_ok=true
+                review_err=$(GH_TOKEN="$BOT_TOKEN" gh pr review "$pr_number" --repo "$REPO" --request-changes \
+                    --body "$review_body" 2>&1) && review_ok=true
                 ;;
             *)
-                GH_TOKEN="$BOT_TOKEN" gh pr review "$pr_number" --repo "$REPO" --comment \
-                    --body "$review_body" 2>/dev/null && review_ok=true
+                review_err=$(GH_TOKEN="$BOT_TOKEN" gh pr review "$pr_number" --repo "$REPO" --comment \
+                    --body "$review_body" 2>&1) && review_ok=true
                 ;;
         esac
+        if ! $review_ok; then
+            log "Formal review failed for PR #${pr_number} (${verdict}): ${review_err}"
+        fi
+    else
+        log "No bot token available — skipping formal review"
     fi
 
     # Fallback: if formal review failed (or no bot token), post as a regular comment
     if ! $review_ok; then
-        log "Formal review failed or no bot token — falling back to PR comment"
-        gh pr comment "$pr_number" --repo "$REPO" \
-            --body "**[${verdict}]** ${review_body}" 2>/dev/null
+        log "Falling back to PR comment for PR #${pr_number}"
+        local comment_err
+        comment_err=$(gh pr comment "$pr_number" --repo "$REPO" \
+            --body "**[${verdict}]** ${review_body}" 2>&1)
+        if [[ $? -ne 0 ]]; then
+            log "PR comment fallback also failed for PR #${pr_number}: ${comment_err}"
+        fi
     fi
 }
 
