@@ -53,12 +53,12 @@ const FETCH_HEADERS = {
 }
 
 async function fetchPage(page) {
-  const res = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`, { headers: FETCH_HEADERS })
+  const res = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(30_000) })
 
   if (res.status === 429) {
     console.log(`[satring] Rate limited at page ${page}, waiting ${RATE_LIMIT_WAIT_MS / 1000}s...`)
     await sleep(RATE_LIMIT_WAIT_MS)
-    const retry = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`, { headers: FETCH_HEADERS })
+    const retry = await fetch(`${SATRING_URL}?page=${page}&page_size=${PAGE_SIZE}`, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(30_000) })
     if (!retry.ok) {
       console.error(`[satring] Retry failed with ${retry.status} at page ${page}`)
       return null

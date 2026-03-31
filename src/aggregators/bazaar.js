@@ -67,7 +67,7 @@ export async function pollBazaar() {
     let fetched = false
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const res = await fetch(url)
+        const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
         if (res.status === 429) {
           const backoff = Math.pow(2, attempt + 1) * 1000
           console.warn(`[bazaar] Rate limited at offset ${offset}, retrying in ${backoff / 1000}s...`)
