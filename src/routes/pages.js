@@ -1,4 +1,7 @@
 import { Router } from 'express'
+import { readFileSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import db, { logQuery } from '../db.js'
 import { queryServices, PAGE_COLUMNS, API_COLUMNS } from '../queries/services.js'
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
@@ -93,6 +96,20 @@ router.get('/feed.xml', (req, res) => {
 
   res.set('Content-Type', 'application/rss+xml; charset=utf-8')
   res.send(feedXml({ services: filtered, selfUrl, filters: { protocol, health, type } }))
+})
+
+// SKILL.md — agent skill for discovering and paying for APIs
+router.get('/SKILL.md', (req, res) => {
+  const __dirname = dirname(fileURLToPath(import.meta.url))
+  const skillPath = join(__dirname, '..', '..', 'SKILL.md')
+  try {
+    const content = readFileSync(skillPath, 'utf-8')
+    res.set('Content-Type', 'text/markdown; charset=utf-8')
+    res.set('Cache-Control', 'public, max-age=3600')
+    res.send(content)
+  } catch {
+    res.status(404).send('SKILL.md not found')
+  }
 })
 
 // llms.txt — machine-readable project summary for AI agents
