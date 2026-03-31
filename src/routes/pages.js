@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { adminAuth } from '../middleware/admin-auth.js'
 import { readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -345,8 +346,9 @@ router.get('/demo', (req, res) => {
   res.redirect(301, '/')
 })
 
-// Admin dashboard (auth is client-side via API calls)
-router.get('/admin', (req, res) => {
+// Admin dashboard — server-side auth gate (issue #14)
+// Reuses adminAuth middleware; unauthenticated requests get 401 JSON.
+router.get('/admin', adminAuth, (req, res) => {
   res.send(adminPage())
 })
 
