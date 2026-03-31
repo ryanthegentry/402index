@@ -194,6 +194,7 @@ submit_review() {
             log "PR comment fallback also failed for PR #${pr_number}: ${comment_err}"
         fi
     fi
+    $review_ok
 }
 
 # Set commit status on the PR HEAD SHA for the dispatch/review context.
@@ -620,6 +621,10 @@ Include your full analysis above the verdict line. PR #${pr_number} in repo ${RE
         fi
     else
         set_review_status "$pr_number" "error" "Bot produced empty review output"
+        log "Empty review body — aborting review chain for PR #${pr_number}"
+        rollback_issue "$issue_number" "$dispatch_label"
+        rm -f "$tmpfile"
+        return 1
     fi
     rm -f "$tmpfile"
 
