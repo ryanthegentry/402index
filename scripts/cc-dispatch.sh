@@ -150,27 +150,38 @@ parse_verdict_from_output() {
 }
 
 # Submit a formal PR review on behalf of the bot.
-# This is deterministic — the script always posts the review, not the agent.
+# Uses BOT_TOKEN so the review comes from 402index-bot (a different identity than
+# the PR author, which is Ryan). This avoids GitHub's "can't review your own PR" error.
+# Falls back to gh pr comment if the formal review fails for any reason.
 submit_review() {
     local pr_number="$1"
     local verdict="$2"
     local review_body="$3"
+    local review_ok=false
 
-    case "$verdict" in
-        APPROVED)
-            gh pr review "$pr_number" --repo "$REPO" --approve \
-                --body "$review_body" 2>/dev/null
-            ;;
-        CHANGES_REQUESTED)
-            gh pr review "$pr_number" --repo "$REPO" --request-changes \
-                --body "$review_body" 2>/dev/null
-            ;;
-        *)
-            # Unknown verdict — post as comment, don't approve or reject
-            gh pr review "$pr_number" --repo "$REPO" --comment \
-                --body "$review_body" 2>/dev/null
-            ;;
-    esac
+    if [[ -n "$BOT_TOKEN" ]]; then
+        case "$verdict" in
+            APPROVED)
+                GH_TOKEN="$BOT_TOKEN" gh pr review "$pr_number" --repo "$REPO" --approve \
+                    --body "$review_body" 2>/dev/null && review_ok=true
+                ;;
+            CHANGES_REQUESTED)
+                GH_TOKEN="$BOT_TOKEN" gh pr review "$pr_number" --repo "$REPO" --request-changes \
+                    --body "$review_body" 2>/dev/null && review_ok=true
+                ;;
+            *)
+                GH_TOKEN="$BOT_TOKEN" gh pr review "$pr_number" --repo "$REPO" --comment \
+                    --body "$review_body" 2>/dev/null && review_ok=true
+                ;;
+        esac
+    fi
+
+    # Fallback: if formal review failed (or no bot token), post as a regular comment
+    if ! $review_ok; then
+        log "Formal review failed or no bot token — falling back to PR comment"
+        gh pr comment "$pr_number" --repo "$REPO" \
+            --body "**[${verdict}]** ${review_body}" 2>/dev/null
+    fi
 }
 
 # ── Parse args ─────────────────────────────────────────────────────
@@ -197,13 +208,15 @@ ensure_deps() {
     done
     gh auth status &>/dev/null || { err "gh not authenticated. Run: gh auth login"; exit 1; }
 
-    # Export bot token so claude --print subprocesses use the bot identity for gh commands
+    # Load bot token for review submission (NOT exported — agents use default gh auth
+    # so PRs are created as Ryan, not the bot. This avoids GitHub's "can't review your
+    # own PR" restriction when the bot tries to review a PR it authored.)
     if [[ -f "$BOT_TOKEN_FILE" ]]; then
-        export GH_TOKEN
-        GH_TOKEN=$(cat "$BOT_TOKEN_FILE")
+        BOT_TOKEN=$(cat "$BOT_TOKEN_FILE")
         log "Bot token loaded from ${BOT_TOKEN_FILE}"
     else
-        log "WARNING: Bot token not found at ${BOT_TOKEN_FILE} — agents will use default gh auth"
+        BOT_TOKEN=""
+        log "WARNING: Bot token not found at ${BOT_TOKEN_FILE} — reviews will post as default gh user"
     fi
 }
 
