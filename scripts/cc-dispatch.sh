@@ -22,6 +22,8 @@
 #   - gh CLI authenticated (gh auth login)
 #   - claude CLI on PATH
 #   - Git repo cloned at REPO_DIR
+#   - Branch protection: require "dispatch/review" status check to block
+#     merge on failed bot reviews (configure in GitHub repo settings)
 #
 # Config: edit these or set env vars before running.
 
@@ -192,6 +194,22 @@ submit_review() {
             log "PR comment fallback also failed for PR #${pr_number}: ${comment_err}"
         fi
     fi
+    $review_ok
+}
+
+# Set commit status on the PR HEAD SHA for the dispatch/review context.
+# Used as a merge-blocking signal when branch protection is configured.
+# Fails silently (|| true) to avoid blocking the pipeline on API errors.
+set_review_status() {
+    local pr_number="$1" state="$2" description="$3"
+    local sha
+    sha=$(gh pr view "$pr_number" --repo "$REPO" --json headRefOid -q .headRefOid 2>/dev/null)
+    if [[ -n "$sha" ]]; then
+        gh api "repos/${REPO}/statuses/${sha}" \
+            -f state="$state" \
+            -f context="dispatch/review" \
+            -f description="$description" 2>/dev/null || true
+    fi
 }
 
 # ── Parse args ─────────────────────────────────────────────────────
@@ -243,6 +261,7 @@ ensure_labels() {
         "needs-review:0075CA:Implementation complete — needs review"
         "red-team-complete:0075CA:Red-team review complete"
         "needs-manual-review:B60205:Revision limit reached — needs human review"
+        "review-failed:B60205:Bot review crashed — needs investigation"
     )
     for entry in "${labels[@]}"; do
         IFS=: read -r name color desc <<< "$entry"
@@ -552,6 +571,10 @@ ${review_context}
 
 Follow your review protocol. Analyze the code thoroughly.
 
+ADDITIONAL REVIEW REQUIREMENTS:
+- If the PR modifies files under src/queries/, verify that integration tests exist which create an in-memory SQLite DB, insert test rows, execute the generated SQL, and assert on results. Flag CHANGES_REQUESTED if missing.
+- Check git log on the PR branch. Verify that at least one commit adds/modifies test files and precedes the commit that modifies source files. If all test changes come in the same commit as or after implementation, flag for TDD non-compliance.
+
 IMPORTANT — OUTPUT FORMAT:
 Do NOT run gh pr review yourself. Instead, output your verdict as a marker line:
   VERDICT:APPROVE        — if the code is safe and correct
@@ -559,6 +582,9 @@ Do NOT run gh pr review yourself. Instead, output your verdict as a marker line:
 
 The dispatch script will submit the formal GitHub review on your behalf.
 Include your full analysis above the verdict line. PR #${pr_number} in repo ${REPO}."
+
+    # Set pending commit status before CC runs
+    set_review_status "$pr_number" "pending" "Bot review in progress"
 
     log "Starting CC review-pr session (logging to ${logfile})"
     local cc_output
@@ -568,6 +594,8 @@ Include your full analysis above the verdict line. PR #${pr_number} in repo ${RE
 
     if [ $cc_exit -ne 0 ]; then
         err "CC PR review failed (exit ${cc_exit}) for issue #${issue_number}"
+        set_review_status "$pr_number" "failure" "Bot review crashed (exit ${cc_exit})"
+        gh pr edit "$pr_number" --repo "$REPO" --add-label "review-failed" 2>/dev/null || true
         rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
         return 1
     fi
@@ -584,8 +612,19 @@ Include your full analysis above the verdict line. PR #${pr_number} in repo ${RE
     if [ -s "$tmpfile" ]; then
         head -c 4000 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
         # Script submits the formal review — not the agent
-        submit_review "$pr_number" "$verdict" "$(cat "$tmpfile")"
-        log "Formal review submitted: ${verdict}"
+        if submit_review "$pr_number" "$verdict" "$(cat "$tmpfile")"; then
+            set_review_status "$pr_number" "success" "Bot review complete: ${verdict}"
+            log "Formal review submitted: ${verdict}"
+        else
+            set_review_status "$pr_number" "error" "Review submission failed"
+            log "Review submission failed for PR #${pr_number}"
+        fi
+    else
+        set_review_status "$pr_number" "error" "Bot produced empty review output"
+        log "Empty review body — aborting review chain for PR #${pr_number}"
+        rollback_issue "$issue_number" "$dispatch_label"
+        rm -f "$tmpfile"
+        return 1
     fi
     rm -f "$tmpfile"
 

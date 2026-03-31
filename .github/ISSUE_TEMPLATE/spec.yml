@@ -1,0 +1,61 @@
+name: Spec
+description: Structured spec for a bug fix, feature, or improvement
+title: "Spec: "
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is broken, missing, or suboptimal?
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix
+    attributes:
+      label: Proposed Fix
+      description: How should this be fixed? Include code snippets or pseudocode if helpful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Which files need to change? List file paths and a brief description of the change in each.
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Any constraints, edge cases, or things that must NOT change.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How do we know this is done? List observable behaviors or test assertions.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: tdd
+    attributes:
+      label: TDD Compliance
+      options:
+        - label: "A failing test will be committed before the implementation fix"
+          required: true
+
+  - type: input
+    id: failing_test_sha
+    attributes:
+      label: Failing Test Commit SHA
+      description: Link to the commit that adds the failing test (fill in after committing)
+      placeholder: "e.g., abc1234"
+    validations:
+      required: false
