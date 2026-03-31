@@ -603,10 +603,9 @@ describe('Page Routes — HTTP Status', () => {
     assert.equal(r.status, 200)
   })
 
-  it('GET /admin → 200 with password form', async () => {
+  it('GET /admin → 401 without auth', async () => {
     const r = await raw('/admin')
-    assert.equal(r.status, 200)
-    assert.ok(r.text.includes('type="password"'))
+    assert.equal(r.status, 401)
   })
 
   it('GET /service/:id → 200 for valid ID', async () => {

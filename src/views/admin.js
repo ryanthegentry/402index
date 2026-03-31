@@ -323,7 +323,7 @@ export function adminPage() {
 
     function logout() {
       clearSecret()
-      showAuth()
+      window.location.reload()
     }
 
     function toast(msg, ok) {
