@@ -89,8 +89,9 @@ export function buildServiceQuery(opts = {}) {
     params.payment_asset = payment_asset
   }
   if (q && q !== '*') {
-    conditions.push("(name LIKE @q OR description LIKE @q OR url LIKE @q)")
-    params.q = `%${q}%`
+    const escaped = q.replace(/[%_\\]/g, '\\$&')
+    conditions.push("(name LIKE @q OR description LIKE @q OR url LIKE @q) ESCAPE '\\\\'")
+    params.q = `%${escaped}%`
   }
   if (featured === 'true' || featured === '1') {
     conditions.push('featured = 1')
