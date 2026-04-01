@@ -186,11 +186,11 @@ export function detailPage(service) {
         <table class="health-history">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Status</th>
-              <th>HTTP</th>
-              <th>Latency</th>
-              <th>Error</th>
+              <th scope="col">Time</th>
+              <th scope="col">Status</th>
+              <th scope="col">HTTP</th>
+              <th scope="col">Latency</th>
+              <th scope="col">Error</th>
             </tr>
           </thead>
           <tbody>${healthRows}</tbody>

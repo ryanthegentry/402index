@@ -48,7 +48,7 @@ export function layout(title, content, meta = {}) {
       </button>
     </div>
   </header>
-  ${content}
+  <main>${content}</main>
   <footer>
     <div class="container">
       <span>402 Index — paid API directory for AI agents</span>
