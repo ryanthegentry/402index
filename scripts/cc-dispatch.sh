@@ -811,7 +811,7 @@ This marker line is machine-parsed. It MUST appear exactly as shown — no markd
     review_body=$(echo "$cc_output" | jq -r '.result // empty' 2>/dev/null)
     if [ -z "$review_body" ]; then
         # Fallback: treat entire output as text (non-JSON output edge case)
-        review_body="$cc_output"
+        review_body=$(echo "$cc_output" | grep -v '^\[')
     fi
 
     # Log both raw JSON and extracted review for debugging
@@ -819,7 +819,7 @@ This marker line is machine-parsed. It MUST appear exactly as shown — no markd
         echo "=== Extracted Review ==="
         echo "$review_body" | head -50
         echo "=== Extracted Verdict ==="
-        extract_verdict "$cc_output" "$pr_number" 2>/dev/null || echo "NONE"
+        echo "${raw_verdict:-NONE}"
     } >> "$logfile"
 
     local tmpfile
