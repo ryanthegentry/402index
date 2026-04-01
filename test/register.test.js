@@ -623,6 +623,9 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     } catch { serverAvailable = false }
     if (!serverAvailable) return t.skip('requires running 402index server')
 
+    const secret = process.env.GOLEM_GATEWAY_SECRET
+    if (!secret) return t.skip('requires GOLEM_GATEWAY_SECRET env var')
+
     const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${VALID_INVOICE}"`
     const { server, port } = await startMockL402Server(wwwAuth)
     try {
