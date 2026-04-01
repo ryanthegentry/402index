@@ -1358,6 +1358,50 @@ echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
     })
   })
 
+  // ── Issue #50: review-issue double-posting fix ─────────────────────
+
+  describe('review-issue double-posting fix (#50)', () => {
+    it('review-issue prompt contains "Do NOT run gh issue comment"', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_issue()')
+      const fnEnd = content.indexOf('\n}', fnStart + 200)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('Do NOT run gh issue comment'),
+        'dispatch_review_issue prompt must explicitly forbid agent from posting comments'
+      )
+    })
+
+    it('review-issue prompt tells agent to output findings directly', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_issue()')
+      const fnEnd = content.indexOf('\n}', fnStart + 200)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('output your full review findings directly'),
+        'dispatch_review_issue prompt must tell agent to output findings for script to post'
+      )
+    })
+  })
+
+  // ── Issue #50: worktree --detach fix ──────────────────────────────
+
+  describe('worktree detach fix (#50)', () => {
+    it('dispatch_issue uses worktree add --detach', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_issue()')
+      const fnEnd = content.indexOf('\n# ── Main loop', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('worktree add --detach'),
+        'dispatch_issue must use --detach to avoid branch-already-in-use error'
+      )
+    })
+  })
+
   // ── Comment accuracy ─────────────────────────────────────────────
 
   describe('comment accuracy', () => {
