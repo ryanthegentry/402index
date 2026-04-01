@@ -292,7 +292,7 @@ describe('cc-dispatch.sh', () => {
       const fnBody = content.slice(fnStart, fnEnd)
 
       assert.ok(
-        fnBody.includes('parse_verdict_from_output'),
+        fnBody.includes('extract_verdict'),
         'dispatch_review_pr must parse verdict from CC output'
       )
     })
@@ -337,31 +337,53 @@ describe('cc-dispatch.sh', () => {
   // ── dispatch_review_pr verdict detection ─────────────────────────
 
   describe('review verdict detection', () => {
-    it('parse_verdict_from_output returns APPROVED for VERDICT:APPROVE marker', () => {
-      const result = callFn('parse_verdict_from_output', 'Some review text\nVERDICT:APPROVE', '999')
-      assert.equal(result, 'APPROVED')
+    it('extract_verdict returns APPROVE for VERDICT:APPROVE marker', () => {
+      const result = callFn('extract_verdict', 'Some review text\nVERDICT:APPROVE', '999')
+      assert.equal(result, 'APPROVE')
     })
 
-    it('parse_verdict_from_output returns CHANGES_REQUESTED for VERDICT:REQUEST_CHANGES marker', () => {
-      const result = callFn('parse_verdict_from_output', 'Some review text\nVERDICT:REQUEST_CHANGES', '999')
-      assert.equal(result, 'CHANGES_REQUESTED')
+    it('extract_verdict returns REQUEST_CHANGES for VERDICT:REQUEST_CHANGES marker', () => {
+      const result = callFn('extract_verdict', 'Some review text\nVERDICT:REQUEST_CHANGES', '999')
+      assert.equal(result, 'REQUEST_CHANGES')
     })
 
-    it('parse_verdict_from_output falls back to keyword matching', () => {
-      const result = callFn('parse_verdict_from_output', 'QA Review: APPROVED\nAll tests pass.', '999')
-      assert.equal(result, 'APPROVED')
+    it('extract_verdict falls back to keyword matching', () => {
+      const result = callFn('extract_verdict', 'QA Review: APPROVED\nAll tests pass.', '999')
+      assert.equal(result, 'APPROVE')
     })
 
-    it('parse_verdict_from_output prefers REQUEST_CHANGES over APPROVED in keyword fallback', () => {
-      const result = callFn('parse_verdict_from_output', 'Some things APPROVED but also CHANGES REQUESTED for demo.js', '999')
-      assert.equal(result, 'CHANGES_REQUESTED')
+    it('extract_verdict prefers REQUEST_CHANGES over APPROVED in keyword fallback', () => {
+      const inputFile = path.join(os.tmpdir(), `cc-input-${Date.now()}.txt`)
+      fs.writeFileSync(inputFile, 'Some things APPROVED but also CHANGES REQUESTED for demo.js')
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+input=$(cat "${inputFile}")
+extract_verdict "$input" "999"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.equal(out, 'REQUEST_CHANGES')
+      } finally {
+        fs.unlinkSync(tmpfile)
+        fs.unlinkSync(inputFile)
+      }
     })
 
-    it('parse_verdict_from_output and submit_review functions exist', () => {
+    it('extract_verdict and submit_review functions exist', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       assert.ok(
-        content.includes('parse_verdict_from_output'),
-        'parse_verdict_from_output function must exist for verdict parsing'
+        content.includes('extract_verdict'),
+        'extract_verdict function must exist for verdict parsing'
       )
       assert.ok(
         content.includes('submit_review'),
@@ -659,9 +681,9 @@ describe('cc-dispatch.sh', () => {
       const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
 
-      // pending must appear before claude --print
+      // pending must appear before claude invocation
       const pendingIdx = fnBody.indexOf('set_review_status')
-      const claudeIdx = fnBody.indexOf('claude --print')
+      const claudeIdx = fnBody.indexOf('claude -p')
       assert.ok(pendingIdx !== -1, 'dispatch_review_pr must call set_review_status')
       assert.ok(pendingIdx < claudeIdx, 'pending status must be set before CC runs')
     })
@@ -1398,6 +1420,325 @@ echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
       assert.ok(
         fnBody.includes('worktree add --detach'),
         'dispatch_issue must use --detach to avoid branch-already-in-use error'
+      )
+    })
+  })
+
+  // ── Issue #53: Deterministic verdict extraction + JSON output ────
+
+  describe('extract_verdict (#53)', () => {
+    it('extract_verdict function exists (replaces parse_verdict_from_output)', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('extract_verdict()'),
+        'extract_verdict() function must exist'
+      )
+    })
+
+    it('extracts APPROVE from explicit VERDICT marker', () => {
+      const result = callFn('extract_verdict', 'Some review text\nVERDICT:APPROVE', '999')
+      assert.equal(result, 'APPROVE')
+    })
+
+    it('extracts REQUEST_CHANGES from explicit VERDICT marker', () => {
+      const result = callFn('extract_verdict', 'Some review text\nVERDICT:REQUEST_CHANGES', '999')
+      assert.equal(result, 'REQUEST_CHANGES')
+    })
+
+    it('extracts verdict from JSON-wrapped output', () => {
+      // Use heredoc-based script to avoid JSON quoting issues with callFn
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+json_input='{"result":"Review looks good.\\nVERDICT:APPROVE","cost_usd":0.01}'
+extract_verdict "$json_input" "999"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.equal(out, 'APPROVE')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('handles ### Verdict header format (PR #51 sonnet failure)', () => {
+      // Sonnet produced "### Verdict: Approved" instead of VERDICT:APPROVE
+      // Tier 2 should catch this with case-insensitive prefix match
+      const inputFile = path.join(os.tmpdir(), `cc-input-${Date.now()}.txt`)
+      fs.writeFileSync(inputFile, '### Test Coverage\nAll good\n### Verdict: Approved\nGreat work')
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+input=$(cat "${inputFile}")
+extract_verdict "$input" "999"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.equal(out, 'APPROVE')
+      } finally {
+        fs.unlinkSync(tmpfile)
+        fs.unlinkSync(inputFile)
+      }
+    })
+
+    it('tier 2 catches "Review: Approved" case-insensitively', () => {
+      const inputFile = path.join(os.tmpdir(), `cc-input-${Date.now()}.txt`)
+      fs.writeFileSync(inputFile, 'QA Review: approved\nAll tests pass.')
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+input=$(cat "${inputFile}")
+extract_verdict "$input" "999"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.equal(out, 'APPROVE')
+      } finally {
+        fs.unlinkSync(tmpfile)
+        fs.unlinkSync(inputFile)
+      }
+    })
+
+    it('bare APPROVED match is case-sensitive (avoids false positives)', () => {
+      // "the approach was approved by the team" should NOT match as APPROVE
+      // when there's also a REQUEST_CHANGES verdict
+      const result = callFn('extract_verdict', 'the approach was approved by the team\nVERDICT:REQUEST_CHANGES', '999')
+      assert.equal(result, 'REQUEST_CHANGES')
+    })
+
+    it('REQUEST_CHANGES takes priority over APPROVE in ambiguous output', () => {
+      const inputFile = path.join(os.tmpdir(), `cc-input-${Date.now()}.txt`)
+      fs.writeFileSync(inputFile, 'Some things APPROVED but also CHANGES REQUESTED for demo.js')
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+input=$(cat "${inputFile}")
+extract_verdict "$input" "999"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.equal(out, 'REQUEST_CHANGES')
+      } finally {
+        fs.unlinkSync(tmpfile)
+        fs.unlinkSync(inputFile)
+      }
+    })
+
+    it('returns exit code 1 on missing verdict', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+if extract_verdict "no verdict here" "" >/dev/null 2>&1; then
+    echo "EXIT=0"
+else
+    echo "EXIT=1"
+fi
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('EXIT=1'), 'extract_verdict must return exit code 1 on missing verdict')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('uses POSIX [[:space:]] not \\s in grep patterns', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('extract_verdict()')
+      const fnEnd = content.indexOf('\n}', fnStart + 100)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('[[:space:]]'),
+        'extract_verdict must use [[:space:]] for POSIX ERE portability (not \\s)'
+      )
+      // Check grep lines only (not comments) for \s usage
+      const grepLines = fnBody.split('\n').filter(l => l.includes('grep') && !l.trimStart().startsWith('#'))
+      for (const line of grepLines) {
+        assert.ok(
+          !line.includes('\\s'),
+          `grep pattern must not use \\s (PCRE-only): ${line.trim()}`
+        )
+      }
+    })
+  })
+
+  describe('validate_cc_output missing verdict is transient (#53)', () => {
+    it('missing VERDICT in review-pr sets TRANSIENT=true (retryable)', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "Some review text without verdict" "review-pr"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('OK=false'), 'missing verdict must set VALIDATION_OK=false')
+        assert.ok(out.includes('TRANSIENT=true'), 'missing verdict must set VALIDATION_TRANSIENT=true (retryable, not permanent)')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+  })
+
+  describe('dispatch_review_pr JSON output (#53)', () => {
+    it('CC invocation uses --output-format json', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n}', fnStart + 200)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('--output-format json'),
+        'dispatch_review_pr must use --output-format json for CC invocation'
+      )
+    })
+
+    it('body extraction uses jq with fallback', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n}', fnStart + 200)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('jq -r'),
+        'dispatch_review_pr must extract review body via jq'
+      )
+      assert.ok(
+        fnBody.includes('.result'),
+        'dispatch_review_pr must extract .result field from JSON envelope'
+      )
+    })
+
+    it('ensure_deps checks for jq', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('ensure_deps()')
+      const fnEnd = content.indexOf('\n}', fnStart) + 2
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('jq'),
+        'ensure_deps must check for jq command'
+      )
+    })
+
+    it('dispatch_review_pr calls extract_verdict (not parse_verdict_from_output)', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n}', fnStart + 200)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('extract_verdict'),
+        'dispatch_review_pr must call extract_verdict'
+      )
+      assert.ok(
+        !fnBody.includes('parse_verdict_from_output'),
+        'dispatch_review_pr must not call parse_verdict_from_output (replaced by extract_verdict)'
+      )
+    })
+
+    it('VERDICT prompt instruction includes "no markdown headers" language', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n}', fnStart + 200)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('no markdown') || fnBody.includes('No markdown'),
+        'VERDICT prompt must warn against markdown header formatting'
+      )
+    })
+
+    it('dispatch logs contain extracted review and verdict sections', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n}', fnStart + 200)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('Extracted Review') && fnBody.includes('Extracted Verdict'),
+        'dispatch_review_pr must log extracted review and verdict for debugging'
+      )
+    })
+  })
+
+  describe('agent configs VERDICT instruction (#53)', () => {
+    it('qa-reviewer.md has explicit VERDICT formatting guidance', () => {
+      const content = fs.readFileSync(path.resolve('.claude/agents/qa-reviewer.md'), 'utf-8')
+      assert.ok(
+        content.includes('VERDICT:APPROVE') && content.includes('VERDICT:REQUEST_CHANGES'),
+        'qa-reviewer.md must show exact VERDICT format'
+      )
+      assert.ok(
+        content.includes('Do NOT use markdown headers') || content.includes('Do NOT use markdown'),
+        'qa-reviewer.md must warn against markdown header formatting for VERDICT'
+      )
+    })
+
+    it('security-reviewer.md has explicit VERDICT formatting guidance', () => {
+      const content = fs.readFileSync(path.resolve('.claude/agents/security-reviewer.md'), 'utf-8')
+      assert.ok(
+        content.includes('VERDICT:APPROVE') && content.includes('VERDICT:REQUEST_CHANGES'),
+        'security-reviewer.md must show exact VERDICT format'
+      )
+      assert.ok(
+        content.includes('Do NOT use markdown headers') || content.includes('Do NOT use markdown'),
+        'security-reviewer.md must warn against markdown header formatting for VERDICT'
       )
     })
   })
