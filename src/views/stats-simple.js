@@ -14,7 +14,7 @@ export function statsSimplePage({ latency, categoryGap }) {
       <h2>How Fast Is the Paid API Economy?</h2>
       <div class="table-wrap">
         <table class="stats-table stats-table-compact">
-          <thead><tr><th>Protocol</th><th>Median Latency</th><th>p90 Latency</th><th>% Under 500ms</th></tr></thead>
+          <thead><tr><th scope="col">Protocol</th><th scope="col">Median Latency</th><th scope="col">p90 Latency</th><th scope="col">% Under 500ms</th></tr></thead>
           <tbody>
             ${['L402', 'x402', 'MPP'].map(proto => {
               const s = latency.protocolSummary[proto]
@@ -35,11 +35,11 @@ export function statsSimplePage({ latency, categoryGap }) {
         <table class="stats-table stats-gap-table">
           <thead>
             <tr>
-              <th>Category</th>
-              <th class="gap-col-l402">L402</th>
-              <th class="gap-col-x402">x402</th>
-              <th class="gap-col-mpp">MPP</th>
-              <th>Total</th>
+              <th scope="col">Category</th>
+              <th scope="col" class="gap-col-l402">L402</th>
+              <th scope="col" class="gap-col-x402">x402</th>
+              <th scope="col" class="gap-col-mpp">MPP</th>
+              <th scope="col">Total</th>
             </tr>
           </thead>
           <tbody>

@@ -84,13 +84,13 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
       <table class="services-table">
         <thead>
           <tr>
-            <th>Service</th>
-            <th>Protocol</th>
-            <th>Price</th>
-            <th>Category</th>
-            <th>Health</th>
-            <th>Latency</th>
-            <th>Source</th>
+            <th scope="col">Service</th>
+            <th scope="col">Protocol</th>
+            <th scope="col">Price</th>
+            <th scope="col">Category</th>
+            <th scope="col">Health</th>
+            <th scope="col">Latency</th>
+            <th scope="col">Source</th>
           </tr>
         </thead>
         <tbody>

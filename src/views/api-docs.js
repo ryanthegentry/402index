@@ -29,7 +29,7 @@ export function apiDocsPage() {
           <p>List and search services with filtering, sorting, and pagination.</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>protocol</td><td>string</td><td>Filter by protocol: <code>l402</code> or <code>x402</code></td></tr>
@@ -87,7 +87,7 @@ export function apiDocsPage() {
           <p>Register a paid API endpoint (L402, x402, or MPP). The URL is probed to verify protocol compliance. Registrations are reviewed before appearing in the directory. Rate limited to 10 registrations per hour per IP.</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>url</td><td>string</td><td><strong>Required.</strong> The endpoint URL to register</td></tr>
@@ -116,7 +116,7 @@ export function apiDocsPage() {
           <p style="margin-top:12px"><strong>Response codes:</strong></p>
           <table class="params-table">
             <thead>
-              <tr><th>Status</th><th>Meaning</th></tr>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
             </thead>
             <tbody>
               <tr><td><code>201</code></td><td>Registered and pending review. Returns the service record (with <code>status: "pending"</code>) and verification details. Re-registering an existing URL+protocol updates the record.</td></tr>
@@ -149,7 +149,7 @@ export function apiDocsPage() {
           <p style="margin-top:12px"><strong>Response codes:</strong></p>
           <table class="params-table">
             <thead>
-              <tr><th>Status</th><th>Meaning</th></tr>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
             </thead>
             <tbody>
               <tr><td><code>200</code></td><td>CSV file download (<code>Content-Type: text/csv</code>)</td></tr>
@@ -168,7 +168,7 @@ export function apiDocsPage() {
           <p>RSS 2.0 feed of indexed services with a custom <code>l402:service</code> XML namespace. Each item includes <code>&lt;l402:endpoint&gt;</code>, <code>&lt;l402:protocol&gt;</code>, and <code>&lt;l402:price&gt;</code> tags.</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>protocol</td><td>string</td><td>Filter: <code>L402</code> or <code>x402</code></td></tr>
@@ -187,7 +187,7 @@ export function apiDocsPage() {
           <p>Ecosystem gap analysis — identifies categories with poor coverage, missing protocols, single-provider dependencies, and failing services. Useful for developers looking for underserved niches.</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>protocol</td><td>string</td><td>Filter opportunities by protocol: <code>L402</code> or <code>x402</code></td></tr>
@@ -204,7 +204,7 @@ export function apiDocsPage() {
           <p>Register a webhook to receive real-time notifications when services are added, change health, or go down. Deliveries are signed with HMAC-SHA256 (<code>X-402Index-Signature</code> header). Rate limited to 5 registrations per hour per IP.</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>url</td><td>string</td><td><strong>Required.</strong> HTTPS callback URL</td></tr>
@@ -223,7 +223,7 @@ export function apiDocsPage() {
           <p style="margin-top:12px"><strong>Management:</strong></p>
           <table class="params-table">
             <thead>
-              <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+              <tr><th scope="col">Method</th><th scope="col">Path</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td><code>GET</code></td><td><code>/api/v1/webhooks/:id</code></td><td>Check webhook status. Requires <code>X-Webhook-Secret</code> header.</td></tr>
@@ -274,7 +274,7 @@ export function apiDocsPage() {
         <p>The following fields are present in the schema but currently <code>null</code> for all services. They will be populated as providers adopt these standards.</p>
         <table class="params-table">
           <thead>
-            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            <tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Description</th></tr>
           </thead>
           <tbody>
             <tr><td>l402_version</td><td>string</td><td>Protocol version (bLIP-0026)</td></tr>
@@ -291,7 +291,7 @@ export function apiDocsPage() {
         <p>API endpoints are rate-limited to ensure fair usage. Pay via Lightning Network to unlock higher limits.</p>
         <table class="params-table">
           <thead>
-            <tr><th>Tier</th><th>Limit</th><th>How</th></tr>
+            <tr><th scope="col">Tier</th><th scope="col">Limit</th><th scope="col">How</th></tr>
           </thead>
           <tbody>
             <tr><td>Free</td><td>100 req/min per IP</td><td>No auth needed</td></tr>
@@ -313,7 +313,7 @@ export function apiDocsPage() {
           <p>Initiate a domain claim. Returns a verification token (keep secret for API auth) and a verification hash (post publicly at <code>.well-known</code>).</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Hostname to claim (e.g. <code>api.example.com</code>). No protocol, path, or port.</td></tr>
@@ -326,7 +326,7 @@ export function apiDocsPage() {
           <p style="margin-top:12px"><strong>Response codes:</strong></p>
           <table class="params-table">
             <thead>
-              <tr><th>Status</th><th>Meaning</th></tr>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
             </thead>
             <tbody>
               <tr><td><code>201</code></td><td>New claim created. Returns <code>verification_token</code>, <code>verification_hash</code>, <code>verification_url</code>, and <code>instructions</code>.</td></tr>
@@ -345,7 +345,7 @@ export function apiDocsPage() {
           <p>Verify a pending domain claim. Fetches the <code>.well-known/402index-verify.txt</code> file from the domain and compares the SHA-256 hash.</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Domain to verify</td></tr>
@@ -357,7 +357,7 @@ export function apiDocsPage() {
           <p style="margin-top:12px"><strong>Response codes:</strong></p>
           <table class="params-table">
             <thead>
-              <tr><th>Status</th><th>Meaning</th></tr>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
             </thead>
             <tbody>
               <tr><td><code>200</code></td><td>Domain verified. Returns <code>domain</code>, <code>status: "verified"</code>, and <code>services_count</code>.</td></tr>
@@ -378,7 +378,7 @@ export function apiDocsPage() {
           <p>Revoke a verified domain claim. Invalidates the token immediately. Re-initiate the claim flow to get a new token.</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Verified domain to revoke</td></tr>
@@ -394,7 +394,7 @@ export function apiDocsPage() {
           <p style="margin-top:12px"><strong>Response codes:</strong></p>
           <table class="params-table">
             <thead>
-              <tr><th>Status</th><th>Meaning</th></tr>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
             </thead>
             <tbody>
               <tr><td><code>200</code></td><td>Claim revoked. Returns <code>status: "revoked"</code> and next-steps message.</td></tr>
@@ -413,7 +413,7 @@ export function apiDocsPage() {
           <p>Edit a listing by verified domain owner. The service URL hostname must match the claimed domain.</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Your verified domain</td></tr>
@@ -438,7 +438,7 @@ export function apiDocsPage() {
           <p style="margin-top:12px"><strong>Response codes:</strong></p>
           <table class="params-table">
             <thead>
-              <tr><th>Status</th><th>Meaning</th></tr>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
             </thead>
             <tbody>
               <tr><td><code>200</code></td><td>Service updated. Returns the full updated service record.</td></tr>
@@ -457,7 +457,7 @@ export function apiDocsPage() {
           <p>Soft-delete a listing by verified domain owner. The service is hidden from all queries, health checks, and pollers. Permanently purged after 30 days. Idempotent &mdash; deleting an already-deleted service returns 200.</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>domain</td><td>string</td><td><strong>Required.</strong> Your verified domain</td></tr>
@@ -473,7 +473,7 @@ export function apiDocsPage() {
           <p style="margin-top:12px"><strong>Response codes:</strong></p>
           <table class="params-table">
             <thead>
-              <tr><th>Status</th><th>Meaning</th></tr>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
             </thead>
             <tbody>
               <tr><td><code>200</code></td><td>Service soft-deleted (or already deleted). Returns <code>id</code> and confirmation message.</td></tr>
@@ -492,7 +492,7 @@ export function apiDocsPage() {
           <p>Bulk soft-delete up to 25 listings at once. Same auth as single delete. Services whose URL doesn't match the claimed domain are skipped (not rejected).</p>
           <table class="params-table">
             <thead>
-              <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
             </thead>
             <tbody>
               <tr><td>ids</td><td>array</td><td><strong>Required.</strong> Array of service IDs to delete (max 25)</td></tr>
@@ -510,7 +510,7 @@ export function apiDocsPage() {
           <p style="margin-top:12px"><strong>Response codes:</strong></p>
           <table class="params-table">
             <thead>
-              <tr><th>Status</th><th>Meaning</th></tr>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
             </thead>
             <tbody>
               <tr><td><code>200</code></td><td>Returns <code>deleted</code> (array of IDs), <code>skipped</code> (array of IDs), and <code>reasons</code> (object with skip reasons).</td></tr>
@@ -554,7 +554,7 @@ export function apiDocsPage() {
 
           <h4>Available Tools</h4>
           <table class="params-table">
-            <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+            <thead><tr><th scope="col">Tool</th><th scope="col">Description</th></tr></thead>
             <tbody>
               <tr><td><code>search_services</code></td><td>Search/filter paid APIs by protocol, category, health, price</td></tr>
               <tr><td><code>get_service_detail</code></td><td>Full details + health check history for a service</td></tr>
