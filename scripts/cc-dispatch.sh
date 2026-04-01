@@ -36,6 +36,7 @@ DRY_RUN=false
 WATCH=false
 POLL_INTERVAL=300
 MAX_REVISIONS=3
+MAX_CONCURRENT="${MAX_CONCURRENT:-3}"
 
 # All dispatch labels the script watches for
 DISPATCH_LABELS=(
@@ -246,6 +247,13 @@ ensure_deps() {
         BOT_TOKEN=""
         log "WARNING: Bot token not found at ${BOT_TOKEN_FILE} — reviews will post as default gh user"
     fi
+
+    # Clean orphaned worktrees from prior crashes
+    (cd "$REPO_DIR" 2>/dev/null && git worktree prune 2>/dev/null) || true
+
+    # Log rotation: remove old logs and status files
+    find "$LOG_DIR" -name "*.log" -mtime +30 -delete 2>/dev/null
+    find "$LOG_DIR" -name "*.status" -mtime +7 -delete 2>/dev/null
 }
 
 ensure_labels() {
@@ -313,6 +321,51 @@ rollback_issue() {
         --remove-label "in-progress" --add-label "$dispatch_label"
 }
 
+# ── CC output validation ──────────────────────────────────────────
+# Returns via global variables: VALIDATION_OK (true/false), VALIDATION_TRANSIENT (true/false)
+validate_cc_output() {
+    local output="$1" mode="$2"
+    VALIDATION_OK=true
+    VALIDATION_TRANSIENT=false
+
+    # Negative patterns — known API/transport errors
+    if printf '%s\n' "$output" | grep -qE 'API Error:|overloaded_error|rate_limit_error|server_error|ECONNREFUSED|ETIMEDOUT'; then
+        VALIDATION_OK=false
+        VALIDATION_TRANSIENT=true
+        return
+    fi
+
+    # Empty or near-empty output
+    if [[ -z "$output" ]]; then
+        VALIDATION_OK=false
+        VALIDATION_TRANSIENT=false
+        return
+    fi
+
+    # Positive patterns — mode-specific expected content
+    case "$mode" in
+        review-pr)
+            # Review handlers MUST produce a VERDICT line
+            if ! printf '%s\n' "$output" | grep -qE 'VERDICT:(APPROVE|REQUEST_CHANGES)'; then
+                VALIDATION_OK=false
+                VALIDATION_TRANSIENT=false
+            fi
+            ;;
+        review-issue)
+            # Issue reviews should contain substantive content (markdown headers, findings)
+            # A raw error message won't have these
+            if ! printf '%s\n' "$output" | grep -qE '^#+[[:space:]]|\*\*|^-[[:space:]]'; then
+                VALIDATION_OK=false
+                VALIDATION_TRANSIENT=false
+            fi
+            ;;
+        implement|revise)
+            # Implementation validation is handled by existing git-diff checks
+            # (line 388 for implement, line 729 for revise) — no additional check needed
+            ;;
+    esac
+}
+
 mkdir -p "$LOG_DIR"
 
 # ── Implement mode: branch → CC → commit → PR ────────────────────
@@ -362,14 +415,55 @@ When done, summarize what you changed and why."
     fi
 
     log "Starting CC implement session (logging to ${logfile})"
+
+    # Write header to logfile
+    {
+      echo "=== CC Session ==="
+      echo "Issue: #${issue_number}"
+      echo "Label: ${dispatch_label}"
+      echo "Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "=== Prompt ==="
+      echo "$cc_prompt"
+      echo "=== Output ==="
+    } > "$logfile"
+
+    # CC execution — append raw output to logfile, also write to .out file
     local cc_output
     # shellcheck disable=SC2086
-    cc_output=$(echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile")
+    echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
     local cc_exit=$?
+    cat "${logfile}.out" >> "$logfile"
+
+    # Read raw output into variable (no header contamination)
+    cc_output=$(cat "${logfile}.out")
+    rm -f "${logfile}.out"
 
     if [ $cc_exit -ne 0 ]; then
         err "CC exited with code ${cc_exit} for issue #${issue_number}"
         rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
+        git checkout "$DEFAULT_BRANCH"
+        return 1
+    fi
+
+    # Validate CC output and retry on transient failures
+    validate_cc_output "$cc_output" "implement"
+    local retries=0 max_retries=2
+    while [[ "$VALIDATION_OK" != "true" && "$VALIDATION_TRANSIENT" == "true" && $retries -lt $max_retries ]]; do
+        retries=$((retries + 1))
+        local backoff=$(( 30 * retries ))
+        log "Transient CC failure for #${issue_number} (attempt ${retries}/${max_retries}), retrying in ${backoff}s"
+        sleep "$backoff"
+        # shellcheck disable=SC2086
+        echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
+        cc_output=$(cat "${logfile}.out")
+        echo "=== Retry ${retries} ===" >> "$logfile"
+        cat "${logfile}.out" >> "$logfile"
+        rm -f "${logfile}.out"
+        validate_cc_output "$cc_output" "implement"
+    done
+    if [[ "$VALIDATION_OK" != "true" ]]; then
+        err "CC output validation failed for #${issue_number} after ${retries} retries"
+        rollback_issue "$issue_number" "$dispatch_label" "$logfile"
         git checkout "$DEFAULT_BRANCH"
         return 1
     fi
@@ -474,14 +568,54 @@ ${issue_body}
 Follow your review protocol. Post findings as a comment on issue #${issue_number} in repo ${REPO}."
 
     log "Starting CC review-issue session (logging to ${logfile})"
+
+    # Write header to logfile
+    {
+      echo "=== CC Session ==="
+      echo "Issue: #${issue_number}"
+      echo "Label: ${dispatch_label}"
+      echo "Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "=== Prompt ==="
+      echo "$cc_prompt"
+      echo "=== Output ==="
+    } > "$logfile"
+
+    # CC execution — append raw output to logfile, also write to .out file
     local cc_output
     # shellcheck disable=SC2086
-    cc_output=$(echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile")
+    echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
     local cc_exit=$?
+    cat "${logfile}.out" >> "$logfile"
+
+    # Read raw output into variable (no header contamination)
+    cc_output=$(cat "${logfile}.out")
+    rm -f "${logfile}.out"
 
     if [ $cc_exit -ne 0 ]; then
         err "CC review failed (exit ${cc_exit}) for issue #${issue_number}"
         rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
+        return 1
+    fi
+
+    # Validate CC output and retry on transient failures
+    validate_cc_output "$cc_output" "review-issue"
+    local retries=0 max_retries=2
+    while [[ "$VALIDATION_OK" != "true" && "$VALIDATION_TRANSIENT" == "true" && $retries -lt $max_retries ]]; do
+        retries=$((retries + 1))
+        local backoff=$(( 30 * retries ))
+        log "Transient CC failure for #${issue_number} (attempt ${retries}/${max_retries}), retrying in ${backoff}s"
+        sleep "$backoff"
+        # shellcheck disable=SC2086
+        echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
+        cc_output=$(cat "${logfile}.out")
+        echo "=== Retry ${retries} ===" >> "$logfile"
+        cat "${logfile}.out" >> "$logfile"
+        rm -f "${logfile}.out"
+        validate_cc_output "$cc_output" "review-issue"
+    done
+    if [[ "$VALIDATION_OK" != "true" ]]; then
+        err "CC output validation failed for #${issue_number} after ${retries} retries"
+        rollback_issue "$issue_number" "$dispatch_label" "$logfile"
         return 1
     fi
 
@@ -587,16 +721,57 @@ Include your full analysis above the verdict line. PR #${pr_number} in repo ${RE
     set_review_status "$pr_number" "pending" "Bot review in progress"
 
     log "Starting CC review-pr session (logging to ${logfile})"
+
+    # Write header to logfile
+    {
+      echo "=== CC Session ==="
+      echo "Issue: #${issue_number}"
+      echo "Label: ${dispatch_label}"
+      echo "Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "=== Prompt ==="
+      echo "$cc_prompt"
+      echo "=== Output ==="
+    } > "$logfile"
+
+    # CC execution — append raw output to logfile, also write to .out file
     local cc_output
     # shellcheck disable=SC2086
-    cc_output=$(echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile")
+    echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
     local cc_exit=$?
+    cat "${logfile}.out" >> "$logfile"
+
+    # Read raw output into variable (no header contamination)
+    cc_output=$(cat "${logfile}.out")
+    rm -f "${logfile}.out"
 
     if [ $cc_exit -ne 0 ]; then
         err "CC PR review failed (exit ${cc_exit}) for issue #${issue_number}"
         set_review_status "$pr_number" "failure" "Bot review crashed (exit ${cc_exit})"
         gh pr edit "$pr_number" --repo "$REPO" --add-label "review-failed" 2>/dev/null || true
         rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
+        return 1
+    fi
+
+    # Validate CC output and retry on transient failures
+    validate_cc_output "$cc_output" "review-pr"
+    local retries=0 max_retries=2
+    while [[ "$VALIDATION_OK" != "true" && "$VALIDATION_TRANSIENT" == "true" && $retries -lt $max_retries ]]; do
+        retries=$((retries + 1))
+        local backoff=$(( 30 * retries ))
+        log "Transient CC failure for #${issue_number} (attempt ${retries}/${max_retries}), retrying in ${backoff}s"
+        sleep "$backoff"
+        # shellcheck disable=SC2086
+        echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
+        cc_output=$(cat "${logfile}.out")
+        echo "=== Retry ${retries} ===" >> "$logfile"
+        cat "${logfile}.out" >> "$logfile"
+        rm -f "${logfile}.out"
+        validate_cc_output "$cc_output" "review-pr"
+    done
+    if [[ "$VALIDATION_OK" != "true" ]]; then
+        err "CC output validation failed for #${issue_number} after ${retries} retries"
+        set_review_status "$pr_number" "error" "CC output validation failed"
+        rollback_issue "$issue_number" "$dispatch_label" "$logfile"
         return 1
     fi
 
@@ -689,6 +864,10 @@ dispatch_revise() {
     git checkout "$branch"
     git pull origin "$branch"
 
+    # Capture HEAD before CC runs (to detect no-change revisions)
+    local head_before
+    head_before=$(git rev-parse HEAD)
+
     # Collect ALL review feedback: formal reviews + comments + issue comments
     local review_feedback
     review_feedback=$(gh pr view "$pr_number" --repo "$REPO" --json comments,reviews \
@@ -713,14 +892,55 @@ INSTRUCTIONS:
 This is revision ${revision_count} of ${MAX_REVISIONS}. If you cannot fully address all findings, comment on the PR explaining what remains and why."
 
     log "Starting CC revise session (logging to ${logfile})"
+
+    # Write header to logfile
+    {
+      echo "=== CC Session ==="
+      echo "Issue: #${issue_number}"
+      echo "Label: ${dispatch_label}"
+      echo "Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "=== Prompt ==="
+      echo "$cc_prompt"
+      echo "=== Output ==="
+    } > "$logfile"
+
+    # CC execution — append raw output to logfile, also write to .out file
     local cc_output
     # shellcheck disable=SC2086
-    cc_output=$(echo "$cc_prompt" | claude --print $agent_flag 2>&1 | tee "$logfile")
+    echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
     local cc_exit=$?
+    cat "${logfile}.out" >> "$logfile"
+
+    # Read raw output into variable (no header contamination)
+    cc_output=$(cat "${logfile}.out")
+    rm -f "${logfile}.out"
 
     if [ $cc_exit -ne 0 ]; then
         err "CC revise failed (exit ${cc_exit}) for issue #${issue_number}"
         rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
+        git checkout "$DEFAULT_BRANCH"
+        return 1
+    fi
+
+    # Validate CC output and retry on transient failures
+    validate_cc_output "$cc_output" "revise"
+    local retries=0 max_retries=2
+    while [[ "$VALIDATION_OK" != "true" && "$VALIDATION_TRANSIENT" == "true" && $retries -lt $max_retries ]]; do
+        retries=$((retries + 1))
+        local backoff=$(( 30 * retries ))
+        log "Transient CC failure for #${issue_number} (attempt ${retries}/${max_retries}), retrying in ${backoff}s"
+        sleep "$backoff"
+        # shellcheck disable=SC2086
+        echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
+        cc_output=$(cat "${logfile}.out")
+        echo "=== Retry ${retries} ===" >> "$logfile"
+        cat "${logfile}.out" >> "$logfile"
+        rm -f "${logfile}.out"
+        validate_cc_output "$cc_output" "revise"
+    done
+    if [[ "$VALIDATION_OK" != "true" ]]; then
+        err "CC output validation failed for #${issue_number} after ${retries} retries"
+        rollback_issue "$issue_number" "$dispatch_label" "$logfile"
         git checkout "$DEFAULT_BRANCH"
         return 1
     fi
@@ -735,6 +955,16 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
     # Push to the existing branch (no new PR needed)
     git push origin "$branch"
+
+    # Gate: bail if revision produced no commits
+    local head_after
+    head_after=$(git rev-parse HEAD)
+    if [[ "$head_before" == "$head_after" ]]; then
+        log "Revision produced no changes for issue #${issue_number} — rolling back"
+        rollback_issue "$issue_number" "$dispatch_label" "$logfile"
+        git checkout "$DEFAULT_BRANCH"
+        return 1
+    fi
 
     # Post revision summary to PR
     local tmpfile
@@ -779,7 +1009,23 @@ dispatch_issue() {
         return 0
     fi
 
-    # Swap label: dispatch → in-progress
+    # Skip if already being handled by a background job
+    local issue_labels
+    issue_labels=$(gh issue view "$issue_number" --repo "$REPO" --json labels -q '[.labels[].name] | join(",")' 2>/dev/null)
+    if echo "$issue_labels" | grep -q "in-progress"; then
+        log "Skipping #${issue_number} — already in-progress"
+        return 0
+    fi
+
+    # Check concurrency — jobs -rp only returns running processes (completed are reaped)
+    local running
+    running=$(jobs -rp | wc -l | tr -d ' ')
+    if [[ "$running" -ge "$MAX_CONCURRENT" ]]; then
+        log "Concurrency limit reached (${running}/${MAX_CONCURRENT}) — skipping #${issue_number}"
+        return 0
+    fi
+
+    # Swap label: dispatch → in-progress (before spawning background job to prevent double-dispatch)
     gh issue edit "$issue_number" --repo "$REPO" \
         --remove-label "$dispatch_label" --add-label "in-progress" 2>/dev/null
 
@@ -787,25 +1033,45 @@ dispatch_issue() {
     local issue_body
     issue_body=$(gh issue view "$issue_number" --repo "$REPO" --json body -q '.body')
 
-    # Route to the appropriate handler
-    case "$mode" in
-        implement)
-            dispatch_implement "$issue_number" "$issue_title" "$issue_body" \
-                "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
-            ;;
-        revise)
-            dispatch_revise "$issue_number" "$issue_title" "$issue_body" \
-                "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
-            ;;
-        review-issue)
-            dispatch_review_issue "$issue_number" "$issue_title" "$issue_body" \
-                "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
-            ;;
-        review-pr)
-            dispatch_review_pr "$issue_number" "$issue_title" "$issue_body" \
-                "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
-            ;;
-    esac
+    # Spawn handler in background subshell
+    (
+        # For implement and revise: create isolated worktree
+        local workdir=""
+        if [[ "$mode" == "implement" || "$mode" == "revise" ]]; then
+            mkdir -p "${REPO_DIR}/.worktrees"
+            workdir=$(mktemp -d "${REPO_DIR}/.worktrees/issue-${issue_number}-XXXXXX")
+            trap 'git -C "$REPO_DIR" worktree remove --force "$workdir" 2>/dev/null' EXIT
+            git -C "$REPO_DIR" worktree add "$workdir" "$DEFAULT_BRANCH" --quiet
+            cd "$workdir"
+        fi
+
+        # Route to the appropriate handler
+        case "$mode" in
+            implement)
+                dispatch_implement "$issue_number" "$issue_title" "$issue_body" \
+                    "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
+                ;;
+            revise)
+                dispatch_revise "$issue_number" "$issue_title" "$issue_body" \
+                    "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
+                ;;
+            review-issue)
+                dispatch_review_issue "$issue_number" "$issue_title" "$issue_body" \
+                    "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
+                ;;
+            review-pr)
+                dispatch_review_pr "$issue_number" "$issue_title" "$issue_body" \
+                    "$agent_flag" "$dispatch_label" "$done_label" "$logfile"
+                ;;
+        esac
+        local handler_exit=$?
+        local status=$( [[ $handler_exit -eq 0 ]] && echo "success" || echo "failed" )
+
+        # Write status file on completion
+        echo "status=${status} issue=${issue_number} mode=${mode} ended=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > "${LOG_DIR}/issue-${issue_number}.status"
+    ) &
+    log "Background job spawned for #${issue_number} (PID $!)"
 }
 
 # ── Main loop ──────────────────────────────────────────────────────
@@ -840,8 +1106,11 @@ run_once() {
 ensure_deps
 ensure_labels
 
+# Kill all background agents on shutdown
+trap 'log "Shutting down — killing background agents"; kill $(jobs -rp) 2>/dev/null; wait; exit 130' INT TERM
+
 if $WATCH; then
-    log "Watch mode: polling every ${POLL_INTERVAL}s (${#DISPATCH_LABELS[@]} labels). Ctrl-C to stop."
+    log "Watch mode: polling every ${POLL_INTERVAL}s (${#DISPATCH_LABELS[@]} labels, max ${MAX_CONCURRENT} concurrent). Ctrl-C to stop."
     while true; do
         run_once
         log "Sleeping ${POLL_INTERVAL}s..."
@@ -849,4 +1118,6 @@ if $WATCH; then
     done
 else
     run_once
+    # Wait for all background jobs to complete in one-shot mode
+    wait
 fi
