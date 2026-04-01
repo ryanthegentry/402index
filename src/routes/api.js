@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { randomUUID } from 'crypto'
+import { randomUUID, timingSafeEqual } from 'crypto'
 import db, { logQuery } from '../db.js'
 import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/services.js'
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
@@ -634,7 +634,22 @@ router.post('/register', async (req, res) => {
     let service = registerUpsert().get(params)
 
     // Auto-approve trusted providers — probe already validated compliance above
-    if (service.status === 'pending' && body.provider === 'golem-gateway') {
+    // Requires GOLEM_GATEWAY_SECRET env var + matching X-Golem-Gateway-Secret header
+    const golemSecret = process.env.GOLEM_GATEWAY_SECRET
+    const golemHeader = req.get('x-golem-gateway-secret')
+    let golemSecretValid = false
+    if (golemSecret && golemHeader) {
+      try {
+        golemSecretValid = timingSafeEqual(
+          Buffer.from(golemSecret),
+          Buffer.from(golemHeader)
+        )
+      } catch {
+        // Length mismatch — treat as invalid
+        golemSecretValid = false
+      }
+    }
+    if (service.status === 'pending' && body.provider === 'golem-gateway' && golemSecretValid) {
       db.prepare(
         "UPDATE services SET status = 'active', approval_reason = 'golem-gateway', updated_at = datetime('now') WHERE id = ? AND status = 'pending'"
       ).run(service.id)
