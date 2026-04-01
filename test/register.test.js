@@ -17,10 +17,10 @@ import { randomUUID } from 'node:crypto'
 const BASE = process.env.API_BASE || 'http://localhost:3402'
 const API = `${BASE}/api/v1`
 
-async function register(body) {
+async function register(body, extraHeaders = {}) {
   const res = await fetch(`${API}/register`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
     body: JSON.stringify(body),
   })
   return {
@@ -585,7 +585,35 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     assert.ok(r.body.error.includes('Invalid protocol'))
   })
 
-  it('golem-gateway auto-approve still works for L402', async (t) => {
+  it('golem-gateway auto-approve works with valid secret', async (t) => {
+    const ipv6 = findPublicIpv6()
+    if (!ipv6) return t.skip('requires public IPv6')
+    let serverAvailable = false
+    try {
+      const res = await fetch(`${BASE}/api/v1/services`, { signal: AbortSignal.timeout(3000) })
+      serverAvailable = res.ok
+    } catch { serverAvailable = false }
+    if (!serverAvailable) return t.skip('requires running 402index server')
+
+    const secret = process.env.GOLEM_GATEWAY_SECRET
+    if (!secret) return t.skip('requires GOLEM_GATEWAY_SECRET env var')
+
+    const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${VALID_INVOICE}"`
+    const { server, port } = await startMockL402Server(wwwAuth)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register(
+        { url, name: 'Golem Gateway Test', protocol: 'L402', provider: 'golem-gateway' },
+        { 'x-golem-gateway-secret': secret }
+      )
+      assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.equal(r.body.service.status, 'active')
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('golem-gateway without secret header stays pending', async (t) => {
     const ipv6 = findPublicIpv6()
     if (!ipv6) return t.skip('requires public IPv6')
     let serverAvailable = false
@@ -599,9 +627,39 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     const { server, port } = await startMockL402Server(wwwAuth)
     try {
       const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
-      const r = await register({ url, name: 'Golem Gateway Test', protocol: 'L402', provider: 'golem-gateway' })
+      const r = await register(
+        { url, name: 'Golem No Secret Test', protocol: 'L402', provider: 'golem-gateway' }
+      )
       assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
-      assert.equal(r.body.service.status, 'active')
+      assert.equal(r.body.service.status, 'pending', 'should NOT auto-approve without secret header')
+    } finally {
+      await closeMockServer(server)
+    }
+  })
+
+  it('golem-gateway with wrong secret stays pending', async (t) => {
+    const ipv6 = findPublicIpv6()
+    if (!ipv6) return t.skip('requires public IPv6')
+    let serverAvailable = false
+    try {
+      const res = await fetch(`${BASE}/api/v1/services`, { signal: AbortSignal.timeout(3000) })
+      serverAvailable = res.ok
+    } catch { serverAvailable = false }
+    if (!serverAvailable) return t.skip('requires running 402index server')
+
+    const secret = process.env.GOLEM_GATEWAY_SECRET
+    if (!secret) return t.skip('requires GOLEM_GATEWAY_SECRET env var')
+
+    const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${VALID_INVOICE}"`
+    const { server, port } = await startMockL402Server(wwwAuth)
+    try {
+      const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
+      const r = await register(
+        { url, name: 'Golem Wrong Secret Test', protocol: 'L402', provider: 'golem-gateway' },
+        { 'x-golem-gateway-secret': 'wrong-secret-value' }
+      )
+      assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
+      assert.equal(r.body.service.status, 'pending', 'should NOT auto-approve with wrong secret')
     } finally {
       await closeMockServer(server)
     }
