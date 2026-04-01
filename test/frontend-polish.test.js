@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { execSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { layout } from '../src/views/layout.js'
 import { homePage } from '../src/views/home.js'
 import { detailPage } from '../src/views/detail.js'
@@ -27,6 +27,12 @@ describe('OG image optimization', () => {
     const height = info.match(/pixelHeight:\s*(\d+)/)?.[1]
     assert.equal(width, '1200', `width should be 1200, got ${width}`)
     assert.equal(height, '630', `height should be 630, got ${height}`)
+  })
+
+  it('no leftover og-image build artifacts in public/', () => {
+    const publicDir = new URL('../public/', import.meta.url).pathname
+    const ogArtifacts = readdirSync(publicDir).filter(f => f.startsWith('og-image') && f !== 'og-image.png')
+    assert.deepStrictEqual(ogArtifacts, [], `unexpected og-image artifacts: ${ogArtifacts.join(', ')}`)
   })
 
   it('meta tags declare correct dimensions matching actual image', () => {
