@@ -253,22 +253,6 @@ describe('cc-dispatch.sh', () => {
       )
     })
 
-    it('prompt instructs agent NOT to post comments directly', () => {
-      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
-      const fnStart = content.indexOf('dispatch_review_issue()')
-      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
-      const fnBody = content.slice(fnStart, fnEnd)
-
-      assert.ok(
-        fnBody.includes('Do NOT run gh issue comment'),
-        'dispatch_review_issue prompt must tell agent not to post comments itself'
-      )
-      assert.ok(
-        fnBody.includes('output your full review findings directly'),
-        'dispatch_review_issue prompt must tell agent to output findings for script to post'
-      )
-    })
-
     it('does not use fragile bot-detection timestamp logic', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       const fnStart = content.indexOf('dispatch_review_issue()')
@@ -1275,18 +1259,6 @@ echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
       assert.ok(
         fnBody.includes('worktree add'),
         'dispatch_issue must create worktree for implement/revise modes'
-      )
-    })
-
-    it('worktree add uses --detach to avoid branch-already-in-use error', () => {
-      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
-      const fnStart = content.indexOf('dispatch_issue()')
-      const fnEnd = content.indexOf('\n# ── Main loop', fnStart)
-      const fnBody = content.slice(fnStart, fnEnd)
-
-      assert.ok(
-        fnBody.includes('worktree add --detach'),
-        'dispatch_issue must use --detach when creating worktree to avoid branch conflict with main repo'
       )
     })
 

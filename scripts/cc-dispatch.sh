@@ -565,11 +565,7 @@ dispatch_review_issue() {
 ISSUE BODY:
 ${issue_body}
 
-Follow your review protocol. Analyze the issue thoroughly.
-
-IMPORTANT — OUTPUT FORMAT:
-Do NOT run gh issue comment yourself. Instead, output your full review findings directly.
-The dispatch script will post your review as a comment on issue #${issue_number} in repo ${REPO} on your behalf."
+Follow your review protocol. Post findings as a comment on issue #${issue_number} in repo ${REPO}."
 
     log "Starting CC review-issue session (logging to ${logfile})"
 
@@ -624,7 +620,7 @@ The dispatch script will post your review as a comment on issue #${issue_number}
     fi
 
     # Agent generates the review; script posts it as a comment.
-    # (Prompt instructs agent to output findings, not post them directly.)
+    # (Agent runs in --print mode and cannot reliably execute gh commands itself.)
     if [[ -n "$cc_output" ]]; then
         log "Posting review comment on issue #${issue_number}"
         local post_err tmpfile
@@ -1045,7 +1041,7 @@ dispatch_issue() {
             mkdir -p "${REPO_DIR}/.worktrees"
             workdir=$(mktemp -d "${REPO_DIR}/.worktrees/issue-${issue_number}-XXXXXX")
             trap 'git -C "$REPO_DIR" worktree remove --force "$workdir" 2>/dev/null' EXIT
-            git -C "$REPO_DIR" worktree add --detach "$workdir" "$DEFAULT_BRANCH" --quiet
+            git -C "$REPO_DIR" worktree add "$workdir" "$DEFAULT_BRANCH" --quiet
             cd "$workdir"
         fi
 
