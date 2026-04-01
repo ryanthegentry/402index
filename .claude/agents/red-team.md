@@ -6,8 +6,6 @@ allowedTools:
   - Read
   - Glob
   - Grep
-  - Bash
-  - Agent
   - WebFetch
   - WebSearch
 ---
