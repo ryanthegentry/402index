@@ -595,7 +595,7 @@ export function adminPage() {
         return
       }
       var html = '<table class="admin-table"><thead><tr>'
-        + '<th>Domain</th><th>Status</th><th>Endpoints</th><th>Contact</th><th>Claimed</th><th>Verified</th>'
+        + '<th scope="col">Domain</th><th scope="col">Status</th><th scope="col">Endpoints</th><th scope="col">Contact</th><th scope="col">Claimed</th><th scope="col">Verified</th>'
         + '</tr></thead><tbody>'
       for (var i = 0; i < d.domains.length; i++) {
         var dm = d.domains[i]
@@ -634,7 +634,7 @@ export function adminPage() {
         return
       }
       var html = '<table class="admin-table"><thead><tr>'
-        + '<th>URL</th><th>Protocol</th><th>Provider</th><th>Failure Reason</th><th>HTTP</th><th>When</th>'
+        + '<th scope="col">URL</th><th scope="col">Protocol</th><th scope="col">Provider</th><th scope="col">Failure Reason</th><th scope="col">HTTP</th><th scope="col">When</th>'
         + '</tr></thead><tbody>'
       for (var i = 0; i < d.attempts.length; i++) {
         var a = d.attempts[i]
@@ -722,7 +722,7 @@ export function adminPage() {
       // Top search terms
       if (d.topSearches && d.topSearches.length > 0) {
         html += '<h3 style="margin:24px 0 12px">Top Search Terms (7 days)</h3>'
-        html += '<table class="admin-table"><thead><tr><th>Search Term</th><th>Count</th></tr></thead><tbody>'
+        html += '<table class="admin-table"><thead><tr><th scope="col">Search Term</th><th scope="col">Count</th></tr></thead><tbody>'
         for (var j = 0; j < d.topSearches.length; j++) {
           html += '<tr><td>' + escHtml(d.topSearches[j].query_text) + '</td><td>' + d.topSearches[j].count + '</td></tr>'
         }
@@ -732,7 +732,7 @@ export function adminPage() {
       // Top user-agents
       if (d.topAgents && d.topAgents.length > 0) {
         html += '<h3 style="margin:24px 0 12px">Top User-Agents (7 days)</h3>'
-        html += '<table class="admin-table"><thead><tr><th>User-Agent</th><th>Count</th><th>Type</th></tr></thead><tbody>'
+        html += '<table class="admin-table"><thead><tr><th scope="col">User-Agent</th><th scope="col">Count</th><th scope="col">Type</th></tr></thead><tbody>'
         for (var k = 0; k < d.topAgents.length; k++) {
           var a = d.topAgents[k]
           html += '<tr><td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(a.user_agent || '(empty)') + '</td><td>' + a.count + '</td><td>' + agentBadge(classifyAgent(a.user_agent)) + '</td></tr>'
@@ -744,7 +744,7 @@ export function adminPage() {
       if (d.zeroResults && d.zeroResults.length > 0) {
         html += '<h3 style="margin:24px 0 12px">Zero-Result Searches (7 days)</h3>'
         html += '<p style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Unmet demand — what people search for but do not find.</p>'
-        html += '<table class="admin-table"><thead><tr><th>Search Term</th><th>Filters</th><th>Count</th></tr></thead><tbody>'
+        html += '<table class="admin-table"><thead><tr><th scope="col">Search Term</th><th scope="col">Filters</th><th scope="col">Count</th></tr></thead><tbody>'
         for (var z = 0; z < d.zeroResults.length; z++) {
           var zr = d.zeroResults[z]
           html += '<tr><td>' + escHtml(zr.query_text) + '</td><td style="font-size:12px;color:var(--text-muted)">' + escHtml(zr.filters || '—') + '</td><td>' + zr.count + '</td></tr>'

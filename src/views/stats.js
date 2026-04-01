@@ -63,7 +63,7 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
       <p class="stats-chart-note">Latency measured across healthy endpoints only. L402: ~200 endpoints, x402: ~12,000, MPP: ~200.</p>
       <div class="table-wrap" style="margin-top:24px">
         <table class="stats-table stats-table-compact">
-          <thead><tr><th>Protocol</th><th>Median Latency</th><th>p90 Latency</th><th>% Under 500ms</th></tr></thead>
+          <thead><tr><th scope="col">Protocol</th><th scope="col">Median Latency</th><th scope="col">p90 Latency</th><th scope="col">% Under 500ms</th></tr></thead>
           <tbody>
             ${['L402', 'x402', 'MPP'].map(proto => {
               const s = latency.protocolSummary[proto]
@@ -83,11 +83,11 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
         <table class="stats-table stats-gap-table">
           <thead>
             <tr>
-              <th>Category</th>
-              <th class="gap-col-l402">L402</th>
-              <th class="gap-col-x402">x402</th>
-              <th class="gap-col-mpp">MPP</th>
-              <th>Total</th>
+              <th scope="col">Category</th>
+              <th scope="col" class="gap-col-l402">L402</th>
+              <th scope="col" class="gap-col-x402">x402</th>
+              <th scope="col" class="gap-col-mpp">MPP</th>
+              <th scope="col">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -165,7 +165,7 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
 
     function renderScoreboard() {
       if (currentView === 'provider') {
-        thead.innerHTML = '<tr><th>#</th><th>Provider</th><th>Protocol(s)</th><th>Avg Reliability</th><th></th><th>Endpoints</th><th>% Healthy</th><th>Avg Latency</th></tr>'
+        thead.innerHTML = '<tr><th scope="col">#</th><th scope="col">Provider</th><th scope="col">Protocol(s)</th><th scope="col">Avg Reliability</th><th scope="col"></th><th scope="col">Endpoints</th><th scope="col">% Healthy</th><th scope="col">Avg Latency</th></tr>'
         var filtered = providerData
         if (currentProtocol) {
           filtered = providerData.filter(function(p) { return p.protocols.indexOf(currentProtocol) !== -1 })
@@ -187,7 +187,7 @@ export function statsPage({ scoreboard, latency, categoryGap }) {
           tbody.innerHTML += '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);font-size:12px;padding:12px;">Showing 25 of ' + filtered.length + ' providers</td></tr>'
         }
       } else {
-        thead.innerHTML = '<tr><th>#</th><th>Name</th><th>Provider</th><th>Protocol</th><th>Reliability</th><th></th><th>Latency</th><th>Health</th><th>Price</th></tr>'
+        thead.innerHTML = '<tr><th scope="col">#</th><th scope="col">Name</th><th scope="col">Provider</th><th scope="col">Protocol</th><th scope="col">Reliability</th><th scope="col"></th><th scope="col">Latency</th><th scope="col">Health</th><th scope="col">Price</th></tr>'
         var filtered = endpointData
         if (currentProtocol) {
           filtered = endpointData.filter(function(e) { return e.protocol === currentProtocol })

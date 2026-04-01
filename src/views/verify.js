@@ -102,7 +102,7 @@ export function verifyPage() {
         <h3>What you can edit</h3>
         <table class="params-table">
           <thead>
-            <tr><th>Field</th><th>Type</th><th>Constraints</th></tr>
+            <tr><th scope="col">Field</th><th scope="col">Type</th><th scope="col">Constraints</th></tr>
           </thead>
           <tbody>
             <tr><td><code>name</code></td><td>string</td><td>Max 200 characters</td></tr>
