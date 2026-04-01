@@ -10,3 +10,4 @@ mcp-server/dist/*.tsbuildinfo
 .desloppify/
 claude
 scorecard.png
+.worktrees/
