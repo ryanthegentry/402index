@@ -505,6 +505,65 @@ describe('cc-dispatch.sh', () => {
     })
   })
 
+  // ── dispatch_revise no-change gate ────────────────────────────────
+
+  describe('dispatch_revise no-change gate', () => {
+    it('records HEAD before CC run', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_revise()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // head_before capture must appear before the CC execution block
+      const headBeforeIdx = fnBody.indexOf('head_before')
+      const ccRunIdx = fnBody.indexOf('claude --print')
+      assert.ok(headBeforeIdx !== -1, 'dispatch_revise must capture head_before via rev-parse HEAD')
+      assert.ok(headBeforeIdx < ccRunIdx, 'head_before must be captured before CC execution')
+    })
+
+    it('gates chain_next_stage on actual changes', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_revise()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // chain_next_stage must appear after a HEAD comparison guard
+      const headCompareIdx = fnBody.indexOf('head_before')
+      const chainIdx = fnBody.indexOf('chain_next_stage')
+      assert.ok(headCompareIdx !== -1 && headCompareIdx < chainIdx,
+        'chain_next_stage must be gated behind HEAD comparison check')
+    })
+
+    it('rolls back when no changes pushed', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_revise()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // After git push, there must be a path that checks head_before == head_after and calls rollback_issue
+      const pushIdx = fnBody.indexOf('git push')
+      const afterPush = fnBody.slice(pushIdx)
+      assert.ok(
+        afterPush.includes('head_before') && afterPush.includes('rollback_issue'),
+        'dispatch_revise must rollback when revision produces no changes'
+      )
+    })
+
+    it('does not post comment when no changes', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_revise()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // The --body-file comment block must appear after the HEAD comparison gate
+      const headAfterIdx = fnBody.indexOf('head_after')
+      const bodyFileIdx = fnBody.indexOf('--body-file')
+      assert.ok(headAfterIdx !== -1, 'dispatch_revise must check head_after')
+      assert.ok(headAfterIdx < bodyFileIdx,
+        'PR comment (--body-file) must come after HEAD comparison gate')
+    })
+  })
+
   // ── chain_next_stage human gate ──────────────────────────────────
 
   describe('chain_next_stage', () => {
@@ -771,6 +830,531 @@ describe('cc-dispatch.sh', () => {
       assert.ok(rmIdx !== -1, 'else branch must rm -f "$tmpfile"')
       assert.ok(returnIdx !== -1, 'else branch must return')
       assert.ok(rmIdx < returnIdx, 'rm -f "$tmpfile" must appear before return')
+    })
+  })
+
+  // ── Fix 2: CC output logging (two-file pattern) ─────────────────
+
+  describe('CC output logging', () => {
+    it('does NOT use tee-in-command-substitution for CC execution', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      // The broken pattern: cc_output=$(... | tee "$logfile")
+      const teeCapture = content.match(/cc_output=\$\(.*\|\s*tee\b/g)
+      assert.equal(teeCapture, null, 'Must not use tee inside command substitution for CC output')
+    })
+
+    it('writes CC output to .out temp file', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('${logfile}.out'),
+        'Must use ${logfile}.out as temp file for raw CC output'
+      )
+    })
+
+    it('reads cc_output from .out file (not from tee)', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('cc_output=$(cat "${logfile}.out")'),
+        'cc_output must be read from .out temp file'
+      )
+    })
+
+    it('cleans up .out temp file after reading', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('rm -f "${logfile}.out"'),
+        'Must clean up .out temp file after reading into cc_output'
+      )
+    })
+
+    it('writes session header to logfile before CC execution', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('=== CC Session ==='),
+        'Logfile must contain session header'
+      )
+      assert.ok(
+        content.includes('=== Prompt ==='),
+        'Logfile must contain prompt section header'
+      )
+      assert.ok(
+        content.includes('=== Output ==='),
+        'Logfile must contain output section header'
+      )
+    })
+
+    it('appends raw CC output to logfile (header + output in one file)', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('cat "${logfile}.out" >> "$logfile"'),
+        'Must append .out contents to logfile for full debug log'
+      )
+    })
+
+    it('all four handlers use the two-file pattern', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const handlers = ['dispatch_implement', 'dispatch_review_issue', 'dispatch_review_pr', 'dispatch_revise']
+      for (const handler of handlers) {
+        const fnStart = content.indexOf(`${handler}()`)
+        const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+        const fnBody = fnEnd !== -1 ? content.slice(fnStart, fnEnd) : content.slice(fnStart, fnStart + 3000)
+
+        assert.ok(
+          fnBody.includes('${logfile}.out'),
+          `${handler} must use two-file logging pattern`
+        )
+        assert.ok(
+          !fnBody.match(/cc_output=\$\(.*\|\s*tee\b/),
+          `${handler} must not use tee-in-command-substitution`
+        )
+      }
+    })
+  })
+
+  // ── Fix 3: CC output validation and retry ────────────────────────
+
+  describe('CC output validation', () => {
+    it('validate_cc_output function exists', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(content.includes('validate_cc_output()'), 'validate_cc_output() function must exist')
+    })
+
+    it('detects API errors as transient failures', () => {
+      const result = callFn('validate_cc_output', 'API Error: overloaded_error', 'review-pr')
+      // VALIDATION_OK should be false, VALIDATION_TRANSIENT should be true
+      // We test by checking the global vars after the call
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "API Error: overloaded_error" "review-pr"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('OK=false'), 'API error must set VALIDATION_OK=false')
+        assert.ok(out.includes('TRANSIENT=true'), 'API error must set VALIDATION_TRANSIENT=true')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('detects empty output as non-transient failure', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "" "review-pr"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('OK=false'), 'Empty output must set VALIDATION_OK=false')
+        assert.ok(out.includes('TRANSIENT=false'), 'Empty output must set VALIDATION_TRANSIENT=false')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('requires VERDICT line for review-pr mode', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "Some review text without verdict" "review-pr"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('OK=false'), 'review-pr without VERDICT must set VALIDATION_OK=false')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('passes review-pr with VERDICT:APPROVE', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "Good review text
+VERDICT:APPROVE" "review-pr"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('OK=true'), 'review-pr with VERDICT:APPROVE must set VALIDATION_OK=true')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('requires markdown content for review-issue mode', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "plain text no markdown" "review-issue"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('OK=false'), 'review-issue without markdown must set VALIDATION_OK=false')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('passes review-issue with markdown headers', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "# Security Findings
+- Issue 1
+- Issue 2" "review-issue"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('OK=true'), 'review-issue with markdown must set VALIDATION_OK=true')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('passes implement mode without positive pattern check', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "I made changes to the file" "implement"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('OK=true'), 'implement mode must pass without positive pattern check')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('detects rate_limit_error as transient', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "Error: rate_limit_error - too many requests" "implement"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        assert.ok(out.includes('OK=false'), 'rate_limit_error must set VALIDATION_OK=false')
+        assert.ok(out.includes('TRANSIENT=true'), 'rate_limit_error must set VALIDATION_TRANSIENT=true')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('retry logic exists with backoff', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('max_retries') && content.includes('backoff'),
+        'Must have retry logic with backoff for transient failures'
+      )
+    })
+
+    it('rollback on validation failure after retries exhausted', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      // After validation+retry block, must call rollback_issue
+      assert.ok(
+        content.includes('VALIDATION_OK') && content.includes('rollback_issue'),
+        'Must rollback on validation failure after retries exhausted'
+      )
+    })
+
+    it('validate_cc_output uses printf not echo for output piping', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('validate_cc_output()')
+      const fnEnd = content.indexOf('\n}', fnStart) + 2
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // Must not use echo "$output" | grep — fragile with dash-prefixed output
+      assert.ok(
+        !fnBody.includes('echo "$output"'),
+        'validate_cc_output must use printf, not echo, for piping output to grep'
+      )
+      assert.ok(
+        fnBody.includes('printf'),
+        'validate_cc_output must use printf for safe output handling'
+      )
+    })
+
+    it('validate_cc_output handles output starting with dash flags', () => {
+      const script = `
+ensure_deps() { :; }
+ensure_labels() { :; }
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DEFAULT_BRANCH="master"
+DRY_RUN=true
+WATCH=false
+eval "$(awk '/^# ── Entry point/{exit} {print}' '${SCRIPT_PATH}')"
+validate_cc_output "-e some output that starts with a dash" "implement"
+echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
+`
+      const tmpfile = path.join(os.tmpdir(), `cc-test-${Date.now()}.sh`)
+      fs.writeFileSync(tmpfile, script)
+      try {
+        const out = execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout: 5000 }).trim()
+        // Should pass validation (implement mode has no positive pattern check)
+        assert.ok(out.includes('OK=true'), 'Output starting with -e must not break validation')
+      } finally {
+        fs.unlinkSync(tmpfile)
+      }
+    })
+
+    it('all review handlers call validate_cc_output', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const handlers = ['dispatch_review_issue', 'dispatch_review_pr']
+      for (const handler of handlers) {
+        const fnStart = content.indexOf(`${handler}()`)
+        const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+        const fnBody = fnEnd !== -1 ? content.slice(fnStart, fnEnd) : content.slice(fnStart, fnStart + 3000)
+
+        assert.ok(
+          fnBody.includes('validate_cc_output'),
+          `${handler} must call validate_cc_output`
+        )
+      }
+    })
+  })
+
+  // ── Fix 1: Background execution, concurrency, worktrees ──────────
+
+  describe('background execution', () => {
+    it('MAX_CONCURRENT variable exists with default value', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('MAX_CONCURRENT'),
+        'MAX_CONCURRENT variable must exist for concurrency control'
+      )
+      // Should have a default value
+      assert.ok(
+        content.match(/MAX_CONCURRENT=.*[0-9]/),
+        'MAX_CONCURRENT must have a numeric default'
+      )
+    })
+
+    it('dispatch_issue checks concurrency before label swap', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_issue()')
+      const fnEnd = content.indexOf('\n# ── Main loop', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // Concurrency check must appear before label swap
+      const concurrencyIdx = fnBody.indexOf('MAX_CONCURRENT')
+      const labelSwapIdx = fnBody.indexOf('--remove-label "$dispatch_label"')
+      assert.ok(concurrencyIdx !== -1, 'dispatch_issue must check MAX_CONCURRENT')
+      assert.ok(labelSwapIdx !== -1, 'dispatch_issue must have label swap')
+      assert.ok(concurrencyIdx < labelSwapIdx, 'Concurrency check must come before label swap')
+    })
+
+    it('dispatch_issue skips already in-progress issues', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_issue()')
+      const fnEnd = content.indexOf('\n# ── Main loop', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('in-progress'),
+        'dispatch_issue must check for in-progress label'
+      )
+    })
+
+    it('handlers run in background subshell', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_issue()')
+      const fnEnd = content.indexOf('\n# ── Main loop', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // Should have a subshell spawned in background: ) &
+      assert.ok(
+        fnBody.includes(') &'),
+        'dispatch_issue must spawn handler in background subshell'
+      )
+    })
+
+    it('worktree isolation for implement and revise modes', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_issue()')
+      const fnEnd = content.indexOf('\n# ── Main loop', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('worktree add'),
+        'dispatch_issue must create worktree for implement/revise modes'
+      )
+    })
+
+    it('worktree cleanup trap in subshell', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_issue()')
+      const fnEnd = content.indexOf('\n# ── Main loop', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('trap') && fnBody.includes('worktree remove'),
+        'Background subshell must have trap for worktree cleanup'
+      )
+    })
+
+    it('status file written on completion', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('.status'),
+        'Background jobs must write status files for observability'
+      )
+    })
+
+    it('status file captures handler exit code (not always success)', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_issue()')
+      const fnEnd = content.indexOf('\n# ── Main loop', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // Must capture exit code from the case block before writing status
+      assert.ok(
+        fnBody.includes('handler_exit') || fnBody.includes('$?'),
+        'Status file must capture handler exit code, not hardcode success'
+      )
+      // Must NOT have unconditional status=success
+      assert.ok(
+        !fnBody.match(/echo\s+"status=success\b(?!.*\$)/),
+        'Status file must not unconditionally write status=success'
+      )
+    })
+
+    it('dispatch_issue does not use wait -n (which serializes dispatch)', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_issue()')
+      const fnEnd = content.indexOf('\n# ── Main loop', fnStart)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        !fnBody.includes('wait -n'),
+        'dispatch_issue must not use wait -n — it blocks until a job finishes, serializing dispatch'
+      )
+    })
+
+    it('signal trap kills background agents on INT/TERM', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      // Should be in the watch mode section
+      assert.ok(
+        content.includes('trap') && content.includes('INT') && content.includes('TERM'),
+        'Main loop must trap INT/TERM to kill background agents'
+      )
+      assert.ok(
+        content.includes('jobs -rp') || content.includes('kill'),
+        'Signal trap must kill running background jobs'
+      )
+    })
+
+    it('git worktree prune in ensure_deps', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('ensure_deps()')
+      const fnEnd = content.indexOf('\n}', fnStart) + 2
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('worktree prune'),
+        'ensure_deps must prune orphaned worktrees at startup'
+      )
+    })
+
+    it('log rotation in ensure_deps', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('ensure_deps()')
+      const fnEnd = content.indexOf('\n}', fnStart) + 2
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        fnBody.includes('-mtime') && fnBody.includes('-delete'),
+        'ensure_deps must rotate old log files'
+      )
+    })
+
+    it('worktrees directory creation', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(
+        content.includes('.worktrees'),
+        'Must use .worktrees directory for isolated worktrees'
+      )
     })
   })
 
