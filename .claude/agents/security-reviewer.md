@@ -101,7 +101,7 @@ If requesting changes:
 VERDICT:REQUEST_CHANGES
 ```
 
-The `VERDICT:` line MUST appear. It is how the pipeline determines next steps.
+The `VERDICT:` line MUST appear exactly as `VERDICT:APPROVE` or `VERDICT:REQUEST_CHANGES` on its own line. Do NOT use markdown headers like `### Verdict` or prose like `Verdict: Approved`. The dispatch script machine-parses this exact format.
 
 ## Decision Criteria
 

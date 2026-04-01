@@ -116,40 +116,51 @@ chain_next_stage() {
 # The script tells agents to output VERDICT:APPROVE or VERDICT:REQUEST_CHANGES.
 # Falls back to keyword matching if no explicit verdict marker found.
 # Falls back to GitHub API as last resort.
-parse_verdict_from_output() {
-    local cc_output="$1"
+extract_verdict() {
+    local output="$1"
     local pr_number="$2"
 
-    # Priority 1: explicit verdict marker (most reliable — deterministic grep)
-    if echo "$cc_output" | grep -q 'VERDICT:APPROVE'; then
-        echo "APPROVED"
-        return
-    fi
-    if echo "$cc_output" | grep -q 'VERDICT:REQUEST_CHANGES'; then
-        echo "CHANGES_REQUESTED"
-        return
+    # Get clean text from JSON envelope if present
+    local text
+    text=$(echo "$output" | jq -r '.result // empty' 2>/dev/null)
+    [ -z "$text" ] && text="$output"
+
+    # Tier 1: Explicit VERDICT marker (current format — exact match)
+    local marker
+    marker=$(echo "$text" | grep -oE 'VERDICT:(APPROVE|REQUEST_CHANGES)' | tail -1)
+    if [ -n "$marker" ]; then
+        echo "${marker#VERDICT:}"
+        return 0
     fi
 
-    # Priority 2: keyword matching on review headers (agents format with these)
-    if echo "$cc_output" | grep -qi 'APPROVED\|Security Review: APPROVED\|QA Review: APPROVED'; then
-        # Make sure it's not "CHANGES REQUESTED" which also contains "APPROVED" substring? No it doesn't. Safe.
-        if echo "$cc_output" | grep -qi 'CHANGES REQUESTED\|REQUEST_CHANGES\|CHANGES_REQUESTED'; then
-            echo "CHANGES_REQUESTED"
-            return
+    # Tier 2: Common agent output patterns
+    # Uses [[:space:]] instead of \s for POSIX ERE portability (macOS BSD grep)
+    # Case-insensitive match requires "verdict" or "review" prefix to avoid false positives
+    if echo "$text" | grep -qiE '(verdict|review)[:[:space:]]*approve[d]?' || echo "$text" | grep -q 'APPROVED'; then
+        # Check for REQUEST_CHANGES first (takes priority over APPROVE in ambiguous output)
+        if echo "$text" | grep -qiE '(verdict|review)[:[:space:]]*changes[[:space:]]*requested|REQUEST_CHANGES|CHANGES_REQUESTED|CHANGES REQUESTED'; then
+            echo "REQUEST_CHANGES"
+            return 0
         fi
-        echo "APPROVED"
-        return
+        echo "APPROVE"
+        return 0
     fi
-    if echo "$cc_output" | grep -qi 'CHANGES REQUESTED\|REQUEST_CHANGES\|CHANGES_REQUESTED'; then
-        echo "CHANGES_REQUESTED"
-        return
+    if echo "$text" | grep -qiE '(verdict|review)[:[:space:]]*changes[[:space:]]*requested|REQUEST_CHANGES|CHANGES_REQUESTED|CHANGES REQUESTED'; then
+        echo "REQUEST_CHANGES"
+        return 0
     fi
 
-    # Priority 3: check GitHub API for formal review (agent might have posted one)
-    local latest_state
-    latest_state=$(gh pr view "$pr_number" --repo "$REPO" --json reviews \
-        --jq '[.reviews[] | select(.author.login == "402index-bot")] | last | .state' 2>/dev/null)
-    echo "${latest_state:-COMMENTED}"
+    # Tier 3: GitHub API fallback (last resort)
+    local api_verdict
+    api_verdict=$(gh api "repos/${REPO}/pulls/${pr_number}/reviews" \
+        --jq '[.[] | select(.user.login == "402index-bot")] | last | .state' 2>/dev/null)
+    case "$api_verdict" in
+        APPROVED) echo "APPROVE"; return 0 ;;
+        CHANGES_REQUESTED) echo "REQUEST_CHANGES"; return 0 ;;
+    esac
+
+    # No verdict found
+    return 1
 }
 
 # Submit a formal PR review on behalf of the bot.
@@ -232,7 +243,7 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 err() { log "ERROR: $*" >&2; }
 
 ensure_deps() {
-    for cmd in gh claude git; do
+    for cmd in gh claude git jq; do
         command -v "$cmd" &>/dev/null || { err "$cmd not found on PATH"; exit 1; }
     done
     gh auth status &>/dev/null || { err "gh not authenticated. Run: gh auth login"; exit 1; }
@@ -345,10 +356,10 @@ validate_cc_output() {
     # Positive patterns — mode-specific expected content
     case "$mode" in
         review-pr)
-            # Review handlers MUST produce a VERDICT line
-            if ! printf '%s\n' "$output" | grep -qE 'VERDICT:(APPROVE|REQUEST_CHANGES)'; then
+            # Review handlers MUST produce a VERDICT line — missing verdict is transient (retryable)
+            if ! extract_verdict "$output" "" >/dev/null 2>&1; then
                 VALIDATION_OK=false
-                VALIDATION_TRANSIENT=false
+                VALIDATION_TRANSIENT=true
             fi
             ;;
         review-issue)
@@ -714,12 +725,15 @@ ADDITIONAL REVIEW REQUIREMENTS:
 - Check git log on the PR branch. Verify that at least one commit adds/modifies test files and precedes the commit that modifies source files. If all test changes come in the same commit as or after implementation, flag for TDD non-compliance.
 
 IMPORTANT — OUTPUT FORMAT:
-Do NOT run gh pr review yourself. Instead, output your verdict as a marker line:
-  VERDICT:APPROVE        — if the code is safe and correct
-  VERDICT:REQUEST_CHANGES — if there are security, correctness, or coverage issues
+Do NOT run gh pr review yourself. The dispatch script will submit the formal GitHub review on your behalf.
 
-The dispatch script will submit the formal GitHub review on your behalf.
-Include your full analysis above the verdict line. PR #${pr_number} in repo ${REPO}."
+Include your full analysis, then end with your verdict on its own line using this EXACT format:
+
+VERDICT:APPROVE
+or
+VERDICT:REQUEST_CHANGES
+
+This marker line is machine-parsed. It MUST appear exactly as shown — no markdown headers, no prose, just VERDICT:APPROVE or VERDICT:REQUEST_CHANGES on its own line at the end of your response. PR #${pr_number} in repo ${REPO}."
 
     # Set pending commit status before CC runs
     set_review_status "$pr_number" "pending" "Bot review in progress"
@@ -737,10 +751,11 @@ Include your full analysis above the verdict line. PR #${pr_number} in repo ${RE
       echo "=== Output ==="
     } > "$logfile"
 
-    # CC execution — append raw output to logfile, also write to .out file
+    # CC execution — JSON envelope isolates clean output from tool-use logging
     local cc_output
     # shellcheck disable=SC2086
-    echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
+    echo "$cc_prompt" | claude -p $agent_flag \
+        --output-format json > "${logfile}.out" 2>&1
     local cc_exit=$?
     cat "${logfile}.out" >> "$logfile"
 
@@ -765,7 +780,8 @@ Include your full analysis above the verdict line. PR #${pr_number} in repo ${RE
         log "Transient CC failure for #${issue_number} (attempt ${retries}/${max_retries}), retrying in ${backoff}s"
         sleep "$backoff"
         # shellcheck disable=SC2086
-        echo "$cc_prompt" | claude --print $agent_flag > "${logfile}.out" 2>&1
+        echo "$cc_prompt" | claude -p $agent_flag \
+            --output-format json > "${logfile}.out" 2>&1
         cc_output=$(cat "${logfile}.out")
         echo "=== Retry ${retries} ===" >> "$logfile"
         cat "${logfile}.out" >> "$logfile"
@@ -780,14 +796,35 @@ Include your full analysis above the verdict line. PR #${pr_number} in repo ${RE
     fi
 
     # Parse verdict from CC output (deterministic — no reliance on agent running gh commands)
-    local verdict
-    verdict=$(parse_verdict_from_output "$cc_output" "$pr_number")
+    local raw_verdict verdict
+    raw_verdict=$(extract_verdict "$cc_output" "$pr_number")
+    # Map extract_verdict output to GitHub API values for submit_review
+    case "$raw_verdict" in
+        APPROVE) verdict="APPROVED" ;;
+        REQUEST_CHANGES) verdict="CHANGES_REQUESTED" ;;
+        *) verdict="$raw_verdict" ;;
+    esac
     log "Parsed verdict: ${verdict}"
 
-    # Extract clean review body from CC output
+    # Extract clean review body from JSON envelope
+    local review_body
+    review_body=$(echo "$cc_output" | jq -r '.result // empty' 2>/dev/null)
+    if [ -z "$review_body" ]; then
+        # Fallback: treat entire output as text (non-JSON output edge case)
+        review_body=$(echo "$cc_output" | grep -v '^\[')
+    fi
+
+    # Log both raw JSON and extracted review for debugging
+    {
+        echo "=== Extracted Review ==="
+        echo "$review_body" | head -50
+        echo "=== Extracted Verdict ==="
+        echo "${raw_verdict:-NONE}"
+    } >> "$logfile"
+
     local tmpfile
     tmpfile=$(mktemp)
-    echo "$cc_output" | grep -v '^\[' | grep -v '^VERDICT:' | tail -100 > "$tmpfile"
+    echo "$review_body" | grep -v '^VERDICT:' | tail -100 > "$tmpfile"
     if [ -s "$tmpfile" ]; then
         head -c 4000 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
         # Script submits the formal review — not the agent
