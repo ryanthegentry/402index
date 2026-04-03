@@ -1,4 +1,5 @@
 import express from 'express'
+import { fileURLToPath } from 'node:url'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { notFoundHandler, errorHandler } from './middleware/error-handler.js'
@@ -25,6 +26,7 @@ app.use(helmet({
       imgSrc: ["'self'", "data:"],
       connectSrc: ["'self'", "https://plausible.io"],
       fontSrc: ["'self'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
     }
@@ -112,14 +114,20 @@ app.use('/', pageRoutes)
 app.use(notFoundHandler)
 app.use(errorHandler)
 
-// Start server
-const server = app.listen(PORT, () => {
-  console.log(`[server] 402index listening on port ${PORT}`)
-  if (!process.env.DIGEST_API_KEY) {
-    console.log('[server] DIGEST_API_KEY not set — /api/v1/digest endpoint disabled')
-  }
-  startScheduler()
-})
+// Export app for testing (import without side effects)
+export { app }
 
-process.on('SIGTERM', () => shutdown(server, 'SIGTERM'))
-process.on('SIGINT', () => shutdown(server, 'SIGINT'))
+// Start server (skip when imported as a module for tests)
+const isDirectRun = process.argv[1] === fileURLToPath(import.meta.url)
+if (isDirectRun) {
+  const server = app.listen(PORT, () => {
+    console.log(`[server] 402index listening on port ${PORT}`)
+    if (!process.env.DIGEST_API_KEY) {
+      console.log('[server] DIGEST_API_KEY not set — /api/v1/digest endpoint disabled')
+    }
+    startScheduler()
+  })
+
+  process.on('SIGTERM', () => shutdown(server, 'SIGTERM'))
+  process.on('SIGINT', () => shutdown(server, 'SIGINT'))
+}
