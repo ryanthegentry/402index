@@ -11,3 +11,5 @@ mcp-server/dist/*.tsbuildinfo
 claude
 scorecard.png
 .worktrees/
+test-results/
+playwright-report/

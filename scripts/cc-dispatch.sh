@@ -116,6 +116,50 @@ chain_next_stage() {
     fi
 }
 
+# Wait for CI checks to pass on a PR. Returns 0 if all checks pass, 1 otherwise.
+# Usage: wait_for_ci <pr_number> <issue_number> <timeout_seconds>
+wait_for_ci() {
+    local pr_number="$1"
+    local issue_number="$2"
+    local timeout="${3:-600}"  # default 10 minutes
+    local interval=30
+    local elapsed=0
+
+    log "Waiting for CI checks on PR #${pr_number} (timeout: ${timeout}s)"
+
+    while [[ $elapsed -lt $timeout ]]; do
+        local status
+        status=$(gh pr checks "$pr_number" --repo "$REPO" 2>&1) || true
+
+        # Check if all checks have completed
+        if echo "$status" | grep -qE 'fail|cancelled'; then
+            log "CI failed on PR #${pr_number}"
+            gh issue edit "$issue_number" --repo "$REPO" --add-label "ready-for-revision"
+            gh issue comment "$issue_number" --repo "$REPO" \
+                --body "⚠️ CI failed after QA approval on PR #${pr_number}. Routing to revision."
+            return 1
+        fi
+
+        # All checks passed if no "pending" or "queued" entries remain
+        if ! echo "$status" | grep -qiE 'pending|queued|in_progress|running'; then
+            if echo "$status" | grep -qE 'pass'; then
+                log "CI passed on PR #${pr_number}"
+                return 0
+            fi
+        fi
+
+        sleep "$interval"
+        elapsed=$((elapsed + interval))
+    done
+
+    # Timeout
+    log "CI timed out after ${timeout}s on PR #${pr_number}"
+    gh issue edit "$issue_number" --repo "$REPO" --add-label "ready-for-revision"
+    gh issue comment "$issue_number" --repo "$REPO" \
+        --body "⚠️ CI did not complete within ${timeout}s after QA approval on PR #${pr_number}. Routing to revision."
+    return 1
+}
+
 # Parse review verdict from CC output text.
 # The script tells agents to output VERDICT:APPROVE or VERDICT:REQUEST_CHANGES.
 # Falls back to keyword matching if no explicit verdict marker found.
@@ -917,7 +961,15 @@ This marker line is machine-parsed. It MUST appear exactly as shown — no markd
 
     # Chain based on parsed verdict
     if [[ "$verdict" == "APPROVED" ]]; then
-        chain_next_stage "$issue_number" "$dispatch_label"
+        # After QA approval, wait for CI before labeling ready-to-merge
+        if [[ "$dispatch_label" == "ready-for-qa" ]]; then
+            if wait_for_ci "$pr_number" "$issue_number" 600; then
+                chain_next_stage "$issue_number" "$dispatch_label"
+            fi
+            # If CI failed/timed out, wait_for_ci already labeled ready-for-revision
+        else
+            chain_next_stage "$issue_number" "$dispatch_label"
+        fi
     elif [[ "$verdict" == "CHANGES_REQUESTED" ]]; then
         log "Reviewer requested changes on PR #${pr_number} — routing to revision"
         gh issue edit "$issue_number" --repo "$REPO" --add-label "ready-for-revision"
