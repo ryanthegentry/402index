@@ -1819,6 +1819,38 @@ echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
     })
   })
 
+  // ── Scope guard: qa-reviewer.md must not be modified by Layer 1 (#62) ──
+
+  describe('qa-reviewer.md scope guard (#62)', () => {
+    it('qa-reviewer.md must NOT contain Layer 2 rewrite patterns', () => {
+      const content = fs.readFileSync(path.resolve('.claude/agents/qa-reviewer.md'), 'utf-8')
+
+      // Must NOT have elevated maxTurns (Layer 2 bumped to 40)
+      assert.ok(
+        !content.includes('maxTurns: 40'),
+        'qa-reviewer.md must not have maxTurns: 40 (Layer 2 change, out of scope)'
+      )
+
+      // Must NOT have Write or Edit in allowedTools (Layer 2 addition)
+      assert.ok(
+        !content.includes('- Write') && !content.includes('- Edit'),
+        'qa-reviewer.md must not have Write/Edit in allowedTools (Layer 2 change)'
+      )
+
+      // Must NOT be renamed to "Browser-based QA reviewer"
+      assert.ok(
+        !content.includes('Browser-based QA reviewer'),
+        'qa-reviewer.md must not be rewritten as browser-based reviewer (Layer 2 scope)'
+      )
+
+      // Must retain original identity
+      assert.ok(
+        content.includes('maxTurns: 15'),
+        'qa-reviewer.md must retain maxTurns: 15'
+      )
+    })
+  })
+
   // ── Comment accuracy ─────────────────────────────────────────────
 
   describe('comment accuracy', () => {
