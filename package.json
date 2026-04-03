@@ -9,7 +9,8 @@
     "dev": "nodemon src/server.js",
     "poll": "node scripts/poll.js",
     "healthcheck": "node scripts/healthcheck.js",
-    "test": "DB_PATH=:memory: ADMIN_SECRET=test-secret DIGEST_API_KEY=test-digest-key CLAIM_RATE_LIMIT=100 REGISTER_RATE_LIMIT=100 node --test test/*.test.js"
+    "test": "DB_PATH=:memory: ADMIN_SECRET=test-secret DIGEST_API_KEY=test-digest-key CLAIM_RATE_LIMIT=100 REGISTER_RATE_LIMIT=100 node --test test/*.test.js",
+    "test:e2e": "npx playwright test"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
@@ -21,6 +22,7 @@
     "nostr-tools": "^2.23.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "nodemon": "^3.1.0"
   },
   "engines": {
