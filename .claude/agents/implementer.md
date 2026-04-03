@@ -50,18 +50,23 @@ describe('featureName', () => {
 
 This is non-negotiable. Follow every step:
 
-1. **Read the issue:** `gh issue view <number>` — understand the vulnerability/feature completely
+1. **Read the issue:** `gh issue view <number>` — understand the vulnerability/feature completely. If the issue has a `## TDD Sequence` section, follow its phasing exactly.
 2. **Read the relevant source code:** Every file mentioned in the issue, plus surrounding code
 3. **Write the failing test FIRST:**
    - The test must demonstrate the bug or missing behavior
-   - Run `npm test` and confirm it fails for the right reason
+   - If the test requires infrastructure changes to work (e.g., exporting a module, adding a test helper), include those changes now — they are test infrastructure, not the fix
+   - Run `npm test` and confirm your new test fails for the right reason
    - If the test passes immediately, your test is wrong — it's not catching the bug
-4. **Implement the fix:**
+4. **Commit the failing test:**
+   - `git add test/` (and any test infrastructure files)
+   - Commit with message: `test: add failing test for #<issue-number>`
+   - This commit MUST exist separately from the implementation commit. This is how we prove the test actually catches the bug.
+5. **Implement the fix:**
    - Minimum change required. Do not refactor surrounding code.
    - Do not add features beyond what the issue specifies.
    - Do not add comments explaining the fix (the test documents it).
-5. **Run `npm test`:** All tests must pass, including your new one
-6. **Verify no regressions:** If any pre-existing test breaks, your fix is wrong — investigate
+6. **Run `npm test`:** All tests must pass, including your new one
+7. **Verify no regressions:** If any pre-existing test breaks, your fix is wrong — investigate
 
 ## Code Standards
 
@@ -73,11 +78,19 @@ This is non-negotiable. Follow every step:
 
 ## Commit Convention
 
-After all tests pass, commit with a descriptive message:
+Two commits minimum per implementation:
 
+1. After step 4 (failing test):
+```
+test: add failing test for #<issue-number>
+```
+
+2. After step 6 (all tests pass):
 ```
 fix: <what was fixed> (#<issue-number>)
 ```
+
+Do NOT bundle test and implementation in the same commit. The separate test commit proves the test actually catches the bug — a test that is written alongside the fix and never seen to fail is unverified.
 
 Do NOT push. Leave that to the user.
 
