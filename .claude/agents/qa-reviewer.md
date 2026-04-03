@@ -100,6 +100,12 @@ npx playwright test test/e2e/_exploration.spec.js
 
 ## Phase 3: Regression Test Authoring
 
+Before committing, check out the PR branch:
+```bash
+PR_BRANCH=$(gh pr view <PR_NUMBER> --json headRefName -q .headRefName)
+git checkout "$PR_BRANCH"
+```
+
 If exploratory testing found bugs OR the PR changes are significant enough to warrant persistent coverage:
 
 1. **Write a persistent test file** at `test/e2e/issue-NNN-description.spec.js` (NNN = issue number from the dispatch-injected prompt)
