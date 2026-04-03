@@ -1,4 +1,5 @@
 import express from 'express'
+import { fileURLToPath } from 'node:url'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { notFoundHandler, errorHandler } from './middleware/error-handler.js'
@@ -117,10 +118,7 @@ app.use(errorHandler)
 export { app }
 
 // Start server (skip when imported as a module for tests)
-const isDirectRun = process.argv[1] && (
-  process.argv[1].endsWith('/server.js') ||
-  process.argv[1].endsWith('/src/server.js')
-)
+const isDirectRun = process.argv[1] === fileURLToPath(import.meta.url)
 if (isDirectRun) {
   const server = app.listen(PORT, () => {
     console.log(`[server] 402index listening on port ${PORT}`)

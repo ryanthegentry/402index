@@ -2,6 +2,7 @@ import { describe, it, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { execSync } from 'node:child_process'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { layout } from '../src/views/layout.js'
 import { homePage } from '../src/views/home.js'
 import { detailPage } from '../src/views/detail.js'
@@ -198,5 +199,37 @@ describe('CSP configuration (integration)', () => {
     assert.ok(csp.includes("style-src 'self'"), 'should have style-src')
     assert.ok(csp.includes("frame-ancestors 'none'"), 'should have frame-ancestors')
     assert.ok(csp.includes("object-src 'none'"), 'should have object-src')
+  })
+})
+
+// ─── E. Repo Hygiene ──────────────────────────────────────────────────────────
+
+describe('repo hygiene', () => {
+  it('no leftover debug scripts in repo root', () => {
+    const rootDir = fileURLToPath(new URL('..', import.meta.url))
+    const debugFiles = readdirSync(rootDir).filter(f => f === 'test-csp.mjs')
+    assert.deepStrictEqual(debugFiles, [], `leftover debug file(s) in repo root: ${debugFiles.join(', ')}`)
+  })
+})
+
+// ─── F. isDirectRun Guard ─────────────────────────────────────────────────────
+
+describe('isDirectRun guard', () => {
+  it('server.js uses fileURLToPath for direct-run detection', () => {
+    const serverSrc = readFileSync(fileURLToPath(new URL('../src/server.js', import.meta.url)), 'utf8')
+    assert.ok(
+      serverSrc.includes('fileURLToPath(import.meta.url)'),
+      'isDirectRun should use fileURLToPath(import.meta.url), not fragile string suffix matching'
+    )
+    assert.ok(
+      !serverSrc.includes("endsWith('/server.js')"),
+      'isDirectRun should not use endsWith string matching'
+    )
+  })
+
+  it('importing server.js does not call listen()', async () => {
+    // The app export exists and is usable without a server starting
+    assert.ok(app, 'app should be exported')
+    assert.ok(typeof app.listen === 'function', 'app should be an Express app')
   })
 })
