@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test'
+import { describe, it, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { execSync } from 'node:child_process'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
@@ -10,6 +10,7 @@ import { statsPage } from '../src/views/stats.js'
 import { statsSimplePage } from '../src/views/stats-simple.js'
 import { verifyPage } from '../src/views/verify.js'
 import { adminPage } from '../src/views/admin.js'
+import { app } from '../src/server.js'
 
 // ─── A. OG Image ────────────────────────────────────────────────────────────
 
@@ -149,22 +150,53 @@ describe('table header scope attributes', () => {
   })
 })
 
-// ─── D. CSP ─────────────────────────────────────────────────────────────────
+// ─── D. CSP (integration — inspects actual HTTP header) ─────────────────────
 
-describe('CSP configuration', () => {
-  it('server.js does not disable CSP', () => {
-    const serverSrc = readFileSync(new URL('../src/server.js', import.meta.url).pathname, 'utf8')
-    assert.ok(!serverSrc.includes('contentSecurityPolicy: false'), 'CSP should not be disabled')
+describe('CSP configuration (integration)', () => {
+  let server
+  let baseUrl
+
+  // Boot the app on a random port
+  after(() => { if (server) server.close() })
+
+  async function getCSPHeader() {
+    if (!server) {
+      await new Promise((resolve, reject) => {
+        server = app.listen(0, () => {
+          baseUrl = `http://127.0.0.1:${server.address().port}`
+          resolve()
+        })
+        server.on('error', reject)
+      })
+    }
+    const res = await fetch(`${baseUrl}/about`)
+    return res.headers.get('content-security-policy')
+  }
+
+  it('CSP header includes script-src-attr \'unsafe-inline\'', async () => {
+    const csp = await getCSPHeader()
+    assert.ok(csp, 'CSP header should be present')
+    assert.ok(
+      csp.includes("script-src-attr 'unsafe-inline'"),
+      `CSP should include script-src-attr 'unsafe-inline', got: ${csp}`
+    )
   })
 
-  it('server.js configures CSP directives', () => {
-    const serverSrc = readFileSync(new URL('../src/server.js', import.meta.url).pathname, 'utf8')
-    assert.ok(serverSrc.includes('contentSecurityPolicy'), 'should have contentSecurityPolicy config')
-    assert.ok(serverSrc.includes('directives'), 'should have directives object')
-    assert.ok(serverSrc.includes('defaultSrc'), 'should have defaultSrc directive')
-    assert.ok(serverSrc.includes('scriptSrc'), 'should have scriptSrc directive')
-    assert.ok(serverSrc.includes('styleSrc'), 'should have styleSrc directive')
-    assert.ok(serverSrc.includes('frameAncestors'), 'should have frameAncestors directive')
-    assert.ok(serverSrc.includes("objectSrc"), 'should have objectSrc directive')
+  it('CSP header does NOT include script-src-attr \'none\'', async () => {
+    const csp = await getCSPHeader()
+    assert.ok(csp, 'CSP header should be present')
+    assert.ok(
+      !csp.includes("script-src-attr 'none'"),
+      `CSP should not include script-src-attr 'none', got: ${csp}`
+    )
+  })
+
+  it('CSP header preserves other directives', async () => {
+    const csp = await getCSPHeader()
+    assert.ok(csp.includes("default-src 'self'"), 'should have default-src')
+    assert.ok(csp.includes("script-src 'self'"), 'should have script-src')
+    assert.ok(csp.includes("style-src 'self'"), 'should have style-src')
+    assert.ok(csp.includes("frame-ancestors 'none'"), 'should have frame-ancestors')
+    assert.ok(csp.includes("object-src 'none'"), 'should have object-src')
   })
 })
