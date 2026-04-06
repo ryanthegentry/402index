@@ -772,24 +772,6 @@ dispatch_review_pr() {
 
     log "Found PR #${pr_number} for issue #${issue_number}"
 
-    # Gate: CI must pass before any review agent runs
-    local ci_output
-    ci_output=$(wait_for_ci "$pr_number")
-    local ci_exit=$?
-    if [[ $ci_exit -ne 0 ]]; then
-        log "CI failed for PR #${pr_number} — skipping review, routing to revision"
-        gh issue edit "$issue_number" --repo "$REPO" \
-            --remove-label "in-progress" --add-label "ready-for-revision"
-        gh issue comment "$issue_number" --repo "$REPO" \
-            --body "⚠️ CI failed on PR #${pr_number} — routing to revision.
-
-Errors:
-\`\`\`
-${ci_output}
-\`\`\`"
-        return 0
-    fi
-
     # Collect prior review context: PR comments + formal reviews
     local prior_pr
     prior_pr=$(gh pr view "$pr_number" --repo "$REPO" --json comments,reviews \
