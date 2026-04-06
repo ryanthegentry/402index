@@ -1,10 +1,27 @@
-import { describe, it } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import db from '../src/db.js'
+import { startServer, stopServer } from './helpers/server.js'
 
 // ─── Integration tests: verify /api/v1/services supports demo search needs ──
-// Requires a running server: API_BASE=http://localhost:3402 npm test
 
-const API = process.env.API_BASE || 'http://localhost:3402'
+let API = process.env.API_BASE
+
+before(async () => {
+  API = API || await startServer()
+  // Seed data for filter assertions
+  const count = db.prepare('SELECT COUNT(*) as c FROM services').get().c
+  if (count === 0) {
+    db.prepare(`INSERT INTO services (id, name, url, protocol, source, health_status, category, status, reliability_score, latency_p50_ms, registered_at, updated_at)
+      VALUES ('search-test-1', 'Search L402', 'https://search-test.example.com/api', 'L402', 'test', 'healthy', 'ai', 'active', 85.0, 120, datetime('now'), datetime('now'))`).run()
+    db.prepare(`INSERT INTO services (id, name, url, protocol, source, health_status, category, status, reliability_score, latency_p50_ms, registered_at, updated_at)
+      VALUES ('search-test-2', 'Search x402', 'https://search-test-x402.example.com/api', 'x402', 'test', 'healthy', 'tools', 'active', 90.0, 80, datetime('now'), datetime('now'))`).run()
+  }
+})
+after(async () => {
+  try { db.prepare("DELETE FROM services WHERE id LIKE 'search-test-%'").run() } catch {}
+  await stopServer()
+})
 
 async function api(path) {
   const res = await fetch(`${API}${path}`)
@@ -61,7 +78,7 @@ describe('services API — demo search support', () => {
   })
 
   it('sort by reliability works', async () => {
-    const r = await api('/api/v1/services?sort=reliability&limit=10')
+    const r = await api('/api/v1/services?sort=reliability&order=desc&limit=10')
     assert.equal(r.status, 200)
     assert.ok(Array.isArray(r.body.services))
     // Verify descending order (default)

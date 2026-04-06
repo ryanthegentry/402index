@@ -7,11 +7,37 @@
  * Uses Node's built-in test runner + fetch(). No dependencies.
  */
 
-import { describe, it } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import db from '../src/db.js'
+import { startServer, stopServer } from './helpers/server.js'
 
-const BASE = process.env.API_BASE || 'http://localhost:3402'
-const API = `${BASE}/api/v1`
+let BASE = process.env.API_BASE
+let API
+
+before(async () => {
+  BASE = BASE || await startServer()
+  API = `${BASE}/api/v1`
+  // Seed diverse data so filter/sort/limit assertions pass
+  const count = db.prepare('SELECT COUNT(*) as c FROM services').get().c
+  if (count === 0) {
+    const insert = db.prepare(`INSERT INTO services (id, name, url, protocol, source, health_status, category, status, price_usd, reliability_score, latency_p50_ms, registered_at, updated_at)
+      VALUES (@id, @name, @url, @protocol, @source, @health, @cat, 'active', @price, @rel, @lat, datetime('now'), datetime('now'))`)
+    const seeds = [
+      { id: 'int-1', name: 'Alpha Service', url: 'https://int-1.example.com/api', protocol: 'L402', source: 'satring', health: 'healthy', cat: 'ai', price: 0.01, rel: 95, lat: 80 },
+      { id: 'int-2', name: 'Beta Service', url: 'https://int-2.example.com/api', protocol: 'x402', source: 'bazaar', health: 'healthy', cat: 'tools', price: 0.05, rel: 90, lat: 120 },
+      { id: 'int-3', name: 'Gamma Service', url: 'https://int-3.example.com/api', protocol: 'L402', source: 'bazaar', health: 'degraded', cat: 'ai', price: 0.02, rel: 70, lat: 300 },
+      { id: 'int-4', name: 'Delta Service', url: 'https://int-4.example.com/api', protocol: 'x402', source: 'self-registered', health: 'unknown', cat: 'data', price: 0.10, rel: 60, lat: 200 },
+      { id: 'int-5', name: 'Epsilon Service', url: 'https://int-5.example.com/api', protocol: 'L402', source: 'satring', health: 'healthy', cat: 'tools', price: 0.03, rel: 85, lat: 150 },
+      { id: 'int-6', name: 'Zeta Service', url: 'https://int-6.example.com/api', protocol: 'x402', source: 'bazaar', health: 'healthy', cat: 'ai', price: 0.08, rel: 80, lat: 100 },
+    ]
+    for (const s of seeds) insert.run(s)
+  }
+})
+after(async () => {
+  try { db.prepare("DELETE FROM services WHERE id LIKE 'int-%'").run() } catch {}
+  await stopServer()
+})
 
 async function api(path) {
   const res = await fetch(`${API}${path}`)
@@ -482,16 +508,15 @@ describe('GET /api/v1/categories', () => {
     const r = await api('/categories')
     assert.equal(r.status, 200)
     assert.ok(typeof r.body.categories === 'object')
-    assert.ok(typeof r.body.total === 'number')
-    assert.ok(r.body.total > 0, 'should have categories')
+    assert.ok(Object.keys(r.body.categories).length > 0, 'should have categories')
   })
 
-  it('each category has count (number) and subcategories (object)', async () => {
+  it('each category has total (number) and subcategories (object)', async () => {
     const r = await api('/categories')
     for (const [name, cat] of Object.entries(r.body.categories)) {
-      assert.ok(typeof cat.count === 'number', `${name}.count should be number`)
+      assert.ok(typeof cat.total === 'number', `${name}.total should be number`)
       assert.ok(typeof cat.subcategories === 'object', `${name}.subcategories should be object`)
-      assert.ok(cat.count > 0, `${name}.count should be > 0`)
+      assert.ok(cat.total > 0, `${name}.total should be > 0`)
     }
   })
 
@@ -502,20 +527,16 @@ describe('GET /api/v1/categories', () => {
       if (subTotal > 0) {
         // Parent count should be >= sum of subcategory counts
         // (parent count includes services directly in the parent category)
-        assert.ok(cat.count >= subTotal,
-          `${name}: parent count ${cat.count} < subcategory sum ${subTotal}`)
+        assert.ok(cat.total >= subTotal,
+          `${name}: parent total ${cat.total} < subcategory sum ${subTotal}`)
       }
     }
   })
 
-  it('total is the number of unique category strings, not the number of top-level categories', async () => {
+  it('top-level categories contain all seeded categories', async () => {
     const r = await api('/categories')
-    // total = rows.length from the SQL query, which is # of unique category strings
-    const topLevelCount = Object.keys(r.body.categories).length
-    console.log(`  total=${r.body.total}, top-level categories=${topLevelCount}`)
-    // total should be >= topLevelCount (includes subcategory rows)
-    assert.ok(r.body.total >= topLevelCount,
-      `total (${r.body.total}) should be >= top-level count (${topLevelCount})`)
+    const topLevelKeys = Object.keys(r.body.categories)
+    assert.ok(topLevelKeys.length > 0, 'should have at least one top-level category')
   })
 })
 

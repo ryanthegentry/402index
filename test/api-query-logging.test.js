@@ -5,11 +5,15 @@
  * Run: node --test test/api-query-logging.test.js
  */
 
-import { describe, it } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { startServer, stopServer } from './helpers/server.js'
 
-const BASE = process.env.API_BASE || 'http://localhost:3402'
-const API = `${BASE}/api/v1`
+let BASE = process.env.API_BASE
+let API
+
+before(async () => { BASE = BASE || await startServer(); API = `${BASE}/api/v1` })
+after(async () => { await stopServer() })
 
 // Helper: query the services endpoint and return parsed response
 async function queryServices(params = '') {
