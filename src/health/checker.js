@@ -5,7 +5,7 @@ import { dirname } from 'path'
 import db, { DB_PATH } from '../db.js'
 import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from '../services/l402-utils.js'
 import { parsePaymentRequired, parsePaymentRequiredBody, validatePaymentRequirements } from '../services/x402-utils.js'
-import { detectProtocol } from '../services/detect-protocol.js'
+import { detectProtocol, getPrimaryDetection } from '../services/detect-protocol.js'
 import { probeEndpoint } from '../services/probe-endpoint.js'
 
 const TIMEOUT_MS = 5000
@@ -488,24 +488,26 @@ export async function checkService(service) {
   // L402/MPP validation: only degrade for invalid detection or payment hash mismatch
   // Per BLIP-0026, token format is agnostic — format-only issues are metadata, not health degradation
   if ((protocol === 'L402' || protocol === 'MPP') && result.httpStatus === 402 && classification.healthStatus === 'healthy') {
-    if (!result.detection.valid) {
+    const primaryDetection = getPrimaryDetection(result.detection, protocol)
+    if (!primaryDetection.valid) {
       classification.healthStatus = 'degraded'
       classification.checkStatus = 'degraded'
-    } else if (protocol === 'L402' && result.detection.details?.paymentHashMatch === false) {
+    } else if (protocol === 'L402' && primaryDetection.details?.paymentHashMatch === false) {
       classification.healthStatus = 'degraded'
       classification.checkStatus = 'degraded'
-      classification.degradeReason = result.detection.degradeReason || 'payment hash mismatch between macaroon and invoice'
+      classification.degradeReason = primaryDetection.degradeReason || 'payment hash mismatch between macaroon and invoice'
     }
   }
 
   // POST fallback persistence — if probeEndpoint detected POST works, save it
-  if (result.postFallback?.attempted && result.postFallback.detection?.valid) {
-    if (result.postFallback.detection.protocol === protocol) {
-      const postDetails = result.postFallback.detection.details
+  if (result.postFallback?.attempted) {
+    const postPrimary = getPrimaryDetection(result.postFallback.detection, protocol)
+    if (postPrimary.valid) {
+      const postDetails = postPrimary.details
       if (protocol === 'L402' && postDetails?.paymentHashMatch === false) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
-        classification.degradeReason = result.postFallback.detection.degradeReason || 'payment hash mismatch between macaroon and invoice'
+        classification.degradeReason = postPrimary.degradeReason || 'payment hash mismatch between macaroon and invoice'
       } else {
         classification.healthStatus = 'healthy'
         classification.checkStatus = 'healthy'
@@ -598,9 +600,10 @@ export async function checkService(service) {
   // Extract L402 macaroon format for metadata (no health impact)
   let l402Format = null
   if (protocol === 'L402') {
-    const detection = result.postFallback?.detection?.valid
-      ? result.postFallback.detection
-      : result.detection
+    const postL402 = getPrimaryDetection(result.postFallback?.detection || [], protocol)
+    const detection = postL402.valid
+      ? postL402
+      : getPrimaryDetection(result.detection, protocol)
     if (detection?.details?.format) {
       l402Format = detection.details.format
     }
