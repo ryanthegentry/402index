@@ -120,3 +120,7 @@ The `VERDICT:` line MUST appear exactly as `VERDICT:APPROVE` or `VERDICT:REQUEST
 - Secrets comparison using `===` instead of constant-time compare
 
 Never approve with "minor nits" on security issues. If it's a security problem, request changes.
+
+## Spec Compliance Check
+
+When the PR references a GitHub issue, verify the fix addresses ALL points in the linked issue spec. If any requirement is unaddressed, REQUEST_CHANGES with a list of missing requirements.
