@@ -334,6 +334,82 @@ describe('cc-dispatch.sh', () => {
     })
   })
 
+  // ── CI gate in dispatch_review_pr ─────────────────────────────────
+
+  describe('CI gate in dispatch_review_pr', () => {
+    it('calls wait_for_ci before running review agent', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      const ciPos = fnBody.indexOf('wait_for_ci')
+      const claudePos = fnBody.indexOf('claude -p')
+      assert.ok(ciPos !== -1, 'dispatch_review_pr must call wait_for_ci')
+      assert.ok(claudePos !== -1, 'dispatch_review_pr must invoke claude agent')
+      assert.ok(ciPos < claudePos, 'wait_for_ci must run before claude -p agent invocation')
+    })
+
+    it('routes to ready-for-revision when CI fails', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // Between wait_for_ci and claude -p, CI failure must route to revision
+      const ciPos = fnBody.indexOf('wait_for_ci')
+      const claudePos = fnBody.indexOf('claude -p')
+      const ciBlock = fnBody.slice(ciPos, claudePos)
+      assert.ok(
+        ciBlock.includes('ready-for-revision'),
+        'must label ready-for-revision on CI failure before reaching review agent'
+      )
+    })
+
+    it('does not invoke review agent when CI fails', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // The CI failure block must return before reaching claude -p
+      const ciPos = fnBody.indexOf('wait_for_ci')
+      const claudePos = fnBody.indexOf('claude -p')
+      const ciBlock = fnBody.slice(ciPos, claudePos)
+      assert.ok(
+        ciBlock.includes('return'),
+        'CI failure path must return before invoking review agent'
+      )
+    })
+
+    it('wait_for_ci function exists and polls gh pr checks', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      assert.ok(content.includes('wait_for_ci()'), 'wait_for_ci function must exist')
+      const fnStart = content.indexOf('wait_for_ci()')
+      const fnEnd = content.indexOf('\n}', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+      assert.ok(
+        fnBody.includes('gh pr checks'),
+        'wait_for_ci must poll gh pr checks'
+      )
+    })
+
+    it('posts CI failure details in issue comment', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_review_pr()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      const ciPos = fnBody.indexOf('wait_for_ci')
+      const claudePos = fnBody.indexOf('claude -p')
+      const ciBlock = fnBody.slice(ciPos, claudePos)
+      assert.ok(
+        ciBlock.includes('gh issue comment'),
+        'must post CI failure details as issue comment'
+      )
+    })
+  })
+
   // ── dispatch_review_pr verdict detection ─────────────────────────
 
   describe('review verdict detection', () => {

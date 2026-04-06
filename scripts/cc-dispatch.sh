@@ -100,6 +100,10 @@ get_next_stage_label() {
 }
 
 # After a dispatch stage completes successfully, auto-chain to next stage
+# NOTE: Branch protection on master is pending a GitHub Pro upgrade (or making
+# the repo public). Until then, required status checks and review requirements
+# are not enforced by GitHub. The CI gate in dispatch_review_pr() provides
+# in-pipeline enforcement as a substitute.
 chain_next_stage() {
     local issue_number="$1"
     local current_label="$2"
@@ -207,6 +211,49 @@ submit_review() {
         fi
     fi
     $review_ok
+}
+
+# Wait for CI checks to complete on a PR.
+# Returns 0 if all checks pass, 1 if any check fails or times out.
+# Outputs check results on failure (for inclusion in issue comments).
+wait_for_ci() {
+    local pr_number="$1"
+    local max_attempts="${2:-30}"  # 30 * 20s = 10 min
+    local interval=20
+
+    log "Waiting for CI on PR #${pr_number}..."
+
+    local attempt=0
+    while [[ $attempt -lt $max_attempts ]]; do
+        local checks
+        checks=$(gh pr checks "$pr_number" --repo "$REPO" 2>&1) || true
+
+        if [[ -z "$checks" ]]; then
+            attempt=$((attempt + 1))
+            [[ $attempt -lt $max_attempts ]] && sleep "$interval"
+            continue
+        fi
+
+        # If any check has failed, bail immediately
+        if echo "$checks" | grep -qiE '\bfail'; then
+            log "CI failed for PR #${pr_number}"
+            echo "$checks"
+            return 1
+        fi
+
+        # If no checks are pending/in-progress, all must have passed
+        if ! echo "$checks" | grep -qiE 'pending|queued|in_progress|waiting'; then
+            log "CI passed for PR #${pr_number}"
+            return 0
+        fi
+
+        attempt=$((attempt + 1))
+        [[ $attempt -lt $max_attempts ]] && sleep "$interval"
+    done
+
+    log "CI timed out for PR #${pr_number} after $((max_attempts * interval))s"
+    echo "CI checks did not complete within $((max_attempts * interval))s"
+    return 1
 }
 
 # Set commit status on the PR HEAD SHA for the dispatch/review context.
@@ -680,6 +727,24 @@ dispatch_review_pr() {
     fi
 
     log "Found PR #${pr_number} for issue #${issue_number}"
+
+    # Gate: CI must pass before any review agent runs
+    local ci_output
+    ci_output=$(wait_for_ci "$pr_number")
+    local ci_exit=$?
+    if [[ $ci_exit -ne 0 ]]; then
+        log "CI failed for PR #${pr_number} — skipping review, routing to revision"
+        gh issue edit "$issue_number" --repo "$REPO" \
+            --remove-label "in-progress" --add-label "ready-for-revision"
+        gh issue comment "$issue_number" --repo "$REPO" \
+            --body "⚠️ CI failed on PR #${pr_number} — routing to revision.
+
+Errors:
+\`\`\`
+${ci_output}
+\`\`\`"
+        return 0
+    fi
 
     # Collect prior review context: PR comments + formal reviews
     local prior_pr

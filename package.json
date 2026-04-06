@@ -9,7 +9,7 @@
     "dev": "nodemon src/server.js",
     "poll": "node scripts/poll.js",
     "healthcheck": "node scripts/healthcheck.js",
-    "test": "node --test test/**/*.test.js"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
