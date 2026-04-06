@@ -180,6 +180,21 @@ export function detailPage(service) {
       </div>
       ` : ''}
 
+      ${service.related_services?.length > 0 ? `
+      <div class="detail-section" style="margin-top:24px; margin-bottom:24px">
+        <h2>Also available via</h2>
+        ${service.related_services.map(rs => `
+          <div style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px">
+            <div>${protocolBadge(rs.protocol)}</div>
+            <div>${healthDot(rs.health_status)}</div>
+            <div>${formatPrice(rs)}</div>
+            <div style="color:var(--text-muted); font-size:0.85em">${escapeHtml(rs.payment_asset || '')} on ${escapeHtml(rs.payment_network || '')}</div>
+            <a href="/service/${encodeURIComponent(rs.id)}" style="margin-left:auto">View details &rarr;</a>
+          </div>
+        `).join('')}
+      </div>
+      ` : ''}
+
       ${service.health_checks?.length > 0 ? `
       <div class="detail-section" style="margin-bottom:24px">
         <h2>Recent Health Checks</h2>
