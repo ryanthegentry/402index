@@ -11,10 +11,13 @@
 
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
+import { startServer, stopServer } from './helpers/server.js'
 
-const BASE = process.env.API_BASE || 'http://localhost:3402'
-const API = `${BASE}/api/v1`
+let BASE = process.env.API_BASE
+let API
+
+before(async () => { BASE = BASE || await startServer(); API = `${BASE}/api/v1` })
 
 // ─── API Helpers ─────────────────────────────────────────────────────────────
 
@@ -65,16 +68,18 @@ try {
 }
 
 // Cleanup all test data after suite
-after(() => {
-  if (!db) return
-  try {
-    db.prepare("DELETE FROM domain_claims WHERE domain LIKE '%.example.com'").run()
-    db.prepare("DELETE FROM domain_claims WHERE domain = 'example.com'").run()
-    db.prepare("DELETE FROM services WHERE id LIKE 'dv-test-%'").run()
-    db.prepare("DELETE FROM health_checks WHERE service_id LIKE 'dv-test-%'").run()
-  } catch {
-    // Tables may not exist yet — expected before implementation
+after(async () => {
+  if (db) {
+    try {
+      db.prepare("DELETE FROM domain_claims WHERE domain LIKE '%.example.com'").run()
+      db.prepare("DELETE FROM domain_claims WHERE domain = 'example.com'").run()
+      db.prepare("DELETE FROM services WHERE id LIKE 'dv-test-%'").run()
+      db.prepare("DELETE FROM health_checks WHERE service_id LIKE 'dv-test-%'").run()
+    } catch {
+      // Tables may not exist yet — expected before implementation
+    }
   }
+  await stopServer()
 })
 
 // ─── 1. Claim Initiation (POST /api/v1/claim) ──────────────────────────────
@@ -89,7 +94,7 @@ describe('POST /api/v1/claim — Claim Initiation', () => {
     assert.equal(r.body.domain, domain)
     assert.ok(r.body.verification_url.startsWith('https://'), 'must be HTTPS')
     assert.ok(r.body.verification_url.includes('/.well-known/402index-verify.txt'))
-    assert.ok(r.body.instructions.includes(r.body.verification_token))
+    assert.ok(r.body.instructions.includes(r.body.verification_hash))
   })
 
   it('2. domain with protocol prefix → 400', async () => {
@@ -230,11 +235,12 @@ describe('POST /api/v1/claim/verify — Verification Logic', () => {
     const claimId = setupClaim(domain, token)
 
     try {
+      const hash = createHash('sha256').update(token).digest('hex')
       const mockFetch = async (url, opts) => {
         assert.ok(url.includes(domain), 'fetch URL should include domain')
         assert.equal(opts.redirect, 'manual', 'must not follow redirects')
         assert.ok(opts.headers['User-Agent'].includes('402index'), 'should set User-Agent')
-        return { status: 200, text: async () => token }
+        return { status: 200, text: async () => hash, headers: { get: () => null } }
       }
 
       const result = await verifyClaimFn(domain, { fetchFn: mockFetch })
@@ -973,15 +979,16 @@ describe('domain_verified flag lifecycle', () => {
         "INSERT INTO domain_claims (id, domain, verification_token, status, expires_at) VALUES (?, ?, ?, 'pending', datetime('now', '+3 days'))"
       ).run(randomUUID(), domain, token)
 
-      // Insert 3 services under the domain with domain_verified=0
+      // Insert 3 services under the domain with domain_verified=0 (hostname must match for verify update)
       for (let i = 0; i < svcIds.length; i++) {
         db.prepare(
-          "INSERT INTO services (id, name, url, protocol, source, status, domain_verified) VALUES (?, ?, ?, 'x402', 'bazaar', 'active', 0)"
-        ).run(svcIds[i], `Service ${i + 1}`, `https://${domain}/api/endpoint-${i + 1}`)
+          "INSERT INTO services (id, name, url, protocol, source, status, domain_verified, hostname) VALUES (?, ?, ?, 'x402', 'bazaar', 'active', 0, ?)"
+        ).run(svcIds[i], `Service ${i + 1}`, `https://${domain}/api/endpoint-${i + 1}`, domain)
       }
 
-      // Verify the claim with mock fetch
-      const mockFetch = async () => ({ status: 200, text: async () => token })
+      // Verify the claim with mock fetch (must return hash, not raw token)
+      const hash = createHash('sha256').update(token).digest('hex')
+      const mockFetch = async () => ({ status: 200, text: async () => hash, headers: { get: () => null } })
       const result = await verifyClaimFn(domain, { fetchFn: mockFetch })
       assert.equal(result.status, 200)
 
@@ -1013,11 +1020,11 @@ describe('domain_verified flag lifecycle', () => {
       "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
     ).run(randomUUID(), domain, token)
 
-    // Insert 3 services with domain_verified=1
+    // Insert 3 services with domain_verified=1 (hostname must match for revoke reset)
     for (let i = 1; i <= 3; i++) {
       db.prepare(
-        "INSERT INTO services (id, name, url, protocol, source, status, domain_verified) VALUES (?, ?, ?, 'x402', 'bazaar', 'active', 1)"
-      ).run(`dv-flag-revoke-${i}`, `Service ${i}`, `https://${domain}/api/endpoint-${i}`)
+        "INSERT INTO services (id, name, url, protocol, source, status, domain_verified, hostname) VALUES (?, ?, ?, 'x402', 'bazaar', 'active', 1, ?)"
+      ).run(`dv-flag-revoke-${i}`, `Service ${i}`, `https://${domain}/api/endpoint-${i}`, domain)
     }
 
     // Revoke

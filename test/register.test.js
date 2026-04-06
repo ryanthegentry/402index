@@ -13,9 +13,13 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { networkInterfaces } from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { startServer, stopServer } from './helpers/server.js'
 
-const BASE = process.env.API_BASE || 'http://localhost:3402'
-const API = `${BASE}/api/v1`
+let BASE = process.env.API_BASE
+let API
+
+before(async () => { BASE = BASE || await startServer(); API = `${BASE}/api/v1` })
+after(async () => { await stopServer() })
 
 async function register(body, extraHeaders = {}) {
   const res = await fetch(`${API}/register`, {
