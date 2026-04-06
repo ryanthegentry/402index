@@ -47,7 +47,8 @@ jobs:
 
       - name: Check if e2e tests exist
         id: check_e2e
-        run: node -e "const p=require('./package.json'); process.exit(p.scripts['test:e2e'] ? 0 : 1)" || echo "skip=true" >> $GITHUB_OUTPUT
+        run: |
+          node -e "const p=require('./package.json'); process.exit(p.scripts['test:e2e'] ? 0 : 1)" || echo "skip=true" >> $GITHUB_OUTPUT
 
       - name: Install Playwright chromium
         if: steps.check_e2e.outputs.skip != 'true'
