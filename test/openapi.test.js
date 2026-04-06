@@ -240,6 +240,80 @@ describe('llms.txt content', async () => {
   })
 })
 
+// ─── Dual-protocol fields — OpenAPI spec (#90) ─────────────────────────────
+
+describe('OpenAPI spec — dual-protocol fields', async () => {
+  const { openapiSpec } = await import('../src/openapi.js')
+  const schemas = openapiSpec.components.schemas
+  const detailPath = openapiSpec.paths['/api/v1/services/{id}']
+  const registerPath = openapiSpec.paths['/api/v1/register']
+
+  it('Service schema has related_protocols as array of string', () => {
+    const prop = schemas.Service.properties.related_protocols
+    assert.ok(prop, 'related_protocols property missing from Service schema')
+    assert.equal(prop.type, 'array')
+    assert.equal(prop.items.type, 'string')
+  })
+
+  it('detail endpoint 200 response includes related_services', () => {
+    const schema200 = detailPath.get.responses['200'].content['application/json'].schema
+    // related_services should be in the allOf block alongside health_checks
+    const extraProps = schema200.allOf[1].properties
+    assert.ok(extraProps.related_services, 'related_services missing from detail 200 response')
+    assert.equal(extraProps.related_services.type, 'array')
+    const itemProps = extraProps.related_services.items.properties
+    assert.ok(itemProps.id, 'related_services items missing id')
+    assert.ok(itemProps.protocol, 'related_services items missing protocol')
+    assert.ok(itemProps.health_status, 'related_services items missing health_status')
+    assert.ok(itemProps.reliability_score, 'related_services items missing reliability_score')
+  })
+
+  it('registration 201 response includes also_registered', () => {
+    const schema201 = registerPath.post.responses['201'].content['application/json'].schema
+    const prop = schema201.properties.also_registered
+    assert.ok(prop, 'also_registered missing from 201 response')
+    assert.equal(prop.type, 'array')
+    assert.ok(prop.items.$ref, 'also_registered items should use $ref to Service schema')
+  })
+
+  it('registration 422 response has structured content/schema with probe object', () => {
+    const resp422 = registerPath.post.responses['422']
+    assert.ok(resp422.content, '422 response missing content block')
+    const schema = resp422.content['application/json'].schema
+    assert.ok(schema.properties.probe, '422 schema missing probe property')
+    const probeProps = schema.properties.probe.properties
+    assert.ok(probeProps.httpStatus, 'probe missing httpStatus')
+    assert.ok(probeProps.headersPresent, 'probe missing headersPresent')
+    assert.ok(probeProps.bodySnippet, 'probe missing bodySnippet')
+    assert.ok(probeProps.detectedProtocols, 'probe missing detectedProtocols')
+    // suggestedProtocol is a top-level optional field
+    assert.ok(schema.properties.suggestedProtocol, '422 schema missing suggestedProtocol')
+  })
+})
+
+// ─── Dual-protocol fields — api-docs page (#90) ────────────────────────────
+
+describe('API docs page — dual-protocol fields', async () => {
+  const { apiDocsPage } = await import('../src/views/api-docs.js')
+  const html = apiDocsPage()
+
+  it('mentions related_protocols in response example', () => {
+    assert.ok(html.includes('related_protocols'), 'api-docs page missing related_protocols')
+  })
+
+  it('mentions related_services for detail endpoint', () => {
+    assert.ok(html.includes('related_services'), 'api-docs page missing related_services')
+  })
+
+  it('mentions also_registered for registration', () => {
+    assert.ok(html.includes('also_registered'), 'api-docs page missing also_registered')
+  })
+
+  it('mentions probe diagnostics for 422 response', () => {
+    assert.ok(html.includes('probe'), 'api-docs page missing probe diagnostics mention')
+  })
+})
+
 // ─── Cache-Control test ─────────────────────────────────────────────────────
 
 describe('OpenAPI route — cache headers', async () => {

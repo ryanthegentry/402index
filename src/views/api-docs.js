@@ -57,7 +57,7 @@ export function apiDocsPage() {
             <span class="endpoint-method">GET</span>
             <span class="endpoint-path">/api/v1/services/:id</span>
           </div>
-          <p>Get full details for a single service, including recent health check history.</p>
+          <p>Get full details for a single service, including recent health check history and <code>related_services</code> (other protocol listings for the same URL with their health, pricing, and reliability data).</p>
           <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>GET /api/v1/services/1</div>
         </div>
 
@@ -119,9 +119,9 @@ export function apiDocsPage() {
               <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
             </thead>
             <tbody>
-              <tr><td><code>201</code></td><td>Registered and pending review. Returns the service record (with <code>status: "pending"</code>) and verification details. Re-registering an existing URL+protocol updates the record.</td></tr>
+              <tr><td><code>201</code></td><td>Registered and pending review. Returns the service record (with <code>status: "pending"</code>), verification details, and <code>also_registered</code> (array of bonus listings auto-created when dual-protocol support is detected). Re-registering an existing URL+protocol updates the record.</td></tr>
               <tr><td><code>400</code></td><td>Missing required fields, invalid protocol, invalid URL, or field exceeds max length.</td></tr>
-              <tr><td><code>422</code></td><td>Protocol verification failed. The response includes actionable details: wrong HTTP status, missing payment headers, unreachable endpoint, or SSRF blocked.</td></tr>
+              <tr><td><code>422</code></td><td>Protocol verification failed. The response includes a diagnostic <code>probe</code> object with <code>httpStatus</code>, <code>headersPresent</code>, <code>bodySnippet</code>, and <code>detectedProtocols</code>. If a different protocol was detected than requested, a top-level <code>suggestedProtocol</code> field is included.</td></tr>
               <tr><td><code>429</code></td><td>Rate limit exceeded (10 registrations per hour per IP).</td></tr>
             </tbody>
           </table>
@@ -262,7 +262,8 @@ export function apiDocsPage() {
               x402_facilitator_reachable: null,
               x402_asset_known: null,
               l402_format: 'v2_tlv',
-              lnget_compatible: 1
+              lnget_compatible: 1,
+              related_protocols: ['x402']
             }
           ],
           total: 7595,
