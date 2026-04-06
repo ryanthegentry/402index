@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { detectProtocol, parseMppChallenge, decodeMppRequest } from '../src/services/detect-protocol.js'
+import { detectProtocol, parseMppChallenge, decodeMppRequest, getPrimaryDetection } from '../src/services/detect-protocol.js'
 
 // ─── Real-world MPP fixture (captured from OpenAI) ────────────────────────────
 
@@ -260,5 +260,101 @@ describe('detectProtocol — rawHeaders', () => {
   it('null protocol returns empty rawHeaders', () => {
     const result = detectProtocol({})
     assert.deepEqual(result.rawHeaders, {})
+  })
+})
+
+// ─── Multi-Protocol Detection ──────────────────────────────────────────────
+
+describe('multi-protocol detection', () => {
+  const validAccepts = [{ payTo: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', amount: '10000', network: 'eip155:8453' }]
+  const validHeaderB64 = Buffer.from(JSON.stringify({ accepts: validAccepts })).toString('base64')
+
+  it('dual L402+x402: returns 2-element array with both protocols', () => {
+    const result = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
+      paymentRequired: validHeaderB64,
+    })
+    assert.ok(Array.isArray(result), 'detectProtocol must return an array')
+    assert.equal(result.length, 2, 'should detect both L402 and x402')
+    const protocols = result.map(d => d.protocol).sort()
+    assert.deepEqual(protocols, ['L402', 'x402'])
+  })
+
+  it('dual L402+MPP is impossible: L402 WWW-Authenticate returns 1-element array with L402 only', () => {
+    // A single WWW-Authenticate header can only carry one scheme
+    const result = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
+    })
+    assert.ok(Array.isArray(result), 'detectProtocol must return an array')
+    assert.equal(result.length, 1)
+    assert.equal(result[0].protocol, 'L402')
+  })
+
+  it('triple detection (L402 + x402 header + x402 body): returns 2-element array (L402 + x402 V2, no V1 duplicate)', () => {
+    const body = JSON.stringify({ x402Version: 1, accepts: validAccepts })
+    const result = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
+      paymentRequired: validHeaderB64,
+      responseBody: body,
+    })
+    assert.ok(Array.isArray(result), 'detectProtocol must return an array')
+    assert.equal(result.length, 2, 'should have L402 + x402 (V2 only, not V1 duplicate)')
+    const x402 = result.find(d => d.protocol === 'x402')
+    assert.equal(x402.details.version, 2, 'x402 V2 takes precedence over V1')
+  })
+
+  it('single L402 only: returns 1-element array', () => {
+    const result = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
+    })
+    assert.ok(Array.isArray(result), 'detectProtocol must return an array')
+    assert.equal(result.length, 1)
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result[0].valid, true)
+  })
+
+  it('no protocol: returns empty array', () => {
+    const result = detectProtocol({})
+    assert.ok(Array.isArray(result), 'detectProtocol must return an array')
+    assert.equal(result.length, 0)
+  })
+})
+
+// ─── getPrimaryDetection ──────────────────────────────────────────────────
+
+describe('getPrimaryDetection', () => {
+  const validAccepts = [{ payTo: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', amount: '10000', network: 'eip155:8453' }]
+  const validHeaderB64 = Buffer.from(JSON.stringify({ accepts: validAccepts })).toString('base64')
+
+  it('extracts L402 detection from a mixed array', () => {
+    const detections = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
+      paymentRequired: validHeaderB64,
+    })
+    const l402 = getPrimaryDetection(detections, 'L402')
+    assert.equal(l402.protocol, 'L402')
+    assert.equal(l402.valid, true)
+  })
+
+  it('returns null-protocol sentinel when protocol not in array', () => {
+    const detections = detectProtocol({
+      wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
+      paymentRequired: validHeaderB64,
+    })
+    const mpp = getPrimaryDetection(detections, 'MPP')
+    assert.equal(mpp.protocol, null)
+    assert.equal(mpp.valid, false)
+    assert.equal(mpp.degradeReason, null)
+    assert.deepEqual(mpp.details, {})
+    assert.deepEqual(mpp.rawHeaders, {})
+  })
+
+  it('returns null-protocol sentinel for empty array', () => {
+    const mpp = getPrimaryDetection([], 'L402')
+    assert.equal(mpp.protocol, null)
+    assert.equal(mpp.valid, false)
+    assert.equal(mpp.degradeReason, null)
+    assert.deepEqual(mpp.details, {})
+    assert.deepEqual(mpp.rawHeaders, {})
   })
 })
