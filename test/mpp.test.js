@@ -371,8 +371,8 @@ describe('detectProtocol used by health checker', () => {
     const result = detectProtocol({
       wwwAuthenticate: 'Payment id="x", realm="r", method="tempo", intent="charge", request="eyJ0ZXN0IjoxfQ"',
     })
-    assert.equal(result.protocol, 'MPP')
-    assert.equal(result.valid, true)
+    assert.equal(result[0].protocol, 'MPP')
+    assert.equal(result[0].valid, true)
   })
 
   it('detects invalid MPP challenge (missing field) via detectProtocol', async () => {
@@ -380,8 +380,8 @@ describe('detectProtocol used by health checker', () => {
     const result = detectProtocol({
       wwwAuthenticate: 'Payment id="x", realm="r", method="tempo"',
     })
-    assert.equal(result.protocol, 'MPP')
-    assert.equal(result.valid, false)
-    assert.ok(result.degradeReason.includes('missing'))
+    assert.equal(result[0].protocol, 'MPP')
+    assert.equal(result[0].valid, false)
+    assert.ok(result[0].degradeReason.includes('missing'))
   })
 })

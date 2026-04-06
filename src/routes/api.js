@@ -5,6 +5,7 @@ import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/servic
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeUrl, extractHostname } from '../services/url-normalize.js'
 import { probeEndpoint } from '../services/probe-endpoint.js'
+import { getPrimaryDetection } from '../services/detect-protocol.js'
 import { getProvider } from '../services/l402-provider.js'
 import { registerWebhook, deleteWebhook, getWebhook } from '../services/webhooks.js'
 import { emit } from '../services/events.js'
@@ -367,7 +368,7 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
 
   // Effective status after POST fallback
   const effectiveStatus = result.httpStatus
-  const detection = result.detection
+  const detection = getPrimaryDetection(result.detection, protocol)
 
   if (effectiveStatus !== 402) {
     return {
@@ -380,18 +381,20 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
   }
 
   // Graceful cross-detection: suggest the right protocol instead of hard-failing
-  if (detection.protocol && detection.protocol !== protocol) {
-    return {
-      valid: false,
-      protocol,
-      httpStatus: effectiveStatus,
-      error: `Your endpoint returns a ${detection.protocol} challenge. Register it as ${detection.protocol} instead.`,
-      suggestedProtocol: detection.protocol,
-      details: detection.details,
-    }
-  }
-
   if (!detection.protocol) {
+    // Check if any other protocol was detected — suggest it
+    const otherDetection = result.detection.find(d => d.protocol && d.protocol !== protocol)
+    if (otherDetection) {
+      return {
+        valid: false,
+        protocol,
+        httpStatus: effectiveStatus,
+        error: `Your endpoint returns a ${otherDetection.protocol} challenge. Register it as ${otherDetection.protocol} instead.`,
+        suggestedProtocol: otherDetection.protocol,
+        details: otherDetection.details,
+      }
+    }
+
     return {
       valid: false,
       protocol,

@@ -401,9 +401,9 @@ describe('probeEndpoint — protocol detection', () => {
     })
 
     const result = await probeEndpoint('https://example.com/api')
-    assert.equal(result.detection.protocol, 'L402')
-    assert.equal(result.detection.valid, true)
-    assert.equal(result.detection.details.scheme, 'L402')
+    assert.equal(result.detection[0].protocol, 'L402')
+    assert.equal(result.detection[0].valid, true)
+    assert.equal(result.detection[0].details.scheme, 'L402')
   })
 
   it('detects x402 protocol from PAYMENT-REQUIRED header', async () => {
@@ -412,8 +412,8 @@ describe('probeEndpoint — protocol detection', () => {
     })
 
     const result = await probeEndpoint('https://example.com/api')
-    assert.equal(result.detection.protocol, 'x402')
-    assert.equal(result.detection.valid, true)
+    assert.equal(result.detection[0].protocol, 'x402')
+    assert.equal(result.detection[0].valid, true)
   })
 
   it('detects MPP protocol from WWW-Authenticate Payment header', async () => {
@@ -422,23 +422,22 @@ describe('probeEndpoint — protocol detection', () => {
     })
 
     const result = await probeEndpoint('https://example.com/api')
-    assert.equal(result.detection.protocol, 'MPP')
-    assert.equal(result.detection.valid, true)
+    assert.equal(result.detection[0].protocol, 'MPP')
+    assert.equal(result.detection[0].valid, true)
   })
 
-  it('returns detection.protocol=null for plain 402', async () => {
+  it('returns empty detection array for plain 402', async () => {
     globalThis.fetch = async () => mockResponse(402)
 
     const result = await probeEndpoint('https://example.com/api')
-    assert.equal(result.detection.protocol, null)
-    assert.equal(result.detection.valid, false)
+    assert.equal(result.detection.length, 0)
   })
 
-  it('returns detection.protocol=null for non-402 response', async () => {
+  it('returns empty detection array for non-402 response', async () => {
     globalThis.fetch = async () => mockResponse(200)
 
     const result = await probeEndpoint('https://example.com/api')
-    assert.equal(result.detection.protocol, null)
+    assert.equal(result.detection.length, 0)
   })
 
   it('detects x402 V1 from response body', async () => {
@@ -455,18 +454,19 @@ describe('probeEndpoint — protocol detection', () => {
     }
 
     const result = await probeEndpoint('https://example.com/api')
-    assert.equal(result.detection.protocol, 'x402')
-    assert.equal(result.detection.details.version, 1)
+    assert.equal(result.detection[0].protocol, 'x402')
+    assert.equal(result.detection[0].details.version, 1)
   })
 
-  it('detection precedence: L402 wins over x402 header', async () => {
+  it('detection: both L402 and x402 detected when both present', async () => {
     globalThis.fetch = async () => mockResponse(402, {
       'www-authenticate': VALID_L402_WWW_AUTH,
       'payment-required': VALID_X402_HEADER,
     })
 
     const result = await probeEndpoint('https://example.com/api')
-    assert.equal(result.detection.protocol, 'L402')
+    assert.equal(result.detection[0].protocol, 'L402')
+    assert.equal(result.detection.length, 2)
   })
 })
 
@@ -490,7 +490,7 @@ describe('probeEndpoint — POST fallback', () => {
     assert.ok(calls.includes('POST'))
     assert.equal(result.postFallback.attempted, true)
     assert.equal(result.postFallback.httpStatus, 402)
-    assert.equal(result.postFallback.detection.protocol, 'L402')
+    assert.equal(result.postFallback.detection[0].protocol, 'L402')
     assert.equal(result.methodUsed, 'POST')
   })
 
@@ -505,7 +505,7 @@ describe('probeEndpoint — POST fallback', () => {
 
     const result = await probeEndpoint('https://example.com/api', { postFallback: true })
     assert.equal(result.postFallback.attempted, true)
-    assert.equal(result.postFallback.detection.protocol, 'x402')
+    assert.equal(result.postFallback.detection[0].protocol, 'x402')
     assert.equal(result.methodUsed, 'POST')
   })
 
@@ -519,7 +519,7 @@ describe('probeEndpoint — POST fallback', () => {
 
     const result = await probeEndpoint('https://example.com/api', { postFallback: true })
     assert.equal(result.postFallback.attempted, true)
-    assert.equal(result.postFallback.detection.protocol, 'MPP')
+    assert.equal(result.postFallback.detection[0].protocol, 'MPP')
     assert.equal(result.methodUsed, 'POST')
   })
 
@@ -638,6 +638,6 @@ describe('probeEndpoint — POST fallback', () => {
     })
     assert.equal(result.postFallback.attempted, true)
     assert.equal(result.postFallback.httpStatus, 402)
-    assert.equal(result.postFallback.detection.protocol, 'L402')
+    assert.equal(result.postFallback.detection[0].protocol, 'L402')
   })
 })

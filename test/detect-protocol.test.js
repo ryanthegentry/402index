@@ -16,54 +16,51 @@ describe('detectProtocol — L402', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
     })
-    assert.equal(result.protocol, 'L402')
-    assert.equal(result.valid, true)
-    assert.equal(result.degradeReason, null)
-    assert.equal(result.details.scheme, 'L402')
-    assert.equal(result.details.macaroonValid, true)
-    assert.equal(result.details.invoiceValid, true)
-    assert.ok(result.rawHeaders['WWW-Authenticate'])
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result[0].valid, true)
+    assert.equal(result[0].degradeReason, null)
+    assert.equal(result[0].details.scheme, 'L402')
+    assert.equal(result[0].details.macaroonValid, true)
+    assert.equal(result[0].details.invoiceValid, true)
+    assert.ok(result[0].rawHeaders['WWW-Authenticate'])
   })
 
   it('detects LSAT scheme (case insensitive)', () => {
     const result = detectProtocol({
       wwwAuthenticate: `LSAT macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
     })
-    assert.equal(result.protocol, 'L402')
-    assert.equal(result.valid, true)
-    assert.equal(result.details.scheme, 'LSAT')
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result[0].valid, true)
+    assert.equal(result[0].details.scheme, 'LSAT')
   })
 
   it('returns valid=false for L402 with invalid macaroon', () => {
     const result = detectProtocol({
       wwwAuthenticate: 'L402 macaroon="bad", invoice="' + VALID_L402_INVOICE + '"',
     })
-    assert.equal(result.protocol, 'L402')
-    assert.equal(result.valid, false)
-    assert.ok(result.degradeReason.includes('macaroon'))
-    assert.equal(result.details.macaroonValid, false)
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result[0].valid, false)
+    assert.ok(result[0].degradeReason.includes('macaroon'))
+    assert.equal(result[0].details.macaroonValid, false)
   })
 
   it('returns valid=false for L402 with missing invoice', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}"`,
     })
-    assert.equal(result.protocol, 'L402')
-    assert.equal(result.valid, false)
-    assert.ok(result.degradeReason.includes('invoice'))
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result[0].valid, false)
+    assert.ok(result[0].degradeReason.includes('invoice'))
   })
 
-  it('returns null protocol for empty WWW-Authenticate', () => {
+  it('returns empty array for empty WWW-Authenticate', () => {
     const result = detectProtocol({ wwwAuthenticate: '' })
-    assert.equal(result.protocol, null)
+    assert.equal(result.length, 0)
   })
 
-  it('returns null protocol for no headers at all', () => {
+  it('returns empty array for no headers at all', () => {
     const result = detectProtocol({})
-    assert.equal(result.protocol, null)
-    assert.equal(result.valid, false)
-    assert.deepEqual(result.details, {})
-    assert.deepEqual(result.rawHeaders, {})
+    assert.equal(result.length, 0)
   })
 })
 
@@ -74,58 +71,58 @@ describe('detectProtocol — MPP', () => {
     const result = detectProtocol({
       wwwAuthenticate: OPENAI_MPP_CHALLENGE,
     })
-    assert.equal(result.protocol, 'MPP')
-    assert.equal(result.valid, true)
-    assert.equal(result.degradeReason, null)
-    assert.equal(result.details.method, 'tempo')
-    assert.equal(result.details.intent, 'session')
-    assert.ok(result.details.id)
-    assert.ok(result.details.realm)
-    assert.ok(result.details.request)
-    assert.ok(result.rawHeaders['WWW-Authenticate'])
+    assert.equal(result[0].protocol, 'MPP')
+    assert.equal(result[0].valid, true)
+    assert.equal(result[0].degradeReason, null)
+    assert.equal(result[0].details.method, 'tempo')
+    assert.equal(result[0].details.intent, 'session')
+    assert.ok(result[0].details.id)
+    assert.ok(result[0].details.realm)
+    assert.ok(result[0].details.request)
+    assert.ok(result[0].rawHeaders['WWW-Authenticate'])
   })
 
   it('returns valid=false for Payment header missing intent', () => {
     const result = detectProtocol({
       wwwAuthenticate: 'Payment id="abc", realm="test.com", method="tempo", request="eyJ0ZXN0IjoxfQ"',
     })
-    assert.equal(result.protocol, 'MPP')
-    assert.equal(result.valid, false)
-    assert.equal(result.degradeReason, 'missing required MPP field: intent')
+    assert.equal(result[0].protocol, 'MPP')
+    assert.equal(result[0].valid, false)
+    assert.equal(result[0].degradeReason, 'missing required MPP field: intent')
   })
 
   it('returns valid=false for Payment header missing request', () => {
     const result = detectProtocol({
       wwwAuthenticate: 'Payment id="abc", realm="test.com", method="tempo", intent="charge"',
     })
-    assert.equal(result.protocol, 'MPP')
-    assert.equal(result.valid, false)
-    assert.equal(result.degradeReason, 'missing required MPP field: request')
+    assert.equal(result[0].protocol, 'MPP')
+    assert.equal(result[0].valid, false)
+    assert.equal(result[0].degradeReason, 'missing required MPP field: request')
   })
 
   it('detects stripe method', () => {
     const result = detectProtocol({
       wwwAuthenticate: 'Payment id="x", realm="r", method="stripe", intent="charge", request="eyJ0ZXN0IjoxfQ"',
     })
-    assert.equal(result.protocol, 'MPP')
-    assert.equal(result.valid, true)
-    assert.equal(result.details.method, 'stripe')
+    assert.equal(result[0].protocol, 'MPP')
+    assert.equal(result[0].valid, true)
+    assert.equal(result[0].details.method, 'stripe')
   })
 
   it('detects session intent', () => {
     const result = detectProtocol({
       wwwAuthenticate: 'Payment id="x", realm="r", method="tempo", intent="session", request="eyJ0ZXN0IjoxfQ"',
     })
-    assert.equal(result.protocol, 'MPP')
-    assert.equal(result.details.intent, 'session')
+    assert.equal(result[0].protocol, 'MPP')
+    assert.equal(result[0].details.intent, 'session')
   })
 
   it('extracts optional expires and description fields', () => {
     const result = detectProtocol({
       wwwAuthenticate: OPENAI_MPP_CHALLENGE,
     })
-    assert.equal(result.details.expires, '2026-03-18T20:04:59.811Z')
-    assert.ok(result.details.description.includes('generation'))
+    assert.equal(result[0].details.expires, '2026-03-18T20:04:59.811Z')
+    assert.ok(result[0].details.description.includes('generation'))
   })
 })
 
@@ -137,32 +134,31 @@ describe('detectProtocol — x402', () => {
 
   it('detects valid x402 V2 header', () => {
     const result = detectProtocol({ paymentRequired: validHeaderB64 })
-    assert.equal(result.protocol, 'x402')
-    assert.equal(result.valid, true)
-    assert.equal(result.details.version, 2)
-    assert.ok(result.details.accepts)
-    assert.ok(result.rawHeaders['PAYMENT-REQUIRED'])
+    assert.equal(result[0].protocol, 'x402')
+    assert.equal(result[0].valid, true)
+    assert.equal(result[0].details.version, 2)
+    assert.ok(result[0].details.accepts)
+    assert.ok(result[0].rawHeaders['PAYMENT-REQUIRED'])
   })
 
   it('detects x402 V1 body fallback', () => {
     const body = JSON.stringify({ x402Version: 1, accepts: validAccepts })
     const result = detectProtocol({ responseBody: body })
-    assert.equal(result.protocol, 'x402')
-    assert.equal(result.valid, true)
-    assert.equal(result.details.version, 1)
-    assert.ok(result.rawHeaders['PAYMENT-REQUIRED'].includes('V1'))
+    assert.equal(result[0].protocol, 'x402')
+    assert.equal(result[0].valid, true)
+    assert.equal(result[0].details.version, 1)
+    assert.ok(result[0].rawHeaders['PAYMENT-REQUIRED'].includes('V1'))
   })
 
-  it('returns valid=false for invalid base64 header', () => {
+  it('returns empty array for invalid base64 header', () => {
     const result = detectProtocol({ paymentRequired: '!!not-base64!!' })
-    // parsePaymentRequired will decode it but get invalid JSON — falls through
-    assert.equal(result.protocol, null)
+    assert.equal(result.length, 0)
   })
 
-  it('returns valid=false for header with empty accepts', () => {
+  it('returns empty array for header with empty accepts', () => {
     const headerB64 = Buffer.from(JSON.stringify({ accepts: [] })).toString('base64')
     const result = detectProtocol({ paymentRequired: headerB64 })
-    assert.equal(result.protocol, null) // parsePaymentRequired returns valid:false for empty accepts
+    assert.equal(result.length, 0)
   })
 })
 
@@ -172,20 +168,22 @@ describe('detectProtocol — precedence', () => {
   const validAccepts = [{ payTo: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', amount: '10000' }]
   const validHeaderB64 = Buffer.from(JSON.stringify({ accepts: validAccepts })).toString('base64')
 
-  it('L402 wins over x402 when both present', () => {
+  it('L402 is first when both L402 and x402 present', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
       paymentRequired: validHeaderB64,
     })
-    assert.equal(result.protocol, 'L402')
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result.length, 2) // both detected
   })
 
-  it('MPP wins over x402 when both present', () => {
+  it('MPP is first when both MPP and x402 present', () => {
     const result = detectProtocol({
       wwwAuthenticate: 'Payment id="x", realm="r", method="tempo", intent="charge", request="eyJ0ZXN0IjoxfQ"',
       paymentRequired: validHeaderB64,
     })
-    assert.equal(result.protocol, 'MPP')
+    assert.equal(result[0].protocol, 'MPP')
+    assert.equal(result.length, 2) // both detected
   })
 
   it('L402 wins over MPP (L402 checked first in WWW-Authenticate)', () => {
@@ -193,13 +191,12 @@ describe('detectProtocol — precedence', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`,
     })
-    assert.equal(result.protocol, 'L402')
+    assert.equal(result[0].protocol, 'L402')
   })
 
-  it('returns null when no protocol headers present', () => {
+  it('returns empty array when no protocol headers present', () => {
     const result = detectProtocol({ httpStatus: 200 })
-    assert.equal(result.protocol, null)
-    assert.equal(result.valid, false)
+    assert.equal(result.length, 0)
   })
 
   it('falls through Bearer WWW-Authenticate to detect x402', () => {
@@ -207,8 +204,8 @@ describe('detectProtocol — precedence', () => {
       wwwAuthenticate: 'Bearer realm="api.example.com"',
       paymentRequired: validHeaderB64,
     })
-    assert.equal(result.protocol, 'x402')
-    assert.equal(result.valid, true)
+    assert.equal(result[0].protocol, 'x402')
+    assert.equal(result[0].valid, true)
   })
 
   it('falls through Basic WWW-Authenticate to detect x402', () => {
@@ -216,23 +213,23 @@ describe('detectProtocol — precedence', () => {
       wwwAuthenticate: 'Basic realm="api.example.com"',
       paymentRequired: validHeaderB64,
     })
-    assert.equal(result.protocol, 'x402')
+    assert.equal(result[0].protocol, 'x402')
   })
 
-  it('non-Payment non-L402 WWW-Authenticate with no x402 returns null', () => {
+  it('non-Payment non-L402 WWW-Authenticate with no x402 returns empty array', () => {
     const result = detectProtocol({
       wwwAuthenticate: 'Digest realm="api.example.com", nonce="abc123"',
     })
-    assert.equal(result.protocol, null)
+    assert.equal(result.length, 0)
   })
 
-  it('MPP wins over x402 V1 body when both present', () => {
+  it('MPP is first when both MPP and x402 V1 body present', () => {
     const body = JSON.stringify({ x402Version: 1, accepts: validAccepts })
     const result = detectProtocol({
       wwwAuthenticate: 'Payment id="x", realm="r", method="tempo", intent="charge", request="eyJ0ZXN0IjoxfQ"',
       responseBody: body,
     })
-    assert.equal(result.protocol, 'MPP')
+    assert.equal(result[0].protocol, 'MPP')
   })
 })
 
@@ -242,24 +239,24 @@ describe('detectProtocol — rawHeaders', () => {
   it('L402 rawHeaders contains WWW-Authenticate', () => {
     const header = `L402 macaroon="${VALID_L402_MACAROON}", invoice="${VALID_L402_INVOICE}"`
     const result = detectProtocol({ wwwAuthenticate: header })
-    assert.equal(result.rawHeaders['WWW-Authenticate'], header)
+    assert.equal(result[0].rawHeaders['WWW-Authenticate'], header)
   })
 
   it('MPP rawHeaders contains WWW-Authenticate', () => {
     const result = detectProtocol({ wwwAuthenticate: OPENAI_MPP_CHALLENGE })
-    assert.equal(result.rawHeaders['WWW-Authenticate'], OPENAI_MPP_CHALLENGE)
+    assert.equal(result[0].rawHeaders['WWW-Authenticate'], OPENAI_MPP_CHALLENGE)
   })
 
   it('x402 rawHeaders contains PAYMENT-REQUIRED', () => {
     const validAccepts = [{ payTo: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', amount: '10000' }]
     const header = Buffer.from(JSON.stringify({ accepts: validAccepts })).toString('base64')
     const result = detectProtocol({ paymentRequired: header })
-    assert.equal(result.rawHeaders['PAYMENT-REQUIRED'], header)
+    assert.equal(result[0].rawHeaders['PAYMENT-REQUIRED'], header)
   })
 
-  it('null protocol returns empty rawHeaders', () => {
+  it('no protocol returns empty array', () => {
     const result = detectProtocol({})
-    assert.deepEqual(result.rawHeaders, {})
+    assert.equal(result.length, 0)
   })
 })
 
