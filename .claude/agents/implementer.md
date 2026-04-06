@@ -1,5 +1,5 @@
 ---
-model: sonnet
+model: opus
 description: TDD-obsessed implementer. Reads the issue spec, writes a failing test first, then implements the fix. Runs npm test to verify.
 maxTurns: 25
 allowedTools:
