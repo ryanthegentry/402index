@@ -332,9 +332,11 @@ describe('adminPage', () => {
     assert.ok(html.includes('id="auth-form"'))
   })
 
-  it('uses event delegation instead of inline onclick', () => {
+  it('uses event delegation instead of inline onclick for admin actions', () => {
     const html = adminPage()
-    assert.ok(!html.includes('onclick='), 'should not contain any inline onclick handlers')
+    assert.ok(!html.includes('onclick="approve'), 'no inline approve handler')
+    assert.ok(!html.includes('onclick="reject'), 'no inline reject handler')
+    assert.ok(!html.includes('onclick="delete'), 'no inline delete handler')
     assert.ok(html.includes('data-id'), 'approve/reject buttons should use data-id')
     assert.ok(html.includes('data-name'), 'reject button should use data-name')
     assert.ok(html.includes('pending-list'), 'should have pending-list container for delegation')

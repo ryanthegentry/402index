@@ -12,10 +12,9 @@ describe('validateProbeUrl', () => {
     assert.equal(result, null, 'should return null for valid URL')
   })
 
-  it('rejects non-HTTPS URLs', () => {
+  it('accepts HTTP URLs (both HTTP and HTTPS supported)', () => {
     const result = validateProbeUrl('http://api.example.com/weather')
-    assert.ok(result, 'should return error for HTTP URL')
-    assert.ok(result.includes('HTTPS'), 'error should mention HTTPS')
+    assert.equal(result, null, 'should return null for valid HTTP URL')
   })
 
   it('rejects malformed URLs', () => {
@@ -255,9 +254,11 @@ describe('health checker service filter (regression guard)', () => {
         probe_body TEXT,
         latency_p50_ms INTEGER,
         consecutive_failures INTEGER DEFAULT 0,
+        consecutive_latency_spikes INTEGER DEFAULT 0,
         registered_at TEXT NOT NULL DEFAULT (datetime('now')),
         x402_payment_valid INTEGER,
-        status TEXT DEFAULT 'active'
+        status TEXT DEFAULT 'active',
+        provider_deleted INTEGER DEFAULT 0
       )
     `)
     return db
