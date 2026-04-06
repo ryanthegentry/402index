@@ -487,7 +487,7 @@ dispatch_implement() {
     git checkout "$DEFAULT_BRANCH" && git pull origin "$DEFAULT_BRANCH"
 
     # Create or switch to feature branch
-    git checkout -b "$branch" 2>/dev/null || git checkout "$branch"
+    git checkout -B "$branch" 2>/dev/null || git checkout "$branch"
 
     local main_sha
     main_sha=$(git rev-parse "$DEFAULT_BRANCH")
