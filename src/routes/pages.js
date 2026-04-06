@@ -323,7 +323,13 @@ router.get('/service/:id', (req, res) => {
     'SELECT id, checked_at, status, response_time_ms, http_status, error_message FROM health_checks WHERE service_id = ? ORDER BY checked_at DESC LIMIT 20'
   ).all(req.params.id)
 
-  res.send(detailPage({ ...service, health_checks }))
+  const related_services = db.prepare(
+    `SELECT id, protocol, health_status, price_sats, price_usd, payment_asset, payment_network, reliability_score, uptime_30d, latency_p50_ms
+     FROM services
+     WHERE url = ? AND id != ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)`
+  ).all(service.url, service.id)
+
+  res.send(detailPage({ ...service, health_checks, related_services }))
 })
 
 // About
