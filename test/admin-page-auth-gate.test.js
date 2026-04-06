@@ -7,23 +7,29 @@
 
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { startServer, stopServer } from './helpers/server.js'
 import { adminAuth } from '../src/middleware/admin-auth.js'
 import { adminPage } from '../src/views/admin.js'
 
-const BASE = process.env.API_BASE || 'http://localhost:3402'
+let BASE = process.env.API_BASE
 
 // ─── adminAuth middleware unit tests (used by /admin route) ──────────────────
 
 describe('Admin page auth gate (issue #14)', () => {
   const originalSecret = process.env.ADMIN_SECRET
 
-  after(() => {
+  before(async () => {
+    BASE = BASE || await startServer()
+  })
+
+  after(async () => {
     // Restore original env
     if (originalSecret !== undefined) {
       process.env.ADMIN_SECRET = originalSecret
     } else {
       delete process.env.ADMIN_SECRET
     }
+    await stopServer()
   })
 
   describe('adminAuth middleware rejects unauthenticated requests', () => {

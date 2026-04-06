@@ -184,7 +184,7 @@ describe('POST /api/v1/register — SSRF Protection', () => {
 
 // ─── Probe Failures ──────────────────────────────────────────────────────────
 
-describe('POST /api/v1/register — Probe Failures', () => {
+describe('POST /api/v1/register — Probe Failures', { skip: process.env.CI ? 'requires external network' : false }, () => {
   it('endpoint returns 200 instead of 402 → 422', async () => {
     // example.com returns 200 on GET — not L402-gated
     const r = await register({
