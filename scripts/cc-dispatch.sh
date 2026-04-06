@@ -487,7 +487,7 @@ dispatch_implement() {
     git checkout "$DEFAULT_BRANCH" && git pull origin "$DEFAULT_BRANCH"
 
     # Create or switch to feature branch
-    git checkout -b "$branch" 2>/dev/null || git checkout "$branch"
+    git checkout -B "$branch" 2>/dev/null || git checkout "$branch"
 
     local main_sha
     main_sha=$(git rev-parse "$DEFAULT_BRANCH")
@@ -1142,6 +1142,13 @@ dispatch_issue() {
         agent_flag="--agent $agent"
     fi
 
+    # Intra-cycle dedup: skip if already dispatched this scan cycle
+    if [[ "$dispatched_this_cycle" == *" ${issue_number} "* ]]; then
+        log "Skipping #${issue_number} — already dispatched this cycle"
+        return 0
+    fi
+    dispatched_this_cycle="${dispatched_this_cycle}${issue_number} "
+
     log "Dispatching #${issue_number} [${dispatch_label} → ${mode}]: ${issue_title}"
 
     if $DRY_RUN; then
@@ -1175,12 +1182,17 @@ dispatch_issue() {
 
     # Spawn handler in background subshell
     (
-        # For implement and revise: create isolated worktree
+        # Unified EXIT trap: always clean up in-progress label + worktree on any exit
         local workdir=""
+        trap '
+            gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress" 2>/dev/null
+            [[ -n "$workdir" ]] && git -C "$REPO_DIR" worktree remove --force "$workdir" 2>/dev/null
+        ' EXIT
+
+        # For implement and revise: create isolated worktree
         if [[ "$mode" == "implement" || "$mode" == "revise" ]]; then
             mkdir -p "${REPO_DIR}/.worktrees"
             workdir=$(mktemp -d "${REPO_DIR}/.worktrees/issue-${issue_number}-XXXXXX")
-            trap 'git -C "$REPO_DIR" worktree remove --force "$workdir" 2>/dev/null' EXIT
             git -C "$REPO_DIR" worktree add --detach "$workdir" "$DEFAULT_BRANCH" --quiet
             cd "$workdir"
         fi
@@ -1217,6 +1229,7 @@ dispatch_issue() {
 # ── Main loop ──────────────────────────────────────────────────────
 run_once() {
     local total=0
+    dispatched_this_cycle=" "
 
     for label in "${DISPATCH_LABELS[@]}"; do
         log "Scanning ${REPO} for '${label}'..."
@@ -1243,21 +1256,23 @@ run_once() {
 }
 
 # ── Entry point ────────────────────────────────────────────────────
-ensure_deps
-ensure_labels
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    ensure_deps
+    ensure_labels
 
-# Kill all background agents on shutdown
-trap 'log "Shutting down — killing background agents"; kill $(jobs -rp) 2>/dev/null; wait; exit 130' INT TERM
+    # Kill all background agents on shutdown
+    trap 'log "Shutting down — killing background agents"; kill $(jobs -rp) 2>/dev/null; wait; exit 130' INT TERM
 
-if $WATCH; then
-    log "Watch mode: polling every ${POLL_INTERVAL}s (${#DISPATCH_LABELS[@]} labels, max ${MAX_CONCURRENT} concurrent). Ctrl-C to stop."
-    while true; do
+    if $WATCH; then
+        log "Watch mode: polling every ${POLL_INTERVAL}s (${#DISPATCH_LABELS[@]} labels, max ${MAX_CONCURRENT} concurrent). Ctrl-C to stop."
+        while true; do
+            run_once
+            log "Sleeping ${POLL_INTERVAL}s..."
+            sleep "$POLL_INTERVAL"
+        done
+    else
         run_once
-        log "Sleeping ${POLL_INTERVAL}s..."
-        sleep "$POLL_INTERVAL"
-    done
-else
-    run_once
-    # Wait for all background jobs to complete in one-shot mode
-    wait
+        # Wait for all background jobs to complete in one-shot mode
+        wait
+    fi
 fi
