@@ -1,10 +1,14 @@
-import { describe, it } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { startServer, stopServer } from './helpers/server.js'
 
-const BASE = process.env.API_BASE || 'http://localhost:3402'
-const API = `${BASE}/api/v1`
+let BASE = process.env.API_BASE
+let API
 const DIGEST_KEY = process.env.DIGEST_API_KEY || 'test-digest-key'
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'test-secret'
+
+before(async () => { BASE = BASE || await startServer(); API = `${BASE}/api/v1` })
+after(async () => { await stopServer() })
 
 function authHeaders(key) {
   return { Authorization: `Bearer ${key}` }

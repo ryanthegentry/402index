@@ -9,7 +9,7 @@
     "dev": "nodemon src/server.js",
     "poll": "node scripts/poll.js",
     "healthcheck": "node scripts/healthcheck.js",
-    "test": "node --test test/*.test.js"
+    "test": "DB_PATH=:memory: ADMIN_SECRET=test-secret DIGEST_API_KEY=test-digest-key CLAIM_RATE_LIMIT=100 REGISTER_RATE_LIMIT=100 node --test test/*.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",

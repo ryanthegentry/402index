@@ -241,16 +241,15 @@ describe('verifyL402 with POST method', () => {
     assert.equal(result.invoiceLengthOk, true)
   })
 
-  it('returns invoiceValid=false for short invoice', async () => {
+  it('returns valid=false for short invoice (fail-fast)', async () => {
     const { verifyL402 } = await import('../src/services/l402-verify.js')
     global.fetch = async () => mockResponse(402, {
       'www-authenticate': 'L402 macaroon="AgELYmVuY2FybWFu", invoice="lnbc1000n1pshort"',
     })
     const result = await verifyL402('https://example.com/api')
-    assert.equal(result.valid, true)
-    assert.equal(result.hasInvoice, true)
-    assert.equal(result.invoiceValid, false)
-    assert.equal(result.invoiceLengthOk, false)
+    assert.equal(result.valid, false, 'fail-fast: short invoice makes result invalid')
+    assert.equal(result.hasInvoice, false, 'short invoice → hasInvoice = false')
+    assert.equal(result.invoiceValid, undefined, 'invoiceValid not in fail-fast result')
   })
 })
 

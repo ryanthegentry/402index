@@ -1,10 +1,30 @@
-import { describe, it } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import db from '../src/db.js'
+import { startServer, stopServer } from './helpers/server.js'
 
 // ─── Integration tests for demo API endpoints ────────────────────────────────
-// Requires a running server: API_BASE=http://localhost:3402 npm test
 
-const API = process.env.API_BASE || 'http://localhost:3402'
+let API = process.env.API_BASE
+
+before(async () => {
+  API = API || await startServer()
+  // Seed a service for probe-sample endpoint
+  const count = db.prepare('SELECT COUNT(*) as c FROM services').get().c
+  if (count === 0) {
+    db.prepare(`INSERT INTO services (id, name, url, protocol, source, health_status, status, registered_at, updated_at)
+      VALUES ('demo-test-1', 'Demo Test Service', 'https://demo-test.example.com/api', 'L402', 'test', 'healthy', 'active', datetime('now'), datetime('now'))`).run()
+    db.prepare(`INSERT INTO health_checks (service_id, status, response_time_ms, http_status)
+      VALUES ('demo-test-1', 'healthy', 150, 402)`).run()
+  }
+})
+after(async () => {
+  try {
+    db.prepare("DELETE FROM health_checks WHERE service_id = 'demo-test-1'").run()
+    db.prepare("DELETE FROM services WHERE id = 'demo-test-1'").run()
+  } catch {}
+  await stopServer()
+})
 
 async function api(path) {
   const res = await fetch(`${API}${path}`)
@@ -104,18 +124,11 @@ describe('GET /api/v1/demo/probe-sample', () => {
   })
 })
 
-// ─── GET /api/v1/healthcheck (stub) ──────────────────────────────────────────
+// ─── GET /api/v1/healthcheck (not yet implemented) ──────────────────────────
 
 describe('GET /api/v1/healthcheck', () => {
-  it('returns 501 Not Implemented', async () => {
+  it('returns 404 (endpoint not yet implemented)', async () => {
     const r = await api('/api/v1/healthcheck')
-    assert.equal(r.status, 501)
-  })
-
-  it('returns informative JSON body', async () => {
-    const r = await api('/api/v1/healthcheck')
-    assert.ok(r.body.error, 'should have error field')
-    assert.ok(r.body.message, 'should have message field')
-    assert.ok(r.body.message.includes('coming soon') || r.body.message.includes('Coming soon'), 'should mention coming soon')
+    assert.equal(r.status, 404)
   })
 })

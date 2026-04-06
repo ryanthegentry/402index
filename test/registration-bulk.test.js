@@ -12,16 +12,19 @@
  *   6. Probe queue cleanup after completion
  */
 
-import { describe, it, after } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { networkInterfaces } from 'node:os'
 import db from '../src/db.js'
 import { domainProbeQueue } from '../src/routes/api.js'
+import { startServer, stopServer } from './helpers/server.js'
 
-const BASE = process.env.API_BASE || 'http://localhost:3402'
-const API = `${BASE}/api/v1`
+let BASE = process.env.API_BASE
+let API
+
+before(async () => { BASE = BASE || await startServer(); API = `${BASE}/api/v1` })
 const TEST_PREFIX = 'bulk-test-'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -129,7 +132,7 @@ function findPublicIpv6() {
 
 // ─── Cleanup ────────────────────────────────────────────────────────────────
 
-after(() => {
+after(async () => {
   try {
     db.prepare(`DELETE FROM services WHERE id LIKE '${TEST_PREFIX}%'`).run()
     db.prepare(`DELETE FROM domain_claims WHERE domain LIKE '${TEST_PREFIX}%'`).run()
@@ -137,6 +140,7 @@ after(() => {
   } catch {
     // Tables may not exist in fresh db
   }
+  await stopServer()
 })
 
 // ─── Test Group 1: Tiered Rate Limits ───────────────────────────────────────
