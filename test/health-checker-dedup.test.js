@@ -292,6 +292,9 @@ describe('Health checker dedup: single-probe dual-update', () => {
     const l402Svc = insertTestService({ protocol: 'L402', url: sharedUrl })
     const x402Svc = insertTestService({ protocol: 'x402', url: sharedUrl })
 
+    // Set both rows to 3 consecutive failures in DB (sibling reads from DB)
+    db.prepare('UPDATE services SET consecutive_failures = 3 WHERE id IN (?, ?)').run(l402Svc.id, x402Svc.id)
+
     // Return 500 error
     globalThis.fetch = async () => mockResponse(500, {})
 
