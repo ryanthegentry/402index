@@ -4,10 +4,11 @@ import Database from 'better-sqlite3'
  * Create a fresh :memory: SQLite DB with the full canonical schema.
  * Use for tests that need their own Database instance (not the db.js singleton).
  * Source of truth: src/db.js
+ * SYNC WARNING: Any ALTER TABLE migration added to src/db.js must be
+ * reflected here. Run `PRAGMA table_info(services)` on both to compare.
  */
 export function createTestDb() {
   const db = new Database(':memory:')
-  db.pragma('journal_mode = WAL')
 
   db.exec(`
     CREATE TABLE services (
