@@ -14,7 +14,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { isSpecCompliantMacaroon, validateL402Challenge, extractInvoicePaymentHash } from '../src/services/l402-utils.js'
-import { detectProtocol } from '../src/services/detect-protocol.js'
+import { detectProtocol, getPrimaryDetection } from '../src/services/detect-protocol.js'
 
 // ─── Fixture Helpers ─────────────────────────────────────────────────────────
 
@@ -348,30 +348,30 @@ describe('detectProtocol — L402 spec compliance integration', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${SPEC_MACAROON}", invoice="${VALID_BOLT11}"`,
     })
-    assert.equal(result.protocol, 'L402')
-    assert.equal(result.valid, true)
-    assert.equal(result.details.specCompliant, true)
-    assert.equal(result.details.format, 'v2_tlv')
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result[0].valid, true)
+    assert.equal(result[0].details.specCompliant, true)
+    assert.equal(result[0].details.format, 'v2_tlv')
   })
 
   it('non-compliant macaroon → specCompliant=false + degradeReason set', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${JSON_MACAROON}", invoice="${VALID_BOLT11}"`,
     })
-    assert.equal(result.protocol, 'L402')
-    assert.equal(result.valid, true) // charset check still passes
-    assert.equal(result.details.specCompliant, false)
-    assert.equal(result.details.format, 'json')
-    assert.ok(result.degradeReason)
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result[0].valid, true) // charset check still passes
+    assert.equal(result[0].details.specCompliant, false)
+    assert.equal(result[0].details.format, 'json')
+    assert.ok(result[0].degradeReason)
   })
 
   it('spec-compliant macaroon + undecodable invoice → paymentHashMatch=null', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${SPEC_MACAROON}", invoice="${UNDECODABLE_INVOICE}"`,
     })
-    assert.equal(result.protocol, 'L402')
-    assert.equal(result.details.specCompliant, true)
-    assert.equal(result.details.paymentHashMatch, null)
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result[0].details.specCompliant, true)
+    assert.equal(result[0].details.paymentHashMatch, null)
   })
 })
 
@@ -381,7 +381,8 @@ describe('Health checker — L402 format relaxation (BLIP-0026)', () => {
   // Simulate checkService's relaxed L402 logic without HTTP layer
   // Per BLIP-0026: format is metadata, only payment hash mismatch degrades
   function simulateHealthCheck(wwwAuthHeader) {
-    const detection = detectProtocol({ wwwAuthenticate: wwwAuthHeader })
+    const detections = detectProtocol({ wwwAuthenticate: wwwAuthHeader })
+    const detection = getPrimaryDetection(detections, 'L402')
     const classification = { healthStatus: 'healthy', checkStatus: 'healthy' }
 
     if (detection.protocol === 'L402' && classification.healthStatus === 'healthy') {
@@ -443,19 +444,18 @@ describe('Health checker — POST fallback with relaxed format rules', () => {
     }
 
     // Relaxed POST fallback: only payment hash mismatch degrades
-    const postFallback = postFallbackDetection ? { attempted: true, detection: postFallbackDetection } : null
-    if (postFallback?.attempted && postFallback.detection?.valid) {
-      if (postFallback.detection.protocol === protocol) {
-        const postDetails = postFallback.detection.details
-        if (protocol === 'L402' && postDetails?.paymentHashMatch === false) {
-          classification.healthStatus = 'degraded'
-          classification.checkStatus = 'degraded'
-          classification.degradeReason = postFallback.detection.degradeReason || 'payment hash mismatch between macaroon and invoice'
-        } else {
-          classification.healthStatus = 'healthy'
-          classification.checkStatus = 'healthy'
-          classification.consecutiveFailures = 0
-        }
+    // postFallbackDetection is now an array from detectProtocol()
+    const postPrimary = postFallbackDetection ? getPrimaryDetection(postFallbackDetection, protocol) : null
+    if (postPrimary?.valid) {
+      const postDetails = postPrimary.details
+      if (protocol === 'L402' && postDetails?.paymentHashMatch === false) {
+        classification.healthStatus = 'degraded'
+        classification.checkStatus = 'degraded'
+        classification.degradeReason = postPrimary.degradeReason || 'payment hash mismatch between macaroon and invoice'
+      } else {
+        classification.healthStatus = 'healthy'
+        classification.checkStatus = 'healthy'
+        classification.consecutiveFailures = 0
       }
     }
 
@@ -647,9 +647,9 @@ describe('detectProtocol — V0 text format integration', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${V0_BASIC}", invoice="${VALID_BOLT11}"`,
     })
-    assert.equal(result.protocol, 'L402')
-    assert.equal(result.details.specCompliant, false)
-    assert.equal(result.details.format, 'v0_text')
-    assert.ok(result.degradeReason.includes('v0'), `expected V0-specific degrade reason, got: ${result.degradeReason}`)
+    assert.equal(result[0].protocol, 'L402')
+    assert.equal(result[0].details.specCompliant, false)
+    assert.equal(result[0].details.format, 'v0_text')
+    assert.ok(result[0].degradeReason.includes('v0'), `expected V0-specific degrade reason, got: ${result[0].degradeReason}`)
   })
 })

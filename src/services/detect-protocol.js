@@ -45,34 +45,32 @@ export function decodeMppRequest(requestB64) {
 
 const MPP_REQUIRED_FIELDS = ['id', 'realm', 'method', 'intent', 'request']
 
+/** Null-protocol sentinel — returned by getPrimaryDetection when no match is found */
+const NULL_DETECTION = { protocol: null, valid: false, degradeReason: null, details: {}, rawHeaders: {} }
+
 /**
- * Detect and validate the payment protocol from an HTTP probe result.
+ * Detect and validate all payment protocols from an HTTP probe result.
  *
- * Detection precedence:
- * 1. WWW-Authenticate L402/LSAT → L402
- * 2. WWW-Authenticate Payment → MPP
- * 3. PAYMENT-REQUIRED header → x402 V2
- * 4. Response body → x402 V1
- * 5. None → { protocol: null }
+ * Runs all detection checks regardless of earlier matches, collecting
+ * results into an array. Each protocol appears at most once.
  *
  * @param {object} httpResult - { httpStatus, wwwAuthenticate, paymentRequired, responseBody, errorMessage, responseTimeMs }
- * @returns {{ protocol: string|null, valid: boolean, degradeReason: string|null, details: object, rawHeaders: object }}
+ * @returns {Array<{ protocol: string, valid: boolean, degradeReason: string|null, details: object, rawHeaders: object }>}
  */
 export function detectProtocol(httpResult) {
   const { wwwAuthenticate, paymentRequired, responseBody } = httpResult
+  const results = []
 
-  // 1. L402/LSAT detection
+  // 1. L402/LSAT detection (WWW-Authenticate)
   if (wwwAuthenticate) {
     const parsed = parseWwwAuthenticate(wwwAuthenticate)
     if (parsed.scheme && /L402|LSAT/i.test(parsed.scheme)) {
       const macaroonValid = isValidMacaroon(parsed.macaroon)
       const invoiceValid = isValidInvoice(parsed.invoice)
       const valid = macaroonValid && invoiceValid
-
-      // Spec compliance: V2/V1 TLV identifier + payment hash cross-validation
       const validation = validateL402Challenge(parsed.macaroon, parsed.invoice)
 
-      return {
+      results.push({
         protocol: 'L402',
         valid,
         degradeReason: valid
@@ -89,30 +87,30 @@ export function detectProtocol(httpResult) {
           format: validation.format || null,
         },
         rawHeaders: { 'WWW-Authenticate': wwwAuthenticate },
-      }
-    }
+      })
+    } else {
+      // 2. MPP detection (also uses WWW-Authenticate — mutually exclusive with L402)
+      const mpp = parseMppChallenge(wwwAuthenticate)
+      if (mpp) {
+        const missingField = MPP_REQUIRED_FIELDS.find(f => !mpp[f])
+        const valid = !missingField
 
-    // 2. MPP detection (also uses WWW-Authenticate)
-    const mpp = parseMppChallenge(wwwAuthenticate)
-    if (mpp) {
-      const missingField = MPP_REQUIRED_FIELDS.find(f => !mpp[f])
-      const valid = !missingField
-
-      return {
-        protocol: 'MPP',
-        valid,
-        degradeReason: valid ? null : `missing required MPP field: ${missingField}`,
-        details: mpp,
-        rawHeaders: { 'WWW-Authenticate': wwwAuthenticate },
+        results.push({
+          protocol: 'MPP',
+          valid,
+          degradeReason: valid ? null : `missing required MPP field: ${missingField}`,
+          details: mpp,
+          rawHeaders: { 'WWW-Authenticate': wwwAuthenticate },
+        })
       }
     }
   }
 
-  // 3. x402 V2 header
+  // 3. x402 V2 header — check independently of WWW-Authenticate
   const headerParsed = parsePaymentRequired(paymentRequired)
   if (headerParsed.valid) {
     const validation = validatePaymentRequirements(headerParsed.accepts)
-    return {
+    results.push({
       protocol: 'x402',
       valid: validation.valid,
       degradeReason: validation.valid ? null : 'invalid payment requirements',
@@ -123,15 +121,13 @@ export function detectProtocol(httpResult) {
         version: 2,
       },
       rawHeaders: { 'PAYMENT-REQUIRED': paymentRequired },
-    }
-  }
-
-  // 4. x402 V1 body fallback
-  if (responseBody) {
+    })
+  } else if (responseBody) {
+    // 4. x402 V1 body fallback — only if V2 header not present (V2 takes precedence)
     const bodyParsed = parsePaymentRequiredBody(responseBody)
     if (bodyParsed.valid) {
       const validation = validatePaymentRequirements(bodyParsed.accepts)
-      return {
+      results.push({
         protocol: 'x402',
         valid: validation.valid,
         degradeReason: validation.valid ? null : 'invalid payment requirements',
@@ -142,10 +138,22 @@ export function detectProtocol(httpResult) {
           version: 1,
         },
         rawHeaders: { 'PAYMENT-REQUIRED': '(from response body — x402 V1)' },
-      }
+      })
     }
   }
 
-  // 5. Nothing detected
-  return { protocol: null, valid: false, degradeReason: null, details: {}, rawHeaders: {} }
+  return results
+}
+
+/**
+ * Extract the detection matching a specific protocol from a detections array.
+ * Returns the null-protocol sentinel when no match is found, so callers can
+ * safely access .valid, .protocol, .details without null checks.
+ *
+ * @param {Array} detections - Array returned by detectProtocol()
+ * @param {string} protocol - Protocol to find ('L402'|'x402'|'MPP')
+ * @returns {{ protocol: string|null, valid: boolean, degradeReason: string|null, details: object, rawHeaders: object }}
+ */
+export function getPrimaryDetection(detections, protocol) {
+  return detections.find(d => d.protocol === protocol) || NULL_DETECTION
 }
