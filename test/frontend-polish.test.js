@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { execSync } from 'node:child_process'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { platform } from 'node:os'
 import { layout } from '../src/views/layout.js'
 import { homePage } from '../src/views/home.js'
 import { detailPage } from '../src/views/detail.js'
@@ -23,7 +24,7 @@ describe('OG image optimization', () => {
     assert.ok(stat.length <= 120 * 1024, `og-image.png is ${(stat.length / 1024).toFixed(0)} KB, expected ≤120 KB`)
   })
 
-  it('og-image.png is exactly 1200x630', () => {
+  it('og-image.png is exactly 1200x630', { skip: platform() !== 'darwin' ? 'sips is macOS-only' : false }, () => {
     const info = execSync(`sips -g pixelWidth -g pixelHeight "${imgPath}"`).toString()
     const width = info.match(/pixelWidth:\s*(\d+)/)?.[1]
     const height = info.match(/pixelHeight:\s*(\d+)/)?.[1]

@@ -1,107 +1,10 @@
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import Database from 'better-sqlite3'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { createTestDb } from './helpers/test-db.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-
-// ─── Test DB Helper ──────────────────────────────────────────────────────────
-
-function createTestDb() {
-  const db = new Database(':memory:')
-  db.pragma('journal_mode = WAL')
-
-  db.exec(`
-    CREATE TABLE services (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT,
-      url TEXT NOT NULL,
-      protocol TEXT NOT NULL,
-      price_sats INTEGER,
-      price_usd REAL,
-      payment_asset TEXT,
-      payment_network TEXT,
-      category TEXT,
-      input_schema TEXT,
-      output_schema TEXT,
-      provider TEXT,
-      source TEXT NOT NULL,
-      source_id TEXT,
-      featured INTEGER DEFAULT 0,
-      registered_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      health_status TEXT DEFAULT 'unknown',
-      uptime_30d REAL,
-      latency_p50_ms INTEGER,
-      last_checked TEXT,
-      last_seen_healthy TEXT,
-      consecutive_failures INTEGER DEFAULT 0,
-      is_template INTEGER DEFAULT 0,
-      is_demo INTEGER DEFAULT 0,
-      verified INTEGER DEFAULT 0,
-      contact_email TEXT,
-      status TEXT DEFAULT 'active',
-      http_method TEXT DEFAULT 'GET',
-      probe_body TEXT,
-      reliability_score REAL,
-      x402_payment_valid INTEGER,
-      x402_facilitator_reachable INTEGER,
-      x402_asset_known INTEGER,
-      l402_version TEXT,
-      agent_spec_url TEXT,
-      capabilities TEXT,
-      token_format TEXT,
-      invoice_type TEXT,
-      pricing_model TEXT,
-      content_domain TEXT
-    );
-
-    CREATE TABLE daily_snapshots (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      snapshot_date TEXT NOT NULL UNIQUE,
-      total_endpoints INTEGER,
-      verified_endpoints INTEGER,
-      total_providers INTEGER,
-      verified_providers INTEGER,
-      healthy_endpoints INTEGER,
-      degraded_endpoints INTEGER,
-      down_endpoints INTEGER,
-      l402_endpoints INTEGER,
-      l402_verified INTEGER,
-      l402_healthy INTEGER,
-      l402_providers INTEGER,
-      x402_endpoints INTEGER,
-      x402_verified INTEGER,
-      x402_healthy INTEGER,
-      x402_providers INTEGER,
-      mpp_endpoints INTEGER,
-      mpp_verified INTEGER,
-      mpp_healthy INTEGER,
-      mpp_providers INTEGER,
-      avg_reliability_score REAL,
-      median_latency_ms INTEGER,
-      p90_latency_ms INTEGER,
-      categories_json TEXT,
-      top_providers_json TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX idx_daily_snapshots_date ON daily_snapshots(snapshot_date);
-
-    CREATE TABLE health_checks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      service_id TEXT NOT NULL,
-      checked_at TEXT NOT NULL DEFAULT (datetime('now')),
-      status TEXT NOT NULL,
-      response_time_ms INTEGER,
-      http_status INTEGER,
-      error_message TEXT
-    );
-  `)
-
-  return db
-}
 
 function seedServices(db) {
   const insert = db.prepare(`

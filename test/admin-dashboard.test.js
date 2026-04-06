@@ -23,9 +23,10 @@ import assert from 'node:assert/strict'
 // Use the project's own db singleton — avoids native module resolution issues
 // from the test/ subdirectory and reuses the same connection as the server.
 import db from '../src/db.js'
+import { startServer, stopServer } from './helpers/server.js'
 
-const BASE = process.env.API_BASE || 'http://localhost:3402'
-const API = `${BASE}/api/v1`
+let BASE = process.env.API_BASE
+let API
 const SECRET = process.env.ADMIN_SECRET
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -85,6 +86,8 @@ function cleanupTestServices() {
 let activeId, pendingId, rejectedId
 
 before(async () => {
+  BASE = BASE || await startServer()
+  API = `${BASE}/api/v1`
   if (!SECRET) {
     console.error('ADMIN_SECRET env var not set — admin auth tests will fail 503')
   }
@@ -95,9 +98,9 @@ before(async () => {
   rejectedId = seedService({ name: 'AdminTest Rejected', status: 'rejected' })
 })
 
-after(() => {
+after(async () => {
   cleanupTestServices()
-  // Don't close — db.js is a shared singleton used by the server process too
+  await stopServer()
 })
 
 // ─── Auth: all admin routes require Bearer token ──────────────────────────────

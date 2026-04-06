@@ -14,10 +14,13 @@ import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import db from '../src/db.js'
+import { startServer, stopServer } from './helpers/server.js'
 
-const BASE = process.env.API_BASE || 'http://localhost:3402'
-const API = `${BASE}/api/v1`
+let BASE = process.env.API_BASE
+let API
 const SECRET = process.env.ADMIN_SECRET || 'test-secret'
+
+before(async () => { BASE = BASE || await startServer(); API = `${BASE}/api/v1` })
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -33,20 +36,24 @@ async function adminGet(path) {
 function seedService(overrides = {}) {
   const id = overrides.id || `aat-${randomUUID().slice(0, 8)}`
   const now = new Date().toISOString().replace('T', ' ').replace('Z', '')
+  const url = overrides.url ?? `https://aat-${id}.example.com/api`
+  let hostname = null
+  try { hostname = new URL(url).hostname } catch {}
   db.prepare(`
     INSERT INTO services (id, name, url, protocol, source, status, provider, category,
-                          registered_at, updated_at)
+                          hostname, registered_at, updated_at)
     VALUES (@id, @name, @url, @protocol, @source, @status, @provider, @category,
-            @registered_at, @updated_at)
+            @hostname, @registered_at, @updated_at)
   `).run({
     id,
     name: overrides.name ?? `Test ${id}`,
-    url: overrides.url ?? `https://aat-${id}.example.com/api`,
+    url,
     protocol: overrides.protocol ?? 'L402',
     source: overrides.source ?? 'self-registered',
     status: overrides.status ?? 'pending',
     provider: overrides.provider ?? null,
     category: overrides.category ?? 'test',
+    hostname,
     registered_at: overrides.registered_at ?? now,
     updated_at: overrides.updated_at ?? now,
   })
@@ -96,7 +103,7 @@ function seedRegistrationAttempt(overrides = {}) {
 const testIds = []
 const testDomains = []
 
-after(() => {
+after(async () => {
   // Clean up all test data
   try {
     db.prepare("DELETE FROM services WHERE id LIKE 'aat-%'").run()
@@ -107,6 +114,7 @@ after(() => {
   } catch {
     // Tables may not exist in fresh db
   }
+  await stopServer()
 })
 
 // ─── Schema ─────────────────────────────────────────────────────────────────
