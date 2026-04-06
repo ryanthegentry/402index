@@ -456,6 +456,11 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
         suggestedProtocol: otherDetection.protocol,
         details: otherDetection.details,
         detections: result.detection,
+        rawHeaders: {
+          wwwAuthenticate: result.wwwAuthenticate,
+          paymentRequired: result.paymentRequired,
+        },
+        bodySnippet: result.responseBody ? result.responseBody.substring(0, 500) : null,
       }
     }
 
@@ -466,6 +471,11 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
       error: `Endpoint returned 402 but no valid ${protocol} challenge was detected.`,
       details: detection.details,
       detections: result.detection,
+      rawHeaders: {
+        wwwAuthenticate: result.wwwAuthenticate,
+        paymentRequired: result.paymentRequired,
+      },
+      bodySnippet: result.responseBody ? result.responseBody.substring(0, 500) : null,
     }
   }
 
@@ -484,6 +494,11 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
       },
       methodUsed: result.methodUsed,
       detections: result.detection,
+      rawHeaders: {
+        wwwAuthenticate: result.wwwAuthenticate,
+        paymentRequired: result.paymentRequired,
+      },
+      bodySnippet: result.responseBody ? result.responseBody.substring(0, 500) : null,
     }
   }
 
@@ -495,6 +510,11 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
     details: detection.details,
     methodUsed: result.methodUsed,
     detections: result.detection,
+    rawHeaders: {
+      wwwAuthenticate: result.wwwAuthenticate,
+      paymentRequired: result.paymentRequired,
+    },
+    bodySnippet: result.responseBody ? result.responseBody.substring(0, 500) : null,
   }
 }
 
