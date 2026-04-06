@@ -42,14 +42,14 @@ describe('dispatch dedup and subshell trap (#82)', () => {
   // ── Structural test: dispatched_this_cycle dedup ───────────────
 
   describe('intra-cycle dedup', () => {
-    it('run_once declares dispatched_this_cycle associative array', () => {
+    it('run_once initializes dispatched_this_cycle', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       const fnStart = content.indexOf('run_once()')
       const fnEnd = content.indexOf('\n}', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
       assert.ok(
         fnBody.includes('dispatched_this_cycle'),
-        'run_once must declare dispatched_this_cycle for intra-cycle dedup'
+        'run_once must initialize dispatched_this_cycle for intra-cycle dedup'
       )
     })
 
@@ -66,12 +66,12 @@ describe('dispatch dedup and subshell trap (#82)', () => {
 
     it('same issue under two labels is dispatched only once per cycle', () => {
       // Functional test: mock gh to return issue #42 under two different labels,
-      // then count how many times dispatch_issue is invoked
+      // run real dispatch_issue in DRY_RUN mode, count "Dispatching" log lines
       const output = runBash(`
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Source the script functions
+# Source the script functions (entry point guarded by BASH_SOURCE)
 source "${SCRIPT_PATH}"
 
 # Override globals
@@ -83,9 +83,6 @@ DRY_RUN=true
 WATCH=false
 DISPATCH_LABELS=(ready-for-impl ready-for-security)
 
-# Counter for dispatch_issue calls
-DISPATCH_COUNT=0
-
 # Mock gh: return issue #42 for both labels
 gh() {
   case "\$1" in
@@ -95,7 +92,8 @@ gh() {
           echo -e "42\\tTest issue"
           ;;
         view)
-          echo "in-progress"
+          # Return empty labels (no in-progress) so the real check passes
+          echo '""'
           ;;
       esac
       ;;
@@ -103,23 +101,13 @@ gh() {
 }
 export -f gh
 
-# Wrap dispatch_issue to count calls
-original_dispatch_issue=$(declare -f dispatch_issue)
-eval "real_dispatch_issue() { \${original_dispatch_issue#*\\{}; }"
-
-dispatch_issue() {
-  DISPATCH_COUNT=\$((DISPATCH_COUNT + 1))
-  echo "DISPATCH_CALL: issue=\$1 label=\$3 count=\$DISPATCH_COUNT"
-}
-
-run_once
-
-echo "TOTAL_DISPATCHES=\$DISPATCH_COUNT"
+run_once 2>&1
 `)
-      // Extract total dispatches
-      const match = output.match(/TOTAL_DISPATCHES=(\d+)/)
-      assert.ok(match, `Expected TOTAL_DISPATCHES in output, got: ${output}`)
-      assert.equal(match[1], '1', `Issue #42 should be dispatched exactly once, but was dispatched ${match[1]} time(s). Output: ${output}`)
+      // Count "Dispatching #42" lines — should be exactly 1 (dedup prevents the second)
+      const dispatchLines = (output.match(/Dispatching #42/g) || []).length
+      const skipLines = (output.match(/Skipping #42.*already dispatched this cycle/g) || []).length
+      assert.equal(dispatchLines, 1, `Issue #42 should be dispatched exactly once, but was dispatched ${dispatchLines} time(s). Output:\n${output}`)
+      assert.equal(skipLines, 1, `Issue #42 should be skipped once (dedup), but was skipped ${skipLines} time(s). Output:\n${output}`)
     })
   })
 
@@ -128,15 +116,11 @@ echo "TOTAL_DISPATCHES=\$DISPATCH_COUNT"
   describe('subshell EXIT trap', () => {
     it('background subshell has EXIT trap that removes in-progress', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
-      // Find the background subshell in dispatch_issue (starts at the ( and ends at ) &)
-      const fnStart = content.indexOf('dispatch_issue()')
-      const fnEnd = content.indexOf('\n}', fnStart + 200) // skip past nested }
-      const fnBody = content.slice(fnStart, fnEnd)
-
-      // The subshell must have a trap on EXIT that removes in-progress
-      const subshellStart = fnBody.indexOf('# Spawn handler in background subshell')
-      assert.ok(subshellStart !== -1, 'Must have background subshell section')
-      const subshellBody = fnBody.slice(subshellStart)
+      // Extract the background subshell: from "# Spawn handler" to ") &"
+      const spawnStart = content.indexOf('# Spawn handler in background subshell')
+      assert.ok(spawnStart !== -1, 'Must have background subshell section')
+      const subshellEnd = content.indexOf(') &', spawnStart)
+      const subshellBody = content.slice(spawnStart, subshellEnd)
 
       assert.ok(
         subshellBody.includes("trap '") || subshellBody.includes('trap "'),
@@ -154,14 +138,14 @@ echo "TOTAL_DISPATCHES=\$DISPATCH_COUNT"
 
     it('EXIT trap covers all modes (not just implement/revise)', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
-      const fnStart = content.indexOf('dispatch_issue()')
-      const fnEnd = content.indexOf('\n}', fnStart + 200)
-      const fnBody = content.slice(fnStart, fnEnd)
+      // Extract the background subshell
+      const spawnStart = content.indexOf('# Spawn handler in background subshell')
+      const subshellEnd = content.indexOf(') &', spawnStart)
+      const subshellBody = content.slice(spawnStart, subshellEnd)
 
       // The EXIT trap with in-progress removal must be BEFORE the mode check
-      const subshellStart = fnBody.indexOf('(', fnBody.indexOf('# Spawn handler'))
-      const modeCheck = fnBody.indexOf('if [[ "$mode" == "implement"', subshellStart)
-      const trapPos = fnBody.indexOf("remove-label", subshellStart)
+      const modeCheck = subshellBody.indexOf('if [[ "$mode" == "implement"')
+      const trapPos = subshellBody.indexOf('remove-label')
 
       assert.ok(trapPos !== -1, 'Must have remove-label in subshell')
       assert.ok(modeCheck !== -1, 'Must have mode check in subshell')
@@ -173,14 +157,13 @@ echo "TOTAL_DISPATCHES=\$DISPATCH_COUNT"
 
     it('old worktree-only trap is removed (replaced by unified EXIT trap)', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
-      const fnStart = content.indexOf('dispatch_issue()')
-      const fnEnd = content.indexOf('\n}', fnStart + 200)
-      const fnBody = content.slice(fnStart, fnEnd)
+      // Extract the background subshell: from "# Spawn handler" to ") &"
+      const spawnStart = content.indexOf('# Spawn handler in background subshell')
+      const subshellEnd = content.indexOf(') &', spawnStart)
+      const subshellBody = content.slice(spawnStart, subshellEnd)
 
-      // Count traps in the subshell — should be exactly one unified trap
-      const subshellStart = fnBody.indexOf('(', fnBody.indexOf('# Spawn handler'))
-      const subshellBody = fnBody.slice(subshellStart)
-      const trapMatches = subshellBody.match(/\btrap\b/g) || []
+      // Count traps — should be exactly one unified trap
+      const trapMatches = subshellBody.match(/\btrap\s+'/g) || []
 
       assert.ok(
         trapMatches.length === 1,
