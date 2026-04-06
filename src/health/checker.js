@@ -340,11 +340,12 @@ export function computeReliabilityScore(service) {
   return Math.round(score * 10) / 10
 }
 
-// ─── Per-host rate limiting ──────────────────────────────────────────────────
+// ─── Per-host rate limiting & dedup ──────────────────────────────────────────
 
 const PER_HOST_MIN_INTERVAL_MS = 1000
 
 const hostLastProbe = new Map()
+const checkedThisCycle = new Set()
 
 export function getHostname(url) {
   try { return new URL(url).hostname } catch { return url }
@@ -466,9 +467,120 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
   }
 }
 
+/**
+ * Build protocol-specific fields for persistHealthResult.
+ * Extracted from checkService to enable reuse for sibling updates.
+ *
+ * @param {string} protocol - 'L402'|'x402'|'MPP'
+ * @param {object} detection - Primary detection for this protocol from getPrimaryDetection()
+ * @param {object} result - Probe result from probeEndpoint()
+ * @param {object} service - Service row (needs x402_payment_valid, http_method)
+ * @returns {Promise<{x402PaymentValid, x402FacilitatorReachable, x402AssetKnown, l402Format, lngetCompatible, l402DegradeReason, l402Compliant}>}
+ */
+async function buildProtocolFields(protocol, detection, result, service) {
+  let x402PaymentValid = null
+  let x402FacilitatorReachable = null
+  let x402AssetKnown = null
+  let l402Format = null
+
+  if (protocol === 'x402' && result.httpStatus === 402) {
+    const currentPaymentValid = service.x402_payment_valid
+    if (currentPaymentValid != null && !result.paymentRequired) {
+      x402PaymentValid = currentPaymentValid
+    } else {
+      let paymentRequiredHeader = result.paymentRequired
+      let v1BodyText = result.responseBody
+
+      // x402 GET retry — some servers only include payment headers on content-bearing responses
+      if (!paymentRequiredHeader && !v1BodyText && (service.http_method || 'GET') !== 'POST') {
+        try {
+          const getRes = await fetch(service.url || result.finalUrl, {
+            method: 'GET',
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+            redirect: 'manual',
+          })
+          if (getRes.status === 402) {
+            paymentRequiredHeader = getRes.headers.get('payment-required')
+            if (!paymentRequiredHeader) {
+              try {
+                v1BodyText = await getRes.text()
+                if (v1BodyText.length > 65536) v1BodyText = null
+              } catch {
+                v1BodyText = null
+              }
+            }
+          }
+        } catch {
+          // GET retry failed
+        }
+      }
+
+      const parsed = parsePaymentRequired(paymentRequiredHeader)
+      let accepts = null
+
+      if (parsed.valid) {
+        accepts = parsed.accepts
+      } else if (v1BodyText) {
+        const bodyParsed = parsePaymentRequiredBody(v1BodyText)
+        if (bodyParsed.valid) {
+          accepts = bodyParsed.accepts
+        }
+      }
+
+      if (accepts) {
+        const validation = validatePaymentRequirements(accepts)
+        x402PaymentValid = validation.valid ? 1 : 0
+        x402AssetKnown = validation.assetKnown ? 1 : 0
+
+        if (validation.facilitatorUrls.length > 0) {
+          const reachResults = await Promise.all(
+            validation.facilitatorUrls.map(u => checkFacilitatorReachable(u))
+          )
+          x402FacilitatorReachable = reachResults.some(r => r) ? 1 : 0
+        } else {
+          x402FacilitatorReachable = null
+        }
+      } else {
+        x402PaymentValid = 0
+      }
+    }
+  }
+
+  // Gap 1: x402 endpoints that don't return 402 should get payment_valid=0, not NULL
+  if (protocol === 'x402' && x402PaymentValid === null && !result.errorMessage) {
+    x402PaymentValid = 0
+  }
+
+  // Extract L402 macaroon format for metadata (no health impact)
+  if (protocol === 'L402') {
+    const postL402 = getPrimaryDetection(result.postFallback?.detection || [], protocol)
+    const det = postL402.valid
+      ? postL402
+      : getPrimaryDetection(result.detection, protocol)
+    if (det?.details?.format) {
+      l402Format = det.details.format
+    }
+  }
+
+  return {
+    x402PaymentValid,
+    x402FacilitatorReachable,
+    x402AssetKnown,
+    l402Format,
+    lngetCompatible: protocol === 'L402' ? (l402Format === 'v2_tlv' ? 1 : (l402Format ? 0 : null)) : null,
+    l402Compliant: null,
+  }
+}
+
+const getSiblings = () => stmt('getSiblings', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, consecutive_latency_spikes, registered_at, x402_payment_valid FROM services WHERE url = ? AND id != ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
+
 /** Check a single service: HTTP probe, classify result, persist. */
 export async function checkService(service) {
   const { id, url, protocol, http_method, probe_body, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, consecutive_latency_spikes: prevLatencySpikes, x402_payment_valid: currentPaymentValid } = service
+
+  // Dedup guard: skip if already checked by a sibling in this cycle
+  if (checkedThisCycle.has(id)) return { id, healthStatus: 'skipped', httpStatus: null }
+  checkedThisCycle.add(id)
 
   // Per-host rate limiting: wait if we probed this host recently
   await waitForHost(getHostname(url))
@@ -517,97 +629,8 @@ export async function checkService(service) {
     }
   }
 
-  // x402 payment requirements validation (health-checker-specific layer)
-  let x402PaymentValid = null
-  let x402FacilitatorReachable = null
-  let x402AssetKnown = null
-
-  if (protocol === 'x402' && result.httpStatus === 402) {
-    // If we already determined payment validity and HEAD didn't include the header, preserve cached value
-    if (currentPaymentValid != null && !result.paymentRequired) {
-      x402PaymentValid = currentPaymentValid
-    } else {
-      let paymentRequiredHeader = result.paymentRequired
-      let v1BodyText = result.responseBody
-
-      // probeEndpoint already does HEAD→GET fallback and captures responseBody,
-      // but if we still have no payment-required header, retry with explicit GET
-      // (some x402 servers only include payment headers on content-bearing responses)
-      if (!paymentRequiredHeader && !v1BodyText && (http_method || 'GET') !== 'POST') {
-        try {
-          const getRes = await fetch(url, {
-            method: 'GET',
-            signal: AbortSignal.timeout(TIMEOUT_MS),
-            redirect: 'manual',
-          })
-          if (getRes.status === 402) {
-            paymentRequiredHeader = getRes.headers.get('payment-required')
-            if (!paymentRequiredHeader) {
-              try {
-                v1BodyText = await getRes.text()
-                if (v1BodyText.length > 65536) v1BodyText = null
-              } catch {
-                v1BodyText = null
-              }
-            }
-          }
-        } catch {
-          // GET retry failed — leave paymentRequiredHeader as null
-        }
-      }
-
-      // Try V2 header parsing first
-      const parsed = parsePaymentRequired(paymentRequiredHeader)
-      let accepts = null
-
-      if (parsed.valid) {
-        accepts = parsed.accepts
-      } else if (v1BodyText) {
-        // V2 header missing/invalid — try V1 body parsing
-        const bodyParsed = parsePaymentRequiredBody(v1BodyText)
-        if (bodyParsed.valid) {
-          accepts = bodyParsed.accepts
-        }
-      }
-
-      if (accepts) {
-        const validation = validatePaymentRequirements(accepts)
-        x402PaymentValid = validation.valid ? 1 : 0
-        x402AssetKnown = validation.assetKnown ? 1 : 0
-
-        // Check facilitator reachability (uses cache)
-        if (validation.facilitatorUrls.length > 0) {
-          const reachResults = await Promise.all(
-            validation.facilitatorUrls.map(u => checkFacilitatorReachable(u))
-          )
-          x402FacilitatorReachable = reachResults.some(r => r) ? 1 : 0
-        } else {
-          x402FacilitatorReachable = null
-        }
-      } else {
-        // PAYMENT-REQUIRED header AND V1 body both missing/unparseable
-        x402PaymentValid = 0
-      }
-    }
-  }
-
-  // Gap 1: x402 endpoints that don't return 402 should get payment_valid=0, not NULL.
-  // NULL means "never checked" — 0 means "checked but paywall not working."
-  if (protocol === 'x402' && x402PaymentValid === null && !result.errorMessage) {
-    x402PaymentValid = 0
-  }
-
-  // Extract L402 macaroon format for metadata (no health impact)
-  let l402Format = null
-  if (protocol === 'L402') {
-    const postL402 = getPrimaryDetection(result.postFallback?.detection || [], protocol)
-    const detection = postL402.valid
-      ? postL402
-      : getPrimaryDetection(result.detection, protocol)
-    if (detection?.details?.format) {
-      l402Format = detection.details.format
-    }
-  }
+  // Build protocol-specific fields via extracted helper
+  const protoFields = await buildProtocolFields(protocol, getPrimaryDetection(result.detection, protocol), result, service)
 
   persistHealthResult(id, {
     ...classification,
@@ -616,16 +639,104 @@ export async function checkService(service) {
     errorMessage: result.errorMessage,
     historicalP50,
     registeredAt: service.registered_at,
-    x402PaymentValid,
-    x402FacilitatorReachable,
-    x402AssetKnown,
-    l402Compliant: null, // deprecated — format tracked in l402_format, degradation in health_status
+    ...protoFields,
     l402DegradeReason: protocol === 'L402'
       ? (classification.degradeReason?.includes('payment hash') ? classification.degradeReason : null)
       : null,
-    l402Format,
-    lngetCompatible: protocol === 'L402' ? (l402Format === 'v2_tlv' ? 1 : (l402Format ? 0 : null)) : null,
   })
+
+  // ─── Sibling lookup and update ──────────────────────────────────────────
+  const siblings = getSiblings().all(url, id)
+
+  for (const sibling of siblings) {
+    // Mark sibling as checked synchronously (before any await) to prevent race conditions
+    checkedThisCycle.add(sibling.id)
+
+    const siblingDetection = getPrimaryDetection(result.detection, sibling.protocol)
+    // Also check POST fallback detection for siblings
+    const siblingPostDetection = result.postFallback?.detection
+      ? getPrimaryDetection(result.postFallback.detection, sibling.protocol)
+      : { valid: false }
+    const hasSiblingProtocol = siblingDetection.protocol === sibling.protocol || siblingPostDetection.protocol === sibling.protocol
+
+    if (result.errorMessage || (result.httpStatus && result.httpStatus !== 402)) {
+      // Non-402 and error responses: apply same classification uniformly to siblings
+      const sibClassification = classifyHealthStatus(
+        result.httpStatus, result.errorMessage,
+        sibling.consecutive_failures || 0, sibling.latency_p50_ms,
+        result.responseTimeMs, sibling.consecutive_latency_spikes || 0
+      )
+      persistHealthResult(sibling.id, {
+        ...sibClassification,
+        httpStatus: result.httpStatus,
+        responseTimeMs: result.responseTimeMs,
+        errorMessage: result.errorMessage,
+        historicalP50: sibling.latency_p50_ms,
+        registeredAt: sibling.registered_at,
+        x402PaymentValid: null,
+        x402FacilitatorReachable: null,
+        x402AssetKnown: null,
+        l402Compliant: null,
+        l402DegradeReason: null,
+        l402Format: null,
+        lngetCompatible: null,
+      })
+    } else if (hasSiblingProtocol) {
+      // Sibling's protocol detected — run protocol-specific validation
+      const sibClassification = classifyHealthStatus(
+        result.httpStatus, result.errorMessage,
+        sibling.consecutive_failures || 0, sibling.latency_p50_ms,
+        result.responseTimeMs, sibling.consecutive_latency_spikes || 0
+      )
+
+      // L402/MPP validation adjustments for sibling
+      if ((sibling.protocol === 'L402' || sibling.protocol === 'MPP') && result.httpStatus === 402 && sibClassification.healthStatus === 'healthy') {
+        const det = siblingDetection.protocol === sibling.protocol ? siblingDetection : siblingPostDetection
+        if (!det.valid) {
+          sibClassification.healthStatus = 'degraded'
+          sibClassification.checkStatus = 'degraded'
+        } else if (sibling.protocol === 'L402' && det.details?.paymentHashMatch === false) {
+          sibClassification.healthStatus = 'degraded'
+          sibClassification.checkStatus = 'degraded'
+          sibClassification.degradeReason = det.degradeReason || 'payment hash mismatch between macaroon and invoice'
+        }
+      }
+
+      const sibProtoFields = await buildProtocolFields(sibling.protocol, siblingDetection, result, sibling)
+      persistHealthResult(sibling.id, {
+        ...sibClassification,
+        httpStatus: result.httpStatus,
+        responseTimeMs: result.responseTimeMs,
+        errorMessage: result.errorMessage,
+        historicalP50: sibling.latency_p50_ms,
+        registeredAt: sibling.registered_at,
+        ...sibProtoFields,
+        l402DegradeReason: sibling.protocol === 'L402'
+          ? (sibClassification.degradeReason?.includes('payment hash') ? sibClassification.degradeReason : null)
+          : null,
+      })
+    } else {
+      // Sibling's protocol NOT in detection array — mark degraded
+      persistHealthResult(sibling.id, {
+        healthStatus: 'degraded',
+        checkStatus: 'degraded',
+        httpStatus: result.httpStatus,
+        responseTimeMs: result.responseTimeMs,
+        errorMessage: null,
+        consecutiveFailures: sibling.consecutive_failures || 0,
+        consecutiveLatencySpikes: sibling.consecutive_latency_spikes || 0,
+        historicalP50: sibling.latency_p50_ms,
+        registeredAt: sibling.registered_at,
+        x402PaymentValid: null,
+        x402FacilitatorReachable: null,
+        x402AssetKnown: null,
+        l402Compliant: null,
+        l402DegradeReason: sibling.protocol === 'x402' ? null : 'protocol not detected in probe response',
+        l402Format: null,
+        lngetCompatible: null,
+      })
+    }
+  }
 
   return { id, healthStatus: classification.healthStatus, httpStatus: result.httpStatus }
 }
@@ -693,12 +804,13 @@ export async function runHealthChecks() {
 
   // Reset per-cycle state
   hostLastProbe.clear()
+  checkedThisCycle.clear()
 
   // Shuffle to distribute same-host endpoints across the full check cycle
   const services = shuffleArray(getServices().all())
   console.log(`[health] Checking ${services.length} services...`)
 
-  const results = { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 }
+  const results = { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0, skipped: 0 }
   const byProtocol = {}
   const errors = []
   let checked = 0
@@ -721,8 +833,12 @@ export async function runHealthChecks() {
 
       if (result.status === 'fulfilled') {
         const status = result.value.healthStatus
-        results[status] = (results[status] || 0) + 1
-        byProtocol[proto][status] = (byProtocol[proto][status] || 0) + 1
+        if (status === 'skipped') {
+          results.skipped++
+        } else {
+          results[status] = (results[status] || 0) + 1
+          byProtocol[proto][status] = (byProtocol[proto][status] || 0) + 1
+        }
       } else {
         results.error++
         byProtocol[proto].error++
