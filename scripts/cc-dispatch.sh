@@ -102,8 +102,8 @@ get_next_stage_label() {
 # After a dispatch stage completes successfully, auto-chain to next stage
 # NOTE: Branch protection on master is pending a GitHub Pro upgrade (or making
 # the repo public). Until then, required status checks and review requirements
-# are not enforced by GitHub. The CI gate in dispatch_review_pr() provides
-# in-pipeline enforcement as a substitute.
+# are not enforced by GitHub. The CI gate (wait_for_ci) in the review-pr
+# handler provides in-pipeline enforcement as a substitute.
 chain_next_stage() {
     local issue_number="$1"
     local current_label="$2"
