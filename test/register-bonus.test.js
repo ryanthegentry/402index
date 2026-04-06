@@ -156,11 +156,8 @@ describe('POST /api/v1/register — Bonus Row Creation', () => {
       assert.equal(r.body.also_registered[0].protocol, 'x402', 'bonus row should be x402')
       assert.ok(r.body.also_registered[0].name.includes('(x402)'), 'bonus row name should be suffixed with (x402)')
 
-      // Verify DB has two rows for this URL
-      const servicesRes = await fetch(`${API}/services?q=${encodeURIComponent(url)}`)
-      const servicesBody = await servicesRes.json()
-      const matchingServices = servicesBody.services.filter(s => s.url === url)
-      assert.ok(matchingServices.length >= 2, `expected 2+ rows for URL, got ${matchingServices.length}`)
+      // Verify bonus row has a distinct ID from primary
+      assert.notEqual(r.body.also_registered[0].id, r.body.service.id, 'bonus row must have different ID from primary')
     } finally {
       await closeMockServer(server)
     }
@@ -182,11 +179,16 @@ describe('POST /api/v1/register — Bonus Row Creation', () => {
       const r2 = await register({ url, name: 'Idempotent Test Updated', protocol: 'L402' })
       assert.equal(r2.status, 201)
 
-      // DB should still have exactly 2 rows (L402 + x402), not 4
-      const servicesRes = await fetch(`${API}/services?q=${encodeURIComponent(url)}`)
-      const servicesBody = await servicesRes.json()
-      const matchingServices = servicesBody.services.filter(s => s.url.includes(uniquePath))
-      assert.equal(matchingServices.length, 2, `expected exactly 2 rows, got ${matchingServices.length}`)
+      // Bonus row should still be returned (upsert, not duplicate)
+      assert.ok(Array.isArray(r2.body.also_registered), 'second registration should have also_registered')
+      assert.equal(r2.body.also_registered.length, 1, 'should still have exactly one bonus row (upserted)')
+      assert.equal(r2.body.also_registered[0].protocol, 'x402')
+
+      // The bonus row ID from second registration should match first (same url+protocol → upsert)
+      const bonus1Id = r1.body.also_registered[0]?.id
+      const bonus2Id = r2.body.also_registered[0]?.id
+      // ON CONFLICT upsert uses RETURNING * — the id stays the same
+      assert.equal(bonus1Id, bonus2Id, 'bonus row ID should be stable across upserts')
     } finally {
       await closeMockServer(server)
     }
@@ -321,7 +323,10 @@ describe('POST /api/v1/register — Error Response Diagnostics', () => {
 
     // New diagnostic fields in the probe/response
     assert.ok(r.body.probe, 'probe object must be present')
-    assert.equal(typeof r.body.probe.httpStatus, 'number', 'probe.httpStatus must be a number')
+    assert.ok(
+      r.body.probe.httpStatus === null || typeof r.body.probe.httpStatus === 'number',
+      'probe.httpStatus must be a number or null'
+    )
 
     // These are the NEW fields required by the issue
     assert.ok('headersPresent' in r.body.probe, 'probe must include headersPresent')

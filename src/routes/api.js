@@ -14,6 +14,7 @@ import { discoverProbeConfig } from '../services/wellknown-discovery.js'
 import { getSnapshots } from '../services/daily-snapshot.js'
 import { openapiSpec, generateMarkdownDocs } from '../openapi.js'
 import { initiateClaim, verifyClaim, editService, revokeClaim, deleteService, bulkDeleteServices } from '../services/domain-verify.js'
+import { decode as decodeBolt11 } from 'light-bolt11-decoder'
 
 const router = Router()
 
@@ -343,6 +344,56 @@ const VALID_HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE'])
 const MAX_LENGTHS = { name: 200, description: 2000, url: 2000, provider: 200, category: 100, payment_asset: 50, payment_network: 50, contact_email: 254, http_method: 10, probe_body: 4000 }
 
 /**
+ * Extract pricing from a bonus protocol detection.
+ * Returns { price_sats, price_usd, payment_asset, payment_network }.
+ * Never throws — returns all nulls on error.
+ */
+function extractBonusPricing(detection) {
+  const nullPricing = { price_sats: null, price_usd: null, payment_asset: null, payment_network: null }
+  try {
+    if (detection.protocol === 'x402' && detection.details?.accepts?.[0]) {
+      const accept = detection.details.accepts[0]
+      // Map known asset addresses to symbols
+      const asset = accept.asset || null
+      const network = accept.network || null
+      let priceUsd = null
+      if (accept.maxAmountRequired != null || accept.amount != null) {
+        const rawAmount = accept.maxAmountRequired ?? accept.amount
+        // Default to 6 decimals (USDC)
+        const decimals = accept.decimals ?? 6
+        priceUsd = Number(rawAmount) / Math.pow(10, decimals)
+        if (!Number.isFinite(priceUsd)) priceUsd = null
+      }
+      return { price_sats: null, price_usd: priceUsd, payment_asset: asset, payment_network: network }
+    }
+
+    if (detection.protocol === 'L402' && detection.details?.invoice) {
+      try {
+        const decoded = decodeBolt11(detection.details.invoice)
+        const amountSection = decoded.sections?.find(s => s.name === 'amount')
+        const priceSats = amountSection ? Math.floor(Number(amountSection.value) / 1000) : null
+        return { price_sats: priceSats, price_usd: null, payment_asset: null, payment_network: null }
+      } catch {
+        return nullPricing
+      }
+    }
+
+    if (detection.protocol === 'MPP' && detection.details?.request) {
+      try {
+        const reqData = JSON.parse(Buffer.from(detection.details.request, 'base64url').toString())
+        const priceUsd = reqData.amount != null ? Number(reqData.amount) : null
+        return { price_sats: null, price_usd: Number.isFinite(priceUsd) ? priceUsd : null, payment_asset: null, payment_network: null }
+      } catch {
+        return nullPricing
+      }
+    }
+  } catch {
+    // Never fail bonus row creation due to pricing extraction errors
+  }
+  return nullPricing
+}
+
+/**
  * Multi-protocol verification dispatcher.
  * All protocols use the shared probeEndpoint() with redirect following,
  * POST fallback, and unified 8s timeout.
@@ -363,6 +414,12 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
       httpStatus: result.httpStatus,
       error: result.errorMessage,
       details: {},
+      detections: result.detection,
+      rawHeaders: {
+        wwwAuthenticate: result.wwwAuthenticate,
+        paymentRequired: result.paymentRequired,
+      },
+      bodySnippet: null,
     }
   }
 
@@ -377,6 +434,12 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
       httpStatus: effectiveStatus,
       error: `Your endpoint returned HTTP ${effectiveStatus} instead of 402. ${protocol} endpoints must return 402 Payment Required for unauthenticated requests.`,
       details: {},
+      detections: result.detection,
+      rawHeaders: {
+        wwwAuthenticate: result.wwwAuthenticate,
+        paymentRequired: result.paymentRequired,
+      },
+      bodySnippet: result.responseBody ? result.responseBody.substring(0, 500) : null,
     }
   }
 
@@ -392,6 +455,7 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
         error: `Your endpoint returns a ${otherDetection.protocol} challenge. Register it as ${otherDetection.protocol} instead.`,
         suggestedProtocol: otherDetection.protocol,
         details: otherDetection.details,
+        detections: result.detection,
       }
     }
 
@@ -401,6 +465,7 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
       httpStatus: effectiveStatus,
       error: `Endpoint returned 402 but no valid ${protocol} challenge was detected.`,
       details: detection.details,
+      detections: result.detection,
     }
   }
 
@@ -418,6 +483,7 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
         hasInvoice: detection.details.invoiceValid ?? false,
       },
       methodUsed: result.methodUsed,
+      detections: result.detection,
     }
   }
 
@@ -428,6 +494,7 @@ async function verifyEndpoint(url, protocol, httpMethod = 'GET', probeBody = '{}
     error: detection.valid ? null : (detection.degradeReason || `Invalid ${protocol} challenge`),
     details: detection.details,
     methodUsed: result.methodUsed,
+    detections: result.detection,
   }
 }
 
@@ -551,6 +618,15 @@ router.post('/register', async (req, res) => {
         probe: {
           httpStatus: probe.httpStatus,
           ...probe.details,
+          headersPresent: {
+            'WWW-Authenticate': !!(probe.rawHeaders?.wwwAuthenticate),
+            'PAYMENT-REQUIRED': !!(probe.rawHeaders?.paymentRequired),
+          },
+          bodySnippet: probe.bodySnippet || null,
+          detectedProtocols: (probe.detections || []).map(d => ({
+            protocol: d.protocol,
+            valid: d.valid,
+          })),
         },
       }
       if (probe.suggestedProtocol) {
@@ -674,6 +750,70 @@ router.post('/register', async (req, res) => {
       emit('service.new', service, db)
     }
 
+    // ── Bonus row creation for additional detected protocols ──────────────
+    const alsoRegistered = []
+    const bonusDetections = (probe.detections || []).filter(
+      d => d.valid && d.protocol !== protocol
+    )
+
+    // Check if rate limit can accommodate bonus rows
+    const currentRegCount = domainRegCount + 1 // primary already counted
+    const bonusBudget = domainLimit - currentRegCount
+
+    for (const bonusDet of bonusDetections) {
+      if (alsoRegistered.length >= bonusBudget) break
+
+      // Skip if (url, bonusProtocol) is soft-deleted
+      const bonusSoftDeleted = db.prepare(
+        "SELECT id FROM services WHERE url = @url AND protocol = @protocol AND provider_deleted = 1"
+      ).get({ url, protocol: bonusDet.protocol })
+      if (bonusSoftDeleted) continue
+
+      const pricing = extractBonusPricing(bonusDet)
+      const bonusParams = {
+        id: randomUUID(),
+        name: `${body.name} (${bonusDet.protocol})`,
+        description: body.description || null,
+        url,
+        protocol: bonusDet.protocol,
+        price_sats: pricing.price_sats,
+        price_usd: pricing.price_usd,
+        payment_asset: pricing.payment_asset,
+        payment_network: pricing.payment_network,
+        category: body.category || 'uncategorized',
+        provider: body.provider || null,
+        contact_email: body.contact_email || null,
+        http_method: httpMethod,
+        probe_body: probeBody !== '{}' ? probeBody : null,
+        hostname: extractHostname(url),
+      }
+
+      let bonusService = registerUpsert().get(bonusParams)
+
+      // Apply same auto-approval logic to bonus row
+      if (bonusService.status === 'pending' && body.provider === 'golem-gateway' && golemSecretValid) {
+        db.prepare(
+          "UPDATE services SET status = 'active', approval_reason = 'golem-gateway', updated_at = datetime('now') WHERE id = ? AND status = 'pending'"
+        ).run(bonusService.id)
+        bonusService = { ...bonusService, status: 'active', approval_reason: 'golem-gateway' }
+      }
+
+      if (bonusService.status === 'pending' && isVerifiedDomain) {
+        db.prepare(
+          "UPDATE services SET status = 'active', approval_reason = 'domain-verified', updated_at = datetime('now') WHERE id = ?"
+        ).run(bonusService.id)
+        bonusService = { ...bonusService, status: 'active', approval_reason: 'domain-verified' }
+      }
+
+      // Fire event for genuinely new bonus registrations
+      if (bonusService.registered_at === bonusService.updated_at) {
+        emit('service.new', bonusService, db)
+      }
+
+      alsoRegistered.push(bonusService)
+      console.log(`[register] Bonus ${bonusDet.protocol} row created for ${url}`)
+    }
+
     const message = service.status === 'active'
       ? (service.approval_reason === 'domain-verified'
         ? 'Service registered and live (domain verified).'
@@ -683,6 +823,7 @@ router.post('/register', async (req, res) => {
     const responseBody = {
       message,
       service,
+      also_registered: alsoRegistered,
       verification: {
         protocol,
         httpStatus: probe.httpStatus,
