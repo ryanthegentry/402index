@@ -1,5 +1,5 @@
 import { isPrivateIp, classifyHealthStatus } from '../health/checker.js'
-import { decodeMppRequest } from './detect-protocol.js'
+import { decodeMppRequest, getPrimaryDetection } from './detect-protocol.js'
 import { probeEndpoint } from './probe-endpoint.js'
 import { liveProbeWithThrottle } from './live-probe-cache.js'
 
@@ -241,36 +241,36 @@ export async function* runProbeSteps(url, db) {
   )
 
   // ─── Protocol detection + validation ─────────────────────────────────
-  const detection = result.detection
+  const detection = getPrimaryDetection(result.detection, config.protocol || result.detection[0]?.protocol)
   let detectedProtocol = detection.protocol || config.protocol
 
-  // Emit headers + protocol-specific validation
-  if (detection.protocol) {
-    yield formatProbeSteps.headers(detection.protocol, detection.rawHeaders)
+  // Emit headers + protocol-specific validation for each detected protocol
+  for (const det of result.detection) {
+    yield formatProbeSteps.headers(det.protocol, det.rawHeaders)
 
-    if (detection.protocol === 'L402') {
-      yield formatProbeSteps.l402Validation(detection.valid, {
-        scheme: detection.details.scheme,
-        macaroon: detection.details.macaroonValid ? 'valid' : null,
-        invoice: detection.details.invoiceValid ? 'valid' : null,
+    if (det.protocol === 'L402') {
+      yield formatProbeSteps.l402Validation(det.valid, {
+        scheme: det.details.scheme,
+        macaroon: det.details.macaroonValid ? 'valid' : null,
+        invoice: det.details.invoiceValid ? 'valid' : null,
       })
-      if (!detection.valid) {
+      if (!det.valid && det.protocol === detection.protocol) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
       }
     }
 
-    if (detection.protocol === 'MPP') {
-      yield formatProbeSteps.mppValidation(detection.valid, detection.details, detection.degradeReason)
-      if (!detection.valid) {
+    if (det.protocol === 'MPP') {
+      yield formatProbeSteps.mppValidation(det.valid, det.details, det.degradeReason)
+      if (!det.valid && det.protocol === detection.protocol) {
         classification.healthStatus = 'degraded'
         classification.checkStatus = 'degraded'
       }
     }
 
-    if (detection.protocol === 'x402') {
-      yield formatProbeSteps.x402Validation(detection.valid, {
-        assetKnown: detection.details.assetKnown,
+    if (det.protocol === 'x402') {
+      yield formatProbeSteps.x402Validation(det.valid, {
+        assetKnown: det.details.assetKnown,
         facilitatorReachable: null, // Skip live facilitator check for speed in demo
       })
     }
@@ -280,25 +280,25 @@ export async function* runProbeSteps(url, db) {
   if (result.postFallback?.attempted) {
     yield formatProbeSteps.postRetry('POST', result.postFallback.httpStatus || 0)
 
-    if (result.postFallback.detection?.valid) {
-      const postDetection = result.postFallback.detection
+    const postPrimary = getPrimaryDetection(result.postFallback.detection, config.protocol || result.postFallback.detection[0]?.protocol)
+    if (postPrimary.valid) {
       classification.healthStatus = 'healthy'
       classification.checkStatus = 'healthy'
       classification.consecutiveFailures = 0
-      detectedProtocol = postDetection.protocol
+      detectedProtocol = postPrimary.protocol
 
-      yield formatProbeSteps.headers(postDetection.protocol, postDetection.rawHeaders)
-      if (postDetection.protocol === 'L402') {
+      yield formatProbeSteps.headers(postPrimary.protocol, postPrimary.rawHeaders)
+      if (postPrimary.protocol === 'L402') {
         yield formatProbeSteps.l402Validation(true, {
-          scheme: postDetection.details.scheme,
+          scheme: postPrimary.details.scheme,
           macaroon: 'valid',
           invoice: 'valid',
         })
-      } else if (postDetection.protocol === 'MPP') {
-        yield formatProbeSteps.mppValidation(true, postDetection.details, null)
-      } else if (postDetection.protocol === 'x402') {
+      } else if (postPrimary.protocol === 'MPP') {
+        yield formatProbeSteps.mppValidation(true, postPrimary.details, null)
+      } else if (postPrimary.protocol === 'x402') {
         yield formatProbeSteps.x402Validation(true, {
-          assetKnown: postDetection.details.assetKnown,
+          assetKnown: postPrimary.details.assetKnown,
           facilitatorReachable: null,
         })
       }
@@ -306,7 +306,8 @@ export async function* runProbeSteps(url, db) {
   }
 
   // Emit fallback headers step if nothing was detected
-  if (!detection.protocol && !result.postFallback?.detection?.protocol) {
+  const postPrimaryProtocol = getPrimaryDetection(result.postFallback?.detection || [], config.protocol || '').protocol
+  if (result.detection.length === 0 && !postPrimaryProtocol) {
     yield formatProbeSteps.headers(detectedProtocol, {})
   }
 

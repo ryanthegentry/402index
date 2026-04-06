@@ -187,21 +187,21 @@ describe('detectProtocol — format in details', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${JSON_MACAROON}", invoice="${VALID_BOLT11}"`,
     })
-    assert.equal(result.details.format, 'json')
+    assert.equal(result[0].details.format, 'json')
   })
 
   it('V2 TLV macaroon returns details.format=v2_tlv', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${SPEC_MACAROON}", invoice="${VALID_BOLT11}"`,
     })
-    assert.equal(result.details.format, 'v2_tlv')
+    assert.equal(result[0].details.format, 'v2_tlv')
   })
 
   it('V1 binary macaroon returns details.format=v1_binary', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${V1_VALID_MACAROON}", invoice="${VALID_BOLT11}"`,
     })
-    assert.equal(result.details.format, 'v1_binary')
+    assert.equal(result[0].details.format, 'v1_binary')
   })
 })
 
@@ -213,7 +213,7 @@ describe('Format extraction uses details.format directly (Part 2)', () => {
       wwwAuthenticate: `L402 macaroon="${JSON_MACAROON}", invoice="${VALID_BOLT11}"`,
     })
     // The format should be taken directly from details.format
-    const extractedFormat = result.details.format
+    const extractedFormat = result[0].details.format
     assert.equal(extractedFormat, 'json')
   })
 
@@ -224,9 +224,9 @@ describe('Format extraction uses details.format directly (Part 2)', () => {
     const result = detectProtocol({
       wwwAuthenticate: `L402 macaroon="${V1_VALID_MACAROON}", invoice="${VALID_BOLT11}"`,
     })
-    assert.equal(result.details.specCompliant, true, 'V1 binary should be spec-compliant')
-    assert.equal(result.details.format, 'v1_binary', 'format should be v1_binary, not v2_tlv')
-    assert.notEqual(result.details.format, 'v2_tlv', 'must NOT incorrectly report as v2_tlv')
+    assert.equal(result[0].details.specCompliant, true, 'V1 binary should be spec-compliant')
+    assert.equal(result[0].details.format, 'v1_binary', 'format should be v1_binary, not v2_tlv')
+    assert.notEqual(result[0].details.format, 'v2_tlv', 'must NOT incorrectly report as v2_tlv')
   })
 })
 

@@ -41,7 +41,7 @@ export async function probeEndpoint(url, {
     wwwAuthenticate: null,
     paymentRequired: null,
     responseBody: null,
-    detection: { protocol: null, valid: false, degradeReason: null, details: {}, rawHeaders: {} },
+    detection: [],
     postFallback: null,
   }
 
@@ -95,7 +95,7 @@ export async function probeEndpoint(url, {
     const postResult = await fetchWithRedirects(url, 'POST', body, timeoutMs, followRedirects, maxRedirects)
 
     const postDetection = postResult.errorMessage
-      ? { protocol: null, valid: false, degradeReason: null, details: {}, rawHeaders: {} }
+      ? []
       : detectProtocol({
           wwwAuthenticate: postResult.wwwAuthenticate,
           paymentRequired: postResult.paymentRequired,
@@ -109,7 +109,7 @@ export async function probeEndpoint(url, {
     }
 
     // If POST yielded 402 + valid protocol detection, promote it
-    if (postResult.httpStatus === 402 && postDetection.valid) {
+    if (postResult.httpStatus === 402 && postDetection.some(d => d.valid)) {
       result.httpStatus = postResult.httpStatus
       result.responseTimeMs = postResult.responseTimeMs
       result.methodUsed = 'POST'
