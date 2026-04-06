@@ -2,7 +2,9 @@ const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_m
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
 const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'self-registered', 'sponge', 'well-known', 'discovery'])
 
-export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason, l402_format, lnget_compatible'
+const RELATED_PROTOCOLS_SQL = `(SELECT CASE WHEN COUNT(*) = 0 THEN '[]' ELSE json_group_array(s2.protocol) END FROM services s2 WHERE s2.url = services.url AND s2.id != services.id AND (s2.status = 'active' OR s2.status IS NULL) AND (s2.provider_deleted = 0 OR s2.provider_deleted IS NULL)) as related_protocols`
+
+export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason, l402_format, lnget_compatible, ' + RELATED_PROTOCOLS_SQL
 export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, latency_p50_ms, reliability_score, x402_payment_valid'
 
 const DEFAULT_ORDER = `ORDER BY
@@ -135,5 +137,10 @@ export function queryServices(db, opts, columns = API_COLUMNS) {
   const services = db.prepare(
     `SELECT ${columns} FROM services ${where} ${orderBy} LIMIT @limit OFFSET @offset`
   ).all({ ...params, limit, offset })
+  for (const s of services) {
+    if (typeof s.related_protocols === 'string') {
+      s.related_protocols = JSON.parse(s.related_protocols)
+    }
+  }
   return { services, total, limit, offset }
 }
