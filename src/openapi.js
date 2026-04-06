@@ -71,6 +71,18 @@ export const openapiSpec = {
                 { $ref: '#/components/schemas/Service' },
                 { type: 'object', properties: {
                   health_checks: { type: 'array', items: { $ref: '#/components/schemas/HealthCheck' } },
+                  related_services: { type: 'array', items: { type: 'object', properties: {
+                    id: { type: 'string' },
+                    protocol: { type: 'string', enum: ['L402', 'x402', 'MPP'] },
+                    health_status: { type: ['string', 'null'] },
+                    price_sats: { type: ['integer', 'null'] },
+                    price_usd: { type: ['number', 'null'] },
+                    payment_asset: { type: ['string', 'null'] },
+                    payment_network: { type: ['string', 'null'] },
+                    reliability_score: { type: ['number', 'null'] },
+                    uptime_30d: { type: ['number', 'null'] },
+                    latency_p50_ms: { type: ['integer', 'null'] },
+                  } }, description: 'Other protocol listings for the same URL (same endpoint, different payment protocol)' },
                 } },
               ],
             } } },
@@ -327,6 +339,7 @@ export const openapiSpec = {
               properties: {
                 message: { type: 'string' },
                 service: { $ref: '#/components/schemas/Service' },
+                also_registered: { type: 'array', items: { $ref: '#/components/schemas/Service' }, description: 'Additional protocol listings auto-created when dual-protocol support is detected' },
                 verification: { type: 'object', properties: {
                   protocol: { type: 'string', enum: ['L402', 'x402', 'MPP'] },
                   httpStatus: { type: 'integer' },
@@ -345,7 +358,29 @@ export const openapiSpec = {
             } } },
           },
           '400': { description: 'Missing required fields or invalid input' },
-          '422': { description: 'Verification failed — endpoint did not return a valid protocol challenge' },
+          '422': {
+            description: 'Verification failed — endpoint did not return a valid protocol challenge',
+            content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                error: { type: 'string' },
+                detail: { type: 'string' },
+                probe: { type: 'object', properties: {
+                  httpStatus: { type: 'integer', description: 'HTTP status code received from the endpoint' },
+                  headersPresent: { type: 'object', properties: {
+                    'WWW-Authenticate': { type: 'boolean' },
+                    'PAYMENT-REQUIRED': { type: 'boolean' },
+                  }, description: 'Which payment-related headers were present' },
+                  bodySnippet: { type: ['string', 'null'], description: 'First bytes of response body' },
+                  detectedProtocols: { type: 'array', items: { type: 'object', properties: {
+                    protocol: { type: 'string' },
+                    valid: { type: 'boolean' },
+                  } }, description: 'All protocols detected regardless of which was requested' },
+                } },
+                suggestedProtocol: { type: 'string', description: 'Present only when a different protocol was detected than what was requested' },
+              },
+            } } },
+          },
           '429': { description: 'Rate limited (10 registrations per hour per IP)' },
         },
       },
@@ -595,6 +630,7 @@ export const openapiSpec = {
           x402_asset_known: { type: ['integer', 'null'] },
           l402_format: { type: ['string', 'null'], enum: ['v2_tlv', 'v1_binary', 'v0_text', 'json', 'unknown', null], description: 'L402 macaroon token format. See github.com/lightninglabs/L402/blob/master/macaroon-spec.md' },
           lnget_compatible: { type: ['integer', 'null'], enum: [1, 0, null], description: 'Whether this endpoint works with Lightning Labs lnget client (1=yes, 0=no, null=not L402)' },
+          related_protocols: { type: 'array', items: { type: 'string' }, description: 'Other payment protocols this URL is also registered under (e.g. if an L402 service also has an x402 listing)' },
         },
       },
       HealthCheck: {
