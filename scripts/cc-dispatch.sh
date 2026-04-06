@@ -917,7 +917,7 @@ This marker line is machine-parsed. It MUST appear exactly as shown — no markd
     tmpfile=$(mktemp)
     echo "$review_body" | grep -v '^VERDICT:' | tail -100 > "$tmpfile"
     if [ -s "$tmpfile" ]; then
-        head -c 4000 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
+        head -c 65536 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
         # Script submits the formal review — not the agent
         if submit_review "$pr_number" "$verdict" "$(cat "$tmpfile")"; then
             set_review_status "$pr_number" "success" "Bot review complete: ${verdict}"
@@ -1111,7 +1111,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     tmpfile=$(mktemp)
     echo "$cc_output" | grep -v '^\[' | tail -100 > "$tmpfile"
     if [ -s "$tmpfile" ]; then
-        head -c 4000 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
+        head -c 65536 "$tmpfile" > "${tmpfile}.trunc" && mv "${tmpfile}.trunc" "$tmpfile"
         gh pr comment "$pr_number" --repo "$REPO" --body-file "$tmpfile" 2>/dev/null
     fi
     rm -f "$tmpfile"
