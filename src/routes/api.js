@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { randomUUID, timingSafeEqual } from 'crypto'
+import { randomUUID, timingSafeEqual, randomBytes, createHash } from 'crypto'
 import db, { logQuery } from '../db.js'
 import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/services.js'
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
@@ -1252,6 +1252,39 @@ router.get('/admin/domains', (req, res) => {
     ORDER BY COALESCE(dc.verified_at, dc.claimed_at) DESC
   `).all()
   res.json({ domains, total: domains.length })
+})
+
+// ─── Admin Domain Token Reset ─────────────────────────────────────────────
+
+router.post('/admin/domains/:domain/reset', (req, res) => {
+  const domain = (req.params.domain || '').trim().toLowerCase()
+  if (!domain) return res.status(400).json({ error: 'domain param is required' })
+
+  const claim = db.prepare('SELECT * FROM domain_claims WHERE domain = ?').get(domain)
+  if (!claim) return res.status(404).json({ error: 'No claim found for this domain' })
+
+  const token = randomBytes(32).toString('hex')
+  const hash = createHash('sha256').update(token).digest('hex')
+  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000)
+    .toISOString().replace('T', ' ').slice(0, 19)
+
+  db.prepare(
+    `UPDATE domain_claims SET verification_token = ?, status = 'pending',
+     expires_at = ?, verified_at = NULL WHERE domain = ?`
+  ).run(token, expiresAt, domain)
+
+  console.log(`[admin/domain-reset] RESET: domain=${domain} old_status=${claim.status}`)
+
+  res.json({
+    reset: true,
+    domain,
+    new_status: 'pending',
+    expires_at: expiresAt,
+    verification_token: token,
+    verification_hash: hash,
+    verification_url: `https://${domain}/.well-known/402index-verify.txt`,
+    instructions: 'Send the token to the provider. They must place the hash at the verification URL, then call POST /api/v1/claim/verify.',
+  })
 })
 
 // ─── Admin Failed Registrations ──────────────────────────────────────────

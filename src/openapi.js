@@ -561,6 +561,38 @@ export const openapiSpec = {
       },
     },
 
+    '/api/v1/admin/domains/{domain}/reset': {
+      post: {
+        summary: 'Reset a domain verification token (admin only)',
+        operationId: 'adminResetDomain',
+        tags: ['Admin'],
+        parameters: [
+          { name: 'domain', in: 'path', required: true, schema: { type: 'string' }, description: 'Domain to reset (e.g. api.example.com)' },
+        ],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Domain reset. Returns new token, hash, and instructions.',
+            content: { 'application/json': { schema: {
+              type: 'object',
+              properties: {
+                reset: { type: 'boolean' },
+                domain: { type: 'string' },
+                new_status: { type: 'string', enum: ['pending'] },
+                expires_at: { type: 'string', description: 'New 72-hour expiry (SQLite datetime format)' },
+                verification_token: { type: 'string', description: '64-char hex token (256 bits)' },
+                verification_hash: { type: 'string', description: 'SHA-256 of the token (place at .well-known)' },
+                verification_url: { type: 'string' },
+                instructions: { type: 'string' },
+              },
+            } } },
+          },
+          '401': { description: 'Missing or invalid admin authorization' },
+          '404': { description: 'No claim found for this domain' },
+        },
+      },
+    },
+
     '/api/v1/claim/verify': {
       post: {
         summary: 'Verify a pending domain claim',
