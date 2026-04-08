@@ -57,6 +57,14 @@ async function apiPatch(id, body) {
   return { status: res.status, body: await res.json().catch(() => null) }
 }
 
+async function apiAdminReset(domain) {
+  const res = await fetch(`${API}/admin/domains/${encodeURIComponent(domain)}/reset`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${process.env.ADMIN_SECRET || 'test-secret'}` },
+  })
+  return { status: res.status, body: await res.json().catch(() => null) }
+}
+
 // ─── DB access for test setup/teardown ───────────────────────────────────────
 
 let db
@@ -1643,5 +1651,167 @@ describe('Soft Delete Edge Cases', () => {
       description: 'Should fail — service is deleted',
     })
     assert.equal(r.status, 404)
+  })
+})
+
+// ─── Admin Domain Token Reset (POST /admin/domains/:domain/reset) ───────────
+
+describe('POST /api/v1/admin/domains/:domain/reset', () => {
+  const RESET_DOMAIN = `reset-${randomUUID().slice(0, 8)}.example.com`
+  const RESET_SVC = `dv-test-reset-${randomUUID().slice(0, 8)}`
+  let originalToken
+  let skipAll = false
+
+  before(() => {
+    if (!db) { skipAll = true; return }
+    try {
+      // Insert a service under this domain
+      db.prepare(
+        `INSERT OR IGNORE INTO services (id, name, url, hostname, protocol, source, status)
+         VALUES (?, 'Reset Test', ?, ?, 'L402', 'self-registered', 'active')`
+      ).run(RESET_SVC, `https://${RESET_DOMAIN}/api`, RESET_DOMAIN)
+    } catch { skipAll = true }
+  })
+
+  it('71. happy path — reset a verified domain', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    // 1. Claim the domain
+    const claim = await apiClaim({ domain: RESET_DOMAIN })
+    assert.equal(claim.status, 201)
+    originalToken = claim.body.verification_token
+
+    // 2. Verify by placing hash in DB directly (bypass HTTP fetch)
+    const hash = createHash('sha256').update(originalToken).digest('hex')
+    db.prepare(
+      `UPDATE domain_claims SET status = 'verified', verified_at = datetime('now')
+       WHERE domain = ?`
+    ).run(RESET_DOMAIN)
+    db.prepare(
+      `UPDATE services SET domain_verified = 1 WHERE hostname = ?`
+    ).run(RESET_DOMAIN)
+
+    // 3. Admin reset
+    const r = await apiAdminReset(RESET_DOMAIN)
+    assert.equal(r.status, 200)
+    assert.equal(r.body.reset, true)
+    assert.equal(r.body.domain, RESET_DOMAIN)
+    assert.equal(r.body.new_status, 'pending')
+    assert.match(r.body.verification_token, /^[0-9a-f]{64}$/)
+    assert.match(r.body.verification_hash, /^[0-9a-f]{64}$/)
+    assert.ok(r.body.verification_url.includes(RESET_DOMAIN))
+    assert.ok(r.body.instructions)
+
+    // 4. Verify DB row: status=pending, new expiry ~72h, verified_at IS NULL
+    const row = db.prepare('SELECT * FROM domain_claims WHERE domain = ?').get(RESET_DOMAIN)
+    assert.equal(row.status, 'pending')
+    assert.equal(row.verified_at, null)
+    const expiresAt = new Date(row.expires_at + 'Z')
+    const hoursUntilExpiry = (expiresAt - Date.now()) / (1000 * 60 * 60)
+    assert.ok(hoursUntilExpiry > 71 && hoursUntilExpiry <= 73, `expires_at should be ~72h from now, got ${hoursUntilExpiry}h`)
+
+    // 5. Services under domain still have domain_verified=1 (grace period)
+    const svc = db.prepare('SELECT domain_verified FROM services WHERE id = ?').get(RESET_SVC)
+    assert.equal(svc.domain_verified, 1, 'domain_verified must remain 1 (grace period)')
+  })
+
+  it('72. reset works for pending domain', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+    const pendingDomain = `reset-pending-${randomUUID().slice(0, 8)}.example.com`
+    await apiClaim({ domain: pendingDomain })
+
+    const r = await apiAdminReset(pendingDomain)
+    assert.equal(r.status, 200)
+    assert.equal(r.body.reset, true)
+    assert.equal(r.body.new_status, 'pending')
+  })
+
+  it('73. reset works for expired domain', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+    const expDomain = `reset-expired-${randomUUID().slice(0, 8)}.example.com`
+    await apiClaim({ domain: expDomain })
+    db.prepare(
+      `UPDATE domain_claims SET status = 'expired', expires_at = datetime('now', '-1 hour')
+       WHERE domain = ?`
+    ).run(expDomain)
+
+    const r = await apiAdminReset(expDomain)
+    assert.equal(r.status, 200)
+    assert.equal(r.body.reset, true)
+  })
+
+  it('74. reset works for revoked domain', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+    const revDomain = `reset-revoked-${randomUUID().slice(0, 8)}.example.com`
+    await apiClaim({ domain: revDomain })
+    db.prepare(
+      `UPDATE domain_claims SET status = 'revoked' WHERE domain = ?`
+    ).run(revDomain)
+
+    const r = await apiAdminReset(revDomain)
+    assert.equal(r.status, 200)
+    assert.equal(r.body.reset, true)
+  })
+
+  it('75. 404 for non-existent domain', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    const r = await apiAdminReset('nonexistent.example.com')
+    assert.equal(r.status, 404)
+  })
+
+  it('76. 401 without admin auth', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    const res = await fetch(`${API}/admin/domains/${RESET_DOMAIN}/reset`, {
+      method: 'POST',
+      // No Authorization header
+    })
+    assert.equal(res.status, 401)
+  })
+
+  it('77. after reset: old token rejected on PATCH', async (t) => {
+    if (skipAll || !originalToken) return t.skip('test setup failed')
+
+    const r = await apiPatch(RESET_SVC, {
+      domain: RESET_DOMAIN,
+      verification_token: originalToken,
+      description: 'Should fail with old token',
+    })
+    assert.equal(r.status, 403)
+  })
+
+  it('78. after reset + re-verify: new token works', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+
+    // Get the current token from DB (set by the reset in test 71)
+    const row = db.prepare('SELECT verification_token FROM domain_claims WHERE domain = ?').get(RESET_DOMAIN)
+    const newToken = row.verification_token
+    const newHash = createHash('sha256').update(newToken).digest('hex')
+
+    // Simulate verification by setting status to verified + updating hash check
+    db.prepare(
+      `UPDATE domain_claims SET status = 'verified', verified_at = datetime('now')
+       WHERE domain = ?`
+    ).run(RESET_DOMAIN)
+
+    // PATCH with the new token should work
+    const r = await apiPatch(RESET_SVC, {
+      domain: RESET_DOMAIN,
+      verification_token: newToken,
+      description: 'Updated after reset',
+    })
+    assert.equal(r.status, 200)
+  })
+
+  it('79. reset preserves contact_email', async (t) => {
+    if (skipAll) return t.skip('test setup failed')
+    const emailDomain = `reset-email-${randomUUID().slice(0, 8)}.example.com`
+    await apiClaim({ domain: emailDomain, contact_email: 'test@example.com' })
+
+    await apiAdminReset(emailDomain)
+
+    const row = db.prepare('SELECT contact_email FROM domain_claims WHERE domain = ?').get(emailDomain)
+    assert.equal(row.contact_email, 'test@example.com')
   })
 })

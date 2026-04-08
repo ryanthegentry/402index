@@ -595,7 +595,7 @@ export function adminPage() {
         return
       }
       var html = '<table class="admin-table"><thead><tr>'
-        + '<th scope="col">Domain</th><th scope="col">Status</th><th scope="col">Endpoints</th><th scope="col">Contact</th><th scope="col">Claimed</th><th scope="col">Verified</th>'
+        + '<th scope="col">Domain</th><th scope="col">Status</th><th scope="col">Endpoints</th><th scope="col">Contact</th><th scope="col">Claimed</th><th scope="col">Verified</th><th scope="col">Actions</th>'
         + '</tr></thead><tbody>'
       for (var i = 0; i < d.domains.length; i++) {
         var dm = d.domains[i]
@@ -609,11 +609,58 @@ export function adminPage() {
           + '<td>' + escHtml(dm.contact_email || '—') + '</td>'
           + '<td>' + claimed + '</td>'
           + '<td>' + verified + '</td>'
+          + '<td><button class="btn-reset-domain" data-domain="' + escHtml(dm.domain) + '" style="padding:4px 12px;background:transparent;border:1px solid var(--yellow);border-radius:4px;color:var(--yellow);cursor:pointer;font-size:12px;font-family:var(--sans)">Reset</button></td>'
           + '</tr>'
       }
       html += '</tbody></table>'
       el.innerHTML = html
     }
+
+    // ─── Domain Reset ────────────────────────────────────────────────────
+
+    async function resetDomain(domain, btn) {
+      if (!confirm('Reset verification for ' + domain + '? Provider will need to re-verify.')) return
+      btn.disabled = true
+      var res = await apiFetch('/admin/domains/' + encodeURIComponent(domain) + '/reset', { method: 'POST' })
+      if (!res) { btn.disabled = false; return }
+      if (!res.ok) {
+        var body = await res.json().catch(function() { return {} })
+        toast(body.error || 'Reset failed', false)
+        btn.disabled = false
+        return
+      }
+      var data = await res.json()
+      // Show modal with new credentials
+      var modal = document.createElement('div')
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:200'
+      modal.innerHTML = '<div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:28px;max-width:560px;width:90%">'
+        + '<h3 style="margin:0 0 8px;color:var(--text-bright)">Domain Reset: ' + escHtml(domain) + '</h3>'
+        + '<p style="color:var(--yellow);font-size:13px;font-weight:600;margin:0 0 16px">Copy this token now \u2014 it won\u2019t be shown again.</p>'
+        + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px"><strong>Verification Token</strong></div>'
+        + '<div style="font-family:var(--mono);font-size:12px;background:var(--bg);padding:10px;border-radius:6px;word-break:break-all;margin-bottom:12px;color:var(--text-bright)">' + escHtml(data.verification_token) + '</div>'
+        + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px"><strong>Verification Hash</strong></div>'
+        + '<div style="font-family:var(--mono);font-size:12px;background:var(--bg);padding:10px;border-radius:6px;word-break:break-all;margin-bottom:12px;color:var(--text-bright)">' + escHtml(data.verification_hash) + '</div>'
+        + '<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px"><strong>Verification URL</strong></div>'
+        + '<div style="font-family:var(--mono);font-size:12px;background:var(--bg);padding:10px;border-radius:6px;word-break:break-all;margin-bottom:12px;color:var(--text-bright)">' + escHtml(data.verification_url) + '</div>'
+        + '<p style="font-size:13px;color:var(--text-muted);margin:0 0 16px">' + escHtml(data.instructions) + '</p>'
+        + '<button id="reset-modal-close" style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-family:var(--sans)">Close</button>'
+        + '</div>'
+      document.body.appendChild(modal)
+      modal.querySelector('#reset-modal-close').addEventListener('click', function() {
+        modal.remove()
+      })
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.remove()
+      })
+      // Refresh domains table
+      tabLoaded.domains = false
+      loadDomains()
+    }
+
+    document.getElementById('panel-domains').addEventListener('click', function(e) {
+      var btn = e.target.closest('.btn-reset-domain')
+      if (btn) resetDomain(btn.dataset.domain, btn)
+    })
 
     // ─── Failed Registrations ─────────────────────────────────────────────
 

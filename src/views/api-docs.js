@@ -408,6 +408,36 @@ export function apiDocsPage() {
 
         <div class="endpoint">
           <div class="endpoint-header">
+            <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
+            <span class="endpoint-path">/api/v1/admin/domains/:domain/reset</span>
+            <span style="background:rgba(255,90,90,0.15);color:var(--red);padding:2px 8px;border-radius:4px;font-size:12px;margin-left:8px">Admin Only</span>
+          </div>
+          <p>Reset a domain's verification token. Generates a new token, reverts status to <code>pending</code>, and sets a new 72-hour expiry. Does NOT clear <code>domain_verified</code> on services (grace period).</p>
+          <table class="params-table">
+            <thead>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>domain</td><td>string (path)</td><td><strong>Required.</strong> Domain to reset</td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X POST https://402index.io/api/v1/admin/domains/api.example.com/reset \\
+  -H 'Authorization: Bearer YOUR_ADMIN_SECRET'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>200</code></td><td>Domain reset. Returns <code>verification_token</code>, <code>verification_hash</code>, <code>verification_url</code>, <code>expires_at</code>, and <code>instructions</code>.</td></tr>
+              <tr><td><code>401</code></td><td>Missing or invalid admin authorization.</td></tr>
+              <tr><td><code>404</code></td><td>No claim found for this domain.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
             <span class="endpoint-method" style="color:#4dabf7;background:rgba(77,171,247,0.1)">PATCH</span>
             <span class="endpoint-path">/api/v1/services/:id</span>
           </div>
