@@ -158,6 +158,18 @@ export function verifyPage() {
           again from step 2. You'll receive a new token and hash, and will need to update your verification file.
         </p>
 
+        <h2>Multi-Protocol Endpoints</h2>
+        <p>
+          If your endpoint supports multiple payment protocols (e.g., both L402 and x402), 402 Index will
+          automatically detect additional protocols during health checks. Detected protocol changes are
+          reviewed by our team and, when confirmed, create sibling listings so your endpoint appears
+          under each supported protocol in the directory.
+        </p>
+        <p>
+          No action is needed from you &mdash; just ensure your endpoint responds with the appropriate
+          payment challenge headers for each protocol it supports.
+        </p>
+
         <h2>8. Lost your token?</h2>
         <p>
           If you've lost your verification token and can't revoke it yourself, email
