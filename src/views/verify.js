@@ -158,6 +158,14 @@ export function verifyPage() {
           again from step 2. You'll receive a new token and hash, and will need to update your verification file.
         </p>
 
+        <h2>8. Lost your token?</h2>
+        <p>
+          If you've lost your verification token and can't revoke it yourself, email
+          <a href="mailto:hello@402index.io">hello@402index.io</a> with your domain name and
+          we'll initiate a reset. You'll need to re-verify by updating your
+          <code>.well-known/402index-verify.txt</code> file with the new hash.
+        </p>
+
         <p style="margin-top:32px">
           Questions? Email <a href="mailto:hello@402index.io">hello@402index.io</a> or
           check the <a href="/api-docs">API docs</a> for the full endpoint reference.

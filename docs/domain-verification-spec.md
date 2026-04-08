@@ -61,6 +61,18 @@ Edit a listing by verified domain owner.
 - Service URL hostname must match claimed domain
 - Partial updates supported
 
+### POST /api/v1/admin/domains/:domain/reset
+
+Admin-only endpoint to reset a domain's verification token. Used when a provider loses their token (catch-22: can't revoke without token, can't re-claim a verified domain).
+
+- **Auth:** `Authorization: Bearer <ADMIN_SECRET>`
+- Generates a new `crypto.randomBytes(32)` token (256-bit entropy)
+- Reverts status to `pending`, sets new 72-hour expiry
+- Clears `verified_at` but does NOT clear `domain_verified` on services (grace period — provider can still appear as verified while re-verifying)
+- Works for domains in any status: `verified`, `pending`, `expired`, `revoked`
+- Preserves `contact_email` on the claim row
+- Returns: `verification_token`, `verification_hash`, `verification_url`, `instructions`
+
 ## Security
 
 1. **Token entropy**: `crypto.randomBytes(32).toString('hex')` — 256 bits
