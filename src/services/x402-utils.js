@@ -9,6 +9,8 @@
  * NOT make or verify payments.
  */
 
+import { isValidInvoice } from './l402-utils.js'
+
 // Known USDC contract addresses by chain
 const KNOWN_USDC = {
   // Base mainnet
@@ -23,6 +25,32 @@ const KNOWN_USDC = {
   '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 'Polygon',
   // Base Sepolia (testnet)
   '0x036cbd53842c5426634e7929541ec2318f3dcf7e': 'Base Sepolia',
+}
+
+// Known native assets (non-contract, chain-native currencies)
+const KNOWN_NATIVE_ASSETS = {
+  'BTC': { chain: 'Bitcoin' },
+}
+
+/**
+ * Check if an asset string is a known native asset (e.g. BTC).
+ * @param {string} asset
+ * @returns {{ known: boolean, chain: string|null }}
+ */
+export function isKnownNativeAsset(asset) {
+  if (!asset || typeof asset !== 'string') return { known: false, chain: null }
+  const entry = KNOWN_NATIVE_ASSETS[asset.toUpperCase()] || null
+  return { known: !!entry, chain: entry?.chain || null }
+}
+
+/**
+ * Check if an x402 accepts entry is a Lightning payment (BTC + extra.paymentMethod === 'lightning').
+ * @param {object} entry - An accepts array entry
+ * @returns {boolean}
+ */
+export function isLightningEntry(entry) {
+  return entry?.asset?.toUpperCase() === 'BTC' &&
+         entry?.extra?.paymentMethod === 'lightning'
 }
 
 /**
@@ -210,6 +238,29 @@ export function validatePaymentRequirements(accepts) {
       hasAmount: false,
       facilitatorUrl: null,
       valid: false,
+    }
+
+    // Lightning x402: validate BOLT11 invoice instead of address formats
+    if (isLightningEntry(entry)) {
+      result.hasPayTo = !!entry.payTo
+      result.payToValid = entry.payTo === 'anonymous'
+      result.hasAsset = true
+      result.assetValid = true
+      const nativeCheck = isKnownNativeAsset(entry.asset)
+      result.assetKnown = nativeCheck.known
+      result.assetChain = nativeCheck.chain
+      if (nativeCheck.known) anyAssetKnown = true
+      if (entry.network) result.hasNetwork = true
+      const invoice = entry.extra?.invoice
+      if (invoice && isValidInvoice(invoice)) {
+        result.hasAmount = true
+      }
+      result.facilitatorUrl = extractFacilitatorUrl(entry)
+      if (result.facilitatorUrl) facilitatorUrls.push(result.facilitatorUrl)
+      result.valid = result.hasPayTo && result.payToValid && result.hasAsset && result.assetValid && result.hasAmount
+      if (result.valid) anyValid = true
+      entries.push(result)
+      continue
     }
 
     // payTo (required)

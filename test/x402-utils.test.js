@@ -9,6 +9,8 @@ import {
   isValidSolanaAddress,
   isValidPaymentAddress,
   isKnownUSDC,
+  isKnownNativeAsset,
+  isLightningEntry,
   extractFacilitatorUrl,
 } from '../src/services/x402-utils.js'
 
@@ -608,5 +610,117 @@ describe('homePage — protocol bar chain colors', () => {
     })
     assert.ok(!html.includes('<div class="protocol-bar">'), 'protocol bar moved to homepage')
     assert.ok(!html.includes('class="stats-bar"'), 'stats bar moved to homepage')
+  })
+})
+
+// ─── isLightningEntry ─────────────────────────────────────────────────────────
+
+const VALID_BOLT11 = 'lnbc20u1p3y0x3hpp5743k2g0fsqqxj7n8qzuhns5gmkk4djeejk3wkp64ppevgekvc0jsdqcve5kzar2v9nr5gpqd4hkuetesp5ez2g297jduwc20t6lmqlsg3man0vf2jfd8ar9fh8fhn2g8yttfkqxqy9gcqcqzys9qrsgqrzjqtx3k77yrrav9hye7zar2rtqlfkytl094dsp0ms5majzth6gt7ca6uhdkxl983uywgqqqqlgqqqvx5qqjqrzjqd98kxkpyw0l9tyy8r8q57k7zpy9zjmh6sez752wj6gcumqnj3yxzhdsmg6qq56utgqqqqqqqqqqqeqqjq7jd56882gtxhrjm03c93aacyfy306m4fq0tskf83c0nmet8zc2lxyyg3saz8x6vwcp26xnrlagf9semau3qm2glysp7sv95693fphvsp54l567'
+
+describe('isLightningEntry', () => {
+  it('returns true for entry with asset BTC + extra.paymentMethod lightning', () => {
+    const entry = { asset: 'BTC', extra: { paymentMethod: 'lightning' } }
+    assert.equal(isLightningEntry(entry), true)
+  })
+
+  it('returns false for standard EVM entry', () => {
+    const entry = { asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', payTo: '0x' + 'a'.repeat(40) }
+    assert.equal(isLightningEntry(entry), false)
+  })
+
+  it('returns false for BTC without extra.paymentMethod', () => {
+    const entry = { asset: 'BTC', payTo: 'anonymous' }
+    assert.equal(isLightningEntry(entry), false)
+  })
+
+  it('returns false for non-BTC asset with lightning paymentMethod', () => {
+    const entry = { asset: 'ETH', extra: { paymentMethod: 'lightning' } }
+    assert.equal(isLightningEntry(entry), false)
+  })
+})
+
+// ─── isKnownNativeAsset ──────────────────────────────────────────────────────
+
+describe('isKnownNativeAsset', () => {
+  it('recognizes BTC → { known: true, chain: "Bitcoin" }', () => {
+    const result = isKnownNativeAsset('BTC')
+    assert.equal(result.known, true)
+    assert.equal(result.chain, 'Bitcoin')
+  })
+
+  it('returns unknown for random string', () => {
+    const result = isKnownNativeAsset('DOGE')
+    assert.equal(result.known, false)
+    assert.equal(result.chain, null)
+  })
+
+  it('returns unknown for null', () => {
+    const result = isKnownNativeAsset(null)
+    assert.equal(result.known, false)
+    assert.equal(result.chain, null)
+  })
+})
+
+// ─── validatePaymentRequirements — Lightning entries ─────────────────────────
+
+describe('validatePaymentRequirements — Lightning entries', () => {
+  const lightningEntry = {
+    scheme: 'exact',
+    network: 'bip122:000000000019d6689c085ae165831e93',
+    amount: '13000',
+    asset: 'BTC',
+    payTo: 'anonymous',
+    maxTimeoutSeconds: 300,
+    extra: {
+      paymentMethod: 'lightning',
+      invoice: VALID_BOLT11,
+    },
+  }
+
+  it('accepts entry with asset BTC, payTo anonymous, valid BOLT11 in extra.invoice', () => {
+    const result = validatePaymentRequirements([lightningEntry])
+    assert.equal(result.valid, true)
+    assert.equal(result.entries[0].valid, true)
+    assert.equal(result.entries[0].payToValid, true)
+    assert.equal(result.entries[0].assetValid, true)
+    assert.equal(result.entries[0].hasAmount, true)
+  })
+
+  it('rejects entry with asset BTC, payTo anonymous, but NO invoice in extra', () => {
+    const noInvoice = { ...lightningEntry, extra: { paymentMethod: 'lightning' } }
+    const result = validatePaymentRequirements([noInvoice])
+    assert.equal(result.valid, false)
+    assert.equal(result.entries[0].valid, false)
+    assert.equal(result.entries[0].hasAmount, false)
+  })
+
+  it('rejects entry with asset BTC, payTo anonymous, invalid BOLT11 in extra.invoice', () => {
+    const badInvoice = { ...lightningEntry, extra: { paymentMethod: 'lightning', invoice: 'not-a-bolt11' } }
+    const result = validatePaymentRequirements([badInvoice])
+    assert.equal(result.valid, false)
+    assert.equal(result.entries[0].valid, false)
+    assert.equal(result.entries[0].hasAmount, false)
+  })
+
+  it('sets assetKnown true and assetChain Bitcoin for BTC entries', () => {
+    const result = validatePaymentRequirements([lightningEntry])
+    assert.equal(result.entries[0].assetKnown, true)
+    assert.equal(result.entries[0].assetChain, 'Bitcoin')
+    assert.equal(result.assetKnown, true)
+  })
+
+  it('mixed accepts array: one EVM entry + one Lightning entry — valid if either is valid', () => {
+    const evmEntry = {
+      payTo: '0x1234567890abcdef1234567890abcdef12345678',
+      asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+      network: 'eip155:8453',
+      amount: '1000000',
+    }
+    const result = validatePaymentRequirements([evmEntry, lightningEntry])
+    assert.equal(result.valid, true)
+    assert.equal(result.entries.length, 2)
+    // Both should be valid
+    assert.equal(result.entries[0].valid, true)
+    assert.equal(result.entries[1].valid, true)
   })
 })

@@ -161,7 +161,7 @@ export const formatProbeSteps = {
 
   x402Validation(valid, details) {
     const parts = []
-    if (details.assetKnown) parts.push('known asset (USDC)')
+    if (details.assetKnown) parts.push(details.paymentMethod === 'lightning' ? 'known asset (BTC)' : 'known asset (USDC)')
     if (details.facilitatorReachable) parts.push('facilitator reachable')
     if (details.facilitatorReachable === false) parts.push('facilitator unreachable')
     const msg = valid
