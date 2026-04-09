@@ -1845,4 +1845,111 @@ echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
       )
     })
   })
+
+  // ── Worktree isolation (#104) ───────────────────────────────────
+
+  describe('worktree isolation (#104)', () => {
+    it('dispatch_implement must NOT contain cd "$REPO_DIR"', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_implement()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        !fnBody.includes('cd "$REPO_DIR"'),
+        'dispatch_implement must not cd to REPO_DIR — worktree is the correct cwd'
+      )
+    })
+
+    it('dispatch_revise must NOT contain cd "$REPO_DIR"', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_revise()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        !fnBody.includes('cd "$REPO_DIR"'),
+        'dispatch_revise must not cd to REPO_DIR — worktree is the correct cwd'
+      )
+    })
+
+    it('dispatch_implement must NOT contain git checkout "$DEFAULT_BRANCH"', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_implement()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        !fnBody.includes('git checkout "$DEFAULT_BRANCH"'),
+        'dispatch_implement must not checkout DEFAULT_BRANCH — EXIT trap handles worktree cleanup'
+      )
+    })
+
+    it('dispatch_revise must NOT contain git checkout "$DEFAULT_BRANCH"', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_revise()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      assert.ok(
+        !fnBody.includes('git checkout "$DEFAULT_BRANCH"'),
+        'dispatch_revise must not checkout DEFAULT_BRANCH — EXIT trap handles worktree cleanup'
+      )
+    })
+
+    it('dispatch_implement contains pre-PR commit sanity check', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_implement()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // Must use git log to check for foreign commits before PR creation
+      const gitLogIdx = fnBody.indexOf('git log')
+      const prCreateIdx = fnBody.indexOf('gh pr create')
+      assert.ok(gitLogIdx !== -1, 'dispatch_implement must use git log for commit sanity check')
+      assert.ok(prCreateIdx !== -1, 'dispatch_implement must have gh pr create')
+      assert.ok(gitLogIdx < prCreateIdx, 'commit sanity check must run before PR creation')
+      assert.ok(
+        fnBody.includes('foreign_commits') || fnBody.includes('issue_number'),
+        'commit sanity check must grep for the issue number in commit messages'
+      )
+    })
+
+    it('pre-PR sanity check is a warning, not a blocker', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      const fnStart = content.indexOf('dispatch_implement()')
+      const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
+      const fnBody = content.slice(fnStart, fnEnd)
+
+      // The sanity check must log a WARNING but still proceed to gh pr create
+      assert.ok(
+        fnBody.includes('WARNING'),
+        'commit sanity check must log a WARNING for foreign commits'
+      )
+      // Ensure gh pr create still runs after the check (not inside an else/exit block)
+      const warningIdx = fnBody.indexOf('WARNING')
+      const prCreateIdx = fnBody.indexOf('gh pr create')
+      assert.ok(warningIdx < prCreateIdx, 'gh pr create must still run after warning')
+    })
+
+    it('review handlers still contain cd "$REPO_DIR" (unchanged)', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+
+      const reviewIssueStart = content.indexOf('dispatch_review_issue()')
+      const reviewIssueEnd = content.indexOf('\n# ── ', reviewIssueStart + 1)
+      const reviewIssueBody = content.slice(reviewIssueStart, reviewIssueEnd)
+      assert.ok(
+        reviewIssueBody.includes('cd "$REPO_DIR"'),
+        'dispatch_review_issue must still cd to REPO_DIR (not in worktree)'
+      )
+
+      const reviewPrStart = content.indexOf('dispatch_review_pr()')
+      const reviewPrEnd = content.indexOf('\n# ── ', reviewPrStart + 1)
+      const reviewPrBody = content.slice(reviewPrStart, reviewPrEnd)
+      assert.ok(
+        reviewPrBody.includes('cd "$REPO_DIR"'),
+        'dispatch_review_pr must still cd to REPO_DIR (not in worktree)'
+      )
+    })
+  })
 })
