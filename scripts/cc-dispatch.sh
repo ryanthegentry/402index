@@ -483,11 +483,9 @@ dispatch_implement() {
         log "Spec issue #${issue_number} supersedes original issue #${superseded_issue}"
     fi
 
-    cd "$REPO_DIR" || { err "Can't cd to $REPO_DIR"; return 1; }
-    git checkout "$DEFAULT_BRANCH" && git pull origin "$DEFAULT_BRANCH"
-
-    # Create or switch to feature branch
-    git checkout -B "$branch" 2>/dev/null || git checkout "$branch"
+    # Worktree is set up by caller — fetch and create branch from remote
+    git fetch origin "$DEFAULT_BRANCH" --quiet
+    git checkout -B "$branch" "origin/${DEFAULT_BRANCH}"
 
     local main_sha
     main_sha=$(git rev-parse "$DEFAULT_BRANCH")
@@ -543,7 +541,6 @@ When done, summarize what you changed and why."
     if [ $cc_exit -ne 0 ]; then
         err "CC exited with code ${cc_exit} for issue #${issue_number}"
         rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
-        git checkout "$DEFAULT_BRANCH"
         return 1
     fi
 
@@ -566,7 +563,6 @@ When done, summarize what you changed and why."
     if [[ "$VALIDATION_OK" != "true" ]]; then
         err "CC output validation failed for #${issue_number} after ${retries} retries"
         rollback_issue "$issue_number" "$dispatch_label" "$logfile"
-        git checkout "$DEFAULT_BRANCH"
         return 1
     fi
 
@@ -586,7 +582,6 @@ When done, summarize what you changed and why."
         gh issue comment "$issue_number" --repo "$REPO" \
             --body "CC analyzed the issue but made no code changes. May need manual intervention."
         rollback_issue "$issue_number" "$dispatch_label"
-        git checkout "$DEFAULT_BRANCH"
         return 0
     fi
 
@@ -602,6 +597,15 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     fi
 
     git push -u origin "$branch"
+
+    # Belt-and-suspenders: warn if commits don't reference this issue
+    local foreign_commits
+    foreign_commits=$(git log "origin/${DEFAULT_BRANCH}..HEAD" --oneline | grep -v "#${issue_number}" | head -5)
+    if [[ -n "$foreign_commits" ]]; then
+        log "WARNING: Branch has commits not mentioning #${issue_number}:"
+        echo "$foreign_commits" | while read -r line; do log "  $line"; done
+        log "This may indicate branch contamination from the worktree bug. PR will still be created."
+    fi
 
     # Extract the implementer's summary from CC output (last ~80 lines before git noise)
     local cc_summary
@@ -645,8 +649,6 @@ PRBODY
     else
         err "Failed to create PR for issue #${issue_number}"
     fi
-
-    git checkout "$DEFAULT_BRANCH"
 }
 
 # ── Review-issue mode: CC reviews spec, posts findings on the issue (pre-impl spec review) ──
@@ -968,7 +970,7 @@ dispatch_revise() {
     local issue_number="$1" issue_title="$2" issue_body="$3"
     local agent_flag="$4" dispatch_label="$5" done_label="$6" logfile="$7"
 
-    cd "$REPO_DIR" || { err "Can't cd to $REPO_DIR"; return 1; }
+    # Worktree is set up by caller — no cd needed
 
     # Find the existing PR
     local pr_number
@@ -999,10 +1001,9 @@ dispatch_revise() {
     local branch
     branch=$(gh pr view "$pr_number" --repo "$REPO" --json headRefName -q '.headRefName')
 
-    # Checkout the existing branch and pull latest
-    git fetch origin "$branch"
+    # Worktree is fresh — fetch and checkout the branch
+    git fetch origin "$branch" --quiet
     git checkout "$branch"
-    git pull origin "$branch"
 
     # Capture HEAD before CC runs (to detect no-change revisions)
     local head_before
@@ -1058,7 +1059,6 @@ This is revision ${revision_count} of ${MAX_REVISIONS}. If you cannot fully addr
     if [ $cc_exit -ne 0 ]; then
         err "CC revise failed (exit ${cc_exit}) for issue #${issue_number}"
         rollback_issue "$issue_number" "$dispatch_label" "$logfile" "$cc_exit"
-        git checkout "$DEFAULT_BRANCH"
         return 1
     fi
 
@@ -1081,7 +1081,6 @@ This is revision ${revision_count} of ${MAX_REVISIONS}. If you cannot fully addr
     if [[ "$VALIDATION_OK" != "true" ]]; then
         err "CC output validation failed for #${issue_number} after ${retries} retries"
         rollback_issue "$issue_number" "$dispatch_label" "$logfile"
-        git checkout "$DEFAULT_BRANCH"
         return 1
     fi
 
@@ -1102,7 +1101,6 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     if [[ "$head_before" == "$head_after" ]]; then
         log "Revision produced no changes for issue #${issue_number} — rolling back"
         rollback_issue "$issue_number" "$dispatch_label" "$logfile"
-        git checkout "$DEFAULT_BRANCH"
         return 1
     fi
 
@@ -1121,7 +1119,6 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     # Chain back to security review
     chain_next_stage "$issue_number" "$dispatch_label"
 
-    git checkout "$DEFAULT_BRANCH"
     log "Revision complete for issue #${issue_number} (PR #${pr_number})"
 }
 
