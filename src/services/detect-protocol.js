@@ -4,7 +4,7 @@
  */
 
 import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice, validateL402Challenge } from './l402-utils.js'
-import { parsePaymentRequired, parsePaymentRequiredBody, validatePaymentRequirements } from './x402-utils.js'
+import { parsePaymentRequired, parsePaymentRequiredBody, validatePaymentRequirements, isLightningEntry } from './x402-utils.js'
 
 /**
  * Parse the WWW-Authenticate header for MPP Payment scheme.
@@ -110,6 +110,7 @@ export function detectProtocol(httpResult) {
   const headerParsed = parsePaymentRequired(paymentRequired)
   if (headerParsed.valid) {
     const validation = validatePaymentRequirements(headerParsed.accepts)
+    const hasLightning = headerParsed.accepts.some(e => isLightningEntry(e))
     results.push({
       protocol: 'x402',
       valid: validation.valid,
@@ -119,6 +120,7 @@ export function detectProtocol(httpResult) {
         assetKnown: validation.assetKnown,
         facilitatorReachable: null,
         version: 2,
+        paymentMethod: hasLightning ? 'lightning' : null,
       },
       rawHeaders: { 'PAYMENT-REQUIRED': paymentRequired },
     })
@@ -127,6 +129,7 @@ export function detectProtocol(httpResult) {
     const bodyParsed = parsePaymentRequiredBody(responseBody)
     if (bodyParsed.valid) {
       const validation = validatePaymentRequirements(bodyParsed.accepts)
+      const hasLightning = bodyParsed.accepts.some(e => isLightningEntry(e))
       results.push({
         protocol: 'x402',
         valid: validation.valid,
@@ -136,6 +139,7 @@ export function detectProtocol(httpResult) {
           assetKnown: validation.assetKnown,
           facilitatorReachable: null,
           version: 1,
+          paymentMethod: hasLightning ? 'lightning' : null,
         },
         rawHeaders: { 'PAYMENT-REQUIRED': '(from response body — x402 V1)' },
       })
