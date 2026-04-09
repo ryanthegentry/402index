@@ -592,6 +592,61 @@ async function buildProtocolFields(protocol, detection, result, service) {
   }
 }
 
+/**
+ * Detect new/removed protocols from probe results and record in protocol_changes table.
+ * Extracted from checkService() for independent testability.
+ *
+ * @param {string} url - The endpoint URL
+ * @param {string} serviceId - The service ID being checked
+ * @param {string} protocol - The service's registered protocol
+ * @param {Map<string, object>} allDetections - Map of protocol → valid detection (already deduped)
+ * @param {number|null} httpStatus - HTTP status code from the probe
+ */
+export function detectProtocolChanges(url, serviceId, protocol, allDetections, httpStatus) {
+  const existingRows = getExistingProtocols().all(url)
+  const existingProtocols = new Set(existingRows.map(r => r.protocol))
+
+  const hostname = getHostname(url)
+  const domainClaim = getDomainEmail().get(hostname)
+  const contactEmail = domainClaim?.contact_email || null
+
+  // Additions: detected protocols not in existing service rows
+  for (const [detectedProto] of allDetections) {
+    if (!existingProtocols.has(detectedProto)) {
+      upsertProtocolChange().run({
+        id: randomUUID(),
+        url,
+        hostname,
+        service_id: serviceId,
+        registered_protocol: protocol,
+        detected_protocol: detectedProto,
+        type: 'addition',
+        contact_email: contactEmail,
+      })
+    }
+  }
+
+  // Removals: existing sibling protocols not in valid detection array
+  // Only trigger on HTTP 402 responses — non-402/error indicates endpoint issues, not protocol removal
+  if (httpStatus === 402) {
+    for (const existingProto of existingProtocols) {
+      if (existingProto === protocol) continue
+      if (!allDetections.has(existingProto)) {
+        upsertProtocolChange().run({
+          id: randomUUID(),
+          url,
+          hostname,
+          service_id: serviceId,
+          registered_protocol: protocol,
+          detected_protocol: existingProto,
+          type: 'removal',
+          contact_email: contactEmail,
+        })
+      }
+    }
+  }
+}
+
 const getSiblings = () => stmt('getSiblings', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, consecutive_latency_spikes, registered_at, x402_payment_valid FROM services WHERE url = ? AND id != ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
 
 /** Check a single service: HTTP probe, classify result, persist. */
@@ -771,50 +826,7 @@ export async function checkService(service) {
       if (d.valid && !allDetections.has(d.protocol)) allDetections.set(d.protocol, d)
     }
 
-    // Get existing service protocols for this URL (excluding rejected and provider-deleted)
-    const existingRows = getExistingProtocols().all(url)
-    const existingProtocols = new Set(existingRows.map(r => r.protocol))
-
-    // Look up contact_email from domain_claims
-    const hostname = getHostname(url)
-    const domainClaim = getDomainEmail().get(hostname)
-    const contactEmail = domainClaim?.contact_email || null
-
-    // Additions: detected protocols not in existing service rows
-    for (const [detectedProto] of allDetections) {
-      if (!existingProtocols.has(detectedProto)) {
-        upsertProtocolChange().run({
-          id: randomUUID(),
-          url,
-          hostname,
-          service_id: id,
-          registered_protocol: protocol,
-          detected_protocol: detectedProto,
-          type: 'addition',
-          contact_email: contactEmail,
-        })
-      }
-    }
-
-    // Removals: existing sibling protocols not in valid detection array
-    // Only trigger on HTTP 402 responses — non-402/error indicates endpoint issues, not protocol removal
-    if (result.httpStatus === 402) {
-      for (const existingProto of existingProtocols) {
-        if (existingProto === protocol) continue // Skip the probed service's own protocol
-        if (!allDetections.has(existingProto)) {
-          upsertProtocolChange().run({
-            id: randomUUID(),
-            url,
-            hostname,
-            service_id: id,
-            registered_protocol: protocol,
-            detected_protocol: existingProto,
-            type: 'removal',
-            contact_email: contactEmail,
-          })
-        }
-      }
-    }
+    detectProtocolChanges(url, id, protocol, allDetections, result.httpStatus)
   } catch (err) {
     console.warn(`[health] Protocol change detection failed for ${url}: ${err.message}`)
   }

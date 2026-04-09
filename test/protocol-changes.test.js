@@ -552,3 +552,171 @@ describe('Protocol change detection → admin approve → sibling exists (integr
     assert.equal(sibling.name, 'E2E Test Service (x402)')
   })
 })
+
+// ─── detectProtocolChanges() unit tests (PR #99 follow-up) ──────────────────
+
+describe('detectProtocolChanges() unit tests (issue #98 follow-up)', () => {
+  let detectProtocolChanges
+
+  before(async () => {
+    cleanupTestData()
+    const checker = await import('../src/health/checker.js')
+    detectProtocolChanges = checker.detectProtocolChanges
+  })
+  after(() => cleanupTestData())
+  beforeEach(() => {
+    db.prepare("DELETE FROM protocol_changes WHERE url LIKE '%test-pc%'").run()
+    db.prepare("DELETE FROM health_checks WHERE service_id IN (SELECT id FROM services WHERE url LIKE '%test-pc%')").run()
+    db.prepare("DELETE FROM services WHERE url LIKE '%test-pc%'").run()
+    db.prepare("DELETE FROM domain_claims WHERE domain LIKE '%test-pc%'").run()
+  })
+
+  it('new protocol in detections not in existing services creates addition row', () => {
+    const url = 'https://test-pc-detect-add.example.com/v1'
+    const svc = insertService({ url, protocol: 'L402', hostname: 'test-pc-detect-add.example.com' })
+
+    const detections = new Map([['x402', { valid: true, protocol: 'x402' }]])
+    detectProtocolChanges(url, svc.id, 'L402', detections, 402)
+
+    const row = db.prepare(
+      "SELECT * FROM protocol_changes WHERE url = ? AND detected_protocol = 'x402' AND type = 'addition'"
+    ).get(url)
+    assert.ok(row, 'should create addition row')
+    assert.equal(row.registered_protocol, 'L402')
+    assert.equal(row.detection_count, 1)
+  })
+
+  it('existing sibling protocol missing from detections + httpStatus 402 creates removal row', () => {
+    const url = 'https://test-pc-detect-remove.example.com/v1'
+    const svc = insertService({ url, protocol: 'L402', hostname: 'test-pc-detect-remove.example.com' })
+    insertService({ url, protocol: 'x402', hostname: 'test-pc-detect-remove.example.com' })
+
+    const detections = new Map([['L402', { valid: true, protocol: 'L402' }]])
+    detectProtocolChanges(url, svc.id, 'L402', detections, 402)
+
+    const row = db.prepare(
+      "SELECT * FROM protocol_changes WHERE url = ? AND detected_protocol = 'x402' AND type = 'removal'"
+    ).get(url)
+    assert.ok(row, 'should create removal row for missing x402')
+  })
+
+  it('existing sibling protocol missing from detections + httpStatus !== 402 does NOT create removal row', () => {
+    const url = 'https://test-pc-detect-noremove.example.com/v1'
+    const svc = insertService({ url, protocol: 'L402', hostname: 'test-pc-detect-noremove.example.com' })
+    insertService({ url, protocol: 'x402', hostname: 'test-pc-detect-noremove.example.com' })
+
+    const detections = new Map([['L402', { valid: true, protocol: 'L402' }]])
+    detectProtocolChanges(url, svc.id, 'L402', detections, 200)
+
+    const rows = db.prepare(
+      "SELECT * FROM protocol_changes WHERE url = ? AND type = 'removal'"
+    ).all(url)
+    assert.equal(rows.length, 0, 'should NOT create removal row when httpStatus !== 402')
+  })
+
+  it('dismissed row is not updated by detectProtocolChanges', () => {
+    const url = 'https://test-pc-detect-dismissed2.example.com/v1'
+    const svc = insertService({ url, protocol: 'L402', hostname: 'test-pc-detect-dismissed2.example.com' })
+
+    db.prepare(`
+      INSERT INTO protocol_changes (id, url, hostname, service_id, registered_protocol, detected_protocol, type, status, detection_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'dismissed', 5)
+    `).run(randomUUID(), url, 'test-pc-detect-dismissed2.example.com', svc.id, 'L402', 'x402', 'addition')
+
+    const detections = new Map([['x402', { valid: true, protocol: 'x402' }]])
+    detectProtocolChanges(url, svc.id, 'L402', detections, 402)
+
+    const row = db.prepare("SELECT * FROM protocol_changes WHERE url = ?").get(url)
+    assert.equal(row.status, 'dismissed')
+    assert.equal(row.detection_count, 5, 'detection_count should not increment for dismissed rows')
+  })
+
+  it('multiple new protocols create multiple addition rows', () => {
+    const url = 'https://test-pc-detect-multi.example.com/v1'
+    const svc = insertService({ url, protocol: 'L402', hostname: 'test-pc-detect-multi.example.com' })
+
+    const detections = new Map([
+      ['x402', { valid: true, protocol: 'x402' }],
+      ['MPP', { valid: true, protocol: 'MPP' }],
+    ])
+    detectProtocolChanges(url, svc.id, 'L402', detections, 402)
+
+    const rows = db.prepare(
+      "SELECT * FROM protocol_changes WHERE url = ? AND type = 'addition'"
+    ).all(url)
+    assert.equal(rows.length, 2, 'should create 2 addition rows')
+    const protocols = rows.map(r => r.detected_protocol).sort()
+    assert.deepEqual(protocols, ['MPP', 'x402'])
+  })
+
+  it('contact_email populated from domain_claims', () => {
+    const url = 'https://test-pc-detect-email2.example.com/v1'
+    const svc = insertService({ url, protocol: 'L402', hostname: 'test-pc-detect-email2.example.com' })
+
+    db.prepare(`
+      INSERT INTO domain_claims (id, domain, verification_token, status, expires_at, contact_email)
+      VALUES (?, ?, ?, 'verified', datetime('now', '+30 days'), ?)
+    `).run(randomUUID(), 'test-pc-detect-email2.example.com', 'token-abc', 'admin@test-pc-detect-email2.example.com')
+
+    const detections = new Map([['x402', { valid: true, protocol: 'x402' }]])
+    detectProtocolChanges(url, svc.id, 'L402', detections, 402)
+
+    const row = db.prepare(
+      "SELECT contact_email FROM protocol_changes WHERE url = ?"
+    ).get(url)
+    assert.equal(row.contact_email, 'admin@test-pc-detect-email2.example.com')
+  })
+})
+
+// ─── Approve conflict guard & source attribution (PR #99 follow-up) ─────────
+
+describe('Approve conflict guard & source attribution (issue #98 follow-up)', () => {
+  beforeEach(() => cleanupTestData())
+  after(() => cleanupTestData())
+
+  it('approve returns 409 when active sibling already exists at (url, detected_protocol)', async () => {
+    const url = 'https://test-pc-conflict.example.com/v1'
+    const svc = insertService({
+      url, protocol: 'L402', name: 'Original L402',
+      hostname: 'test-pc-conflict.example.com',
+    })
+    insertService({
+      url, protocol: 'x402', name: 'Custom Name',
+      hostname: 'test-pc-conflict.example.com', status: 'active',
+    })
+    const pc = insertProtocolChange({
+      url, hostname: 'test-pc-conflict.example.com',
+      service_id: svc.id, registered_protocol: 'L402',
+      detected_protocol: 'x402', type: 'addition', status: 'pending',
+    })
+
+    const r = await adminPost(`/admin/protocol-changes/${pc.id}/approve`)
+    assert.equal(r.status, 409, `Expected 409, got ${r.status}: ${JSON.stringify(r.body)}`)
+    assert.ok(r.body.existing_service_id, 'should return existing_service_id')
+
+    // Existing service name must NOT be overwritten
+    const existing = db.prepare(
+      "SELECT name FROM services WHERE url = ? AND protocol = 'x402'"
+    ).get(url)
+    assert.equal(existing.name, 'Custom Name', 'existing service name should not be overwritten')
+  })
+
+  it('approved sibling has source = protocol-change', async () => {
+    const url = 'https://test-pc-source.example.com/v1'
+    const svc = insertService({
+      url, protocol: 'L402', name: 'Source Test',
+      hostname: 'test-pc-source.example.com',
+    })
+    const pc = insertProtocolChange({
+      url, hostname: 'test-pc-source.example.com',
+      service_id: svc.id, registered_protocol: 'L402',
+      detected_protocol: 'x402', type: 'addition', status: 'pending',
+    })
+
+    const r = await adminPost(`/admin/protocol-changes/${pc.id}/approve`)
+    assert.equal(r.status, 200)
+
+    const sibling = db.prepare('SELECT source FROM services WHERE id = ?').get(r.body.created_service_id)
+    assert.equal(sibling.source, 'protocol-change', 'sibling source should be protocol-change, not self-registered')
+  })
+})
