@@ -436,6 +436,14 @@ export function apiDocsPage() {
           </table>
         </div>
 
+        <h3 style="margin-top:28px">Protocol Change Detection</h3>
+        <p>
+          During regular health checks, 402 Index detects when endpoints support additional protocols
+          beyond what is registered (e.g., an L402 endpoint that also responds with x402 headers).
+          Detected changes are reviewed by admins and, when approved, create new sibling listings
+          automatically. This ensures your multi-protocol endpoints are fully represented in the directory.
+        </p>
+
         <div class="endpoint">
           <div class="endpoint-header">
             <span class="endpoint-method" style="color:#4dabf7;background:rgba(77,171,247,0.1)">PATCH</span>

@@ -1376,6 +1376,100 @@ router.get('/admin/traffic', (req, res) => {
   })
 })
 
+// ─── Protocol Changes ──────────────────────────────────────────────────────
+
+const getProtocolChanges = () => stmt('getProtocolChanges',
+  'SELECT * FROM protocol_changes WHERE status = @status ORDER BY last_detected_at DESC'
+)
+
+const getAllProtocolChanges = () => stmt('getAllProtocolChanges',
+  'SELECT * FROM protocol_changes ORDER BY last_detected_at DESC'
+)
+
+router.get('/admin/protocol-changes', (req, res) => {
+  const status = req.query.status
+  if (status === 'all') {
+    const changes = getAllProtocolChanges().all()
+    return res.json({ changes, total: changes.length })
+  }
+  const changes = getProtocolChanges().all({ status: status || 'pending' })
+  res.json({ changes, total: changes.length })
+})
+
+router.post('/admin/protocol-changes/:id/approve', (req, res) => {
+  const pc = db.prepare('SELECT * FROM protocol_changes WHERE id = ?').get(req.params.id)
+  if (!pc) {
+    return res.status(404).json({ error: 'Protocol change not found' })
+  }
+  if (pc.type !== 'addition') {
+    return res.status(400).json({ error: 'Only addition type can be approved' })
+  }
+  if (pc.status === 'approved') {
+    return res.status(409).json({ error: 'Already approved' })
+  }
+  if (pc.status === 'dismissed') {
+    return res.status(409).json({ error: 'Already dismissed' })
+  }
+
+  // Read the triggering service to copy fields
+  const originalService = db.prepare('SELECT * FROM services WHERE id = ?').get(pc.service_id)
+  if (!originalService) {
+    return res.status(404).json({ error: 'Triggering service not found' })
+  }
+
+  // Conflict guard: check if an active sibling already exists at (url, detected_protocol)
+  const existingSibling = db.prepare(
+    "SELECT id FROM services WHERE url = ? AND protocol = ? AND status = 'active' AND (provider_deleted = 0 OR provider_deleted IS NULL)"
+  ).get(pc.url, pc.detected_protocol)
+  if (existingSibling) {
+    return res.status(409).json({ error: 'Sibling service already exists', existing_service_id: existingSibling.id })
+  }
+
+  // Create sibling via registerUpsert with null pricing
+  const newId = randomUUID()
+  const bonusParams = {
+    id: newId,
+    name: `${originalService.name} (${pc.detected_protocol})`,
+    description: originalService.description || null,
+    url: pc.url,
+    protocol: pc.detected_protocol,
+    price_sats: null,
+    price_usd: null,
+    payment_asset: null,
+    payment_network: null,
+    category: originalService.category || 'uncategorized',
+    provider: originalService.provider || null,
+    contact_email: originalService.contact_email || pc.contact_email || null,
+    http_method: originalService.http_method || 'GET',
+    probe_body: originalService.probe_body || null,
+    hostname: extractHostname(pc.url),
+  }
+
+  const newService = registerUpsert().get(bonusParams)
+
+  // Set to active with admin-protocol-change approval reason and correct source
+  db.prepare(
+    "UPDATE services SET status = 'active', approval_reason = 'admin-protocol-change', source = 'protocol-change', updated_at = datetime('now') WHERE id = ?"
+  ).run(newService.id)
+
+  // Update protocol_changes row
+  db.prepare(
+    "UPDATE protocol_changes SET status = 'approved', reviewed_at = datetime('now'), created_service_id = ? WHERE id = ?"
+  ).run(newService.id, pc.id)
+
+  res.json({ message: 'Protocol change approved', id: pc.id, created_service_id: newService.id })
+})
+
+router.post('/admin/protocol-changes/:id/dismiss', (req, res) => {
+  const result = db.prepare(
+    "UPDATE protocol_changes SET status = 'dismissed', reviewed_at = datetime('now') WHERE id = ? AND status = 'pending'"
+  ).run(req.params.id)
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'No pending protocol change with that ID' })
+  }
+  res.json({ message: 'Protocol change dismissed', id: req.params.id })
+})
+
 router.post('/admin/vacuum', (req, res) => {
   try {
     const before = db.pragma('page_count', { simple: true }) * db.pragma('page_size', { simple: true })

@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import dns from 'dns'
 import { statfs } from 'fs/promises'
 import { isIPv4, isIPv6 } from 'net'
@@ -141,6 +142,25 @@ const persistHttpMethod = () => stmt('persistHttpMethod', `
   UPDATE services SET http_method = @http_method, updated_at = datetime('now')
   WHERE id = @id AND (http_method IS NULL OR http_method = 'GET')
 `)
+
+// Protocol change detection statements
+const getExistingProtocols = () => stmt('getExistingProtocols',
+  "SELECT protocol FROM services WHERE url = ? AND provider_deleted = 0 AND status != 'rejected'"
+)
+
+const upsertProtocolChange = () => stmt('upsertProtocolChange', `
+  INSERT INTO protocol_changes (id, url, hostname, service_id, registered_protocol, detected_protocol, type, contact_email)
+  VALUES (@id, @url, @hostname, @service_id, @registered_protocol, @detected_protocol, @type, @contact_email)
+  ON CONFLICT(url, detected_protocol, type) DO UPDATE SET
+    last_detected_at = datetime('now'),
+    detection_count = detection_count + 1,
+    service_id = excluded.service_id
+  WHERE status != 'dismissed'
+`)
+
+const getDomainEmail = () => stmt('getDomainEmail',
+  "SELECT contact_email FROM domain_claims WHERE domain = ? AND status = 'verified'"
+)
 
 function calculateP50(serviceId) {
   const rows = getRecentLatencies().all(serviceId)
@@ -572,6 +592,61 @@ async function buildProtocolFields(protocol, detection, result, service) {
   }
 }
 
+/**
+ * Detect new/removed protocols from probe results and record in protocol_changes table.
+ * Extracted from checkService() for independent testability.
+ *
+ * @param {string} url - The endpoint URL
+ * @param {string} serviceId - The service ID being checked
+ * @param {string} protocol - The service's registered protocol
+ * @param {Map<string, object>} allDetections - Map of protocol → valid detection (already deduped)
+ * @param {number|null} httpStatus - HTTP status code from the probe
+ */
+export function detectProtocolChanges(url, serviceId, protocol, allDetections, httpStatus) {
+  const existingRows = getExistingProtocols().all(url)
+  const existingProtocols = new Set(existingRows.map(r => r.protocol))
+
+  const hostname = getHostname(url)
+  const domainClaim = getDomainEmail().get(hostname)
+  const contactEmail = domainClaim?.contact_email || null
+
+  // Additions: detected protocols not in existing service rows
+  for (const [detectedProto] of allDetections) {
+    if (!existingProtocols.has(detectedProto)) {
+      upsertProtocolChange().run({
+        id: randomUUID(),
+        url,
+        hostname,
+        service_id: serviceId,
+        registered_protocol: protocol,
+        detected_protocol: detectedProto,
+        type: 'addition',
+        contact_email: contactEmail,
+      })
+    }
+  }
+
+  // Removals: existing sibling protocols not in valid detection array
+  // Only trigger on HTTP 402 responses — non-402/error indicates endpoint issues, not protocol removal
+  if (httpStatus === 402) {
+    for (const existingProto of existingProtocols) {
+      if (existingProto === protocol) continue
+      if (!allDetections.has(existingProto)) {
+        upsertProtocolChange().run({
+          id: randomUUID(),
+          url,
+          hostname,
+          service_id: serviceId,
+          registered_protocol: protocol,
+          detected_protocol: existingProto,
+          type: 'removal',
+          contact_email: contactEmail,
+        })
+      }
+    }
+  }
+}
+
 const getSiblings = () => stmt('getSiblings', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, consecutive_latency_spikes, registered_at, x402_payment_valid FROM services WHERE url = ? AND id != ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
 
 /** Check a single service: HTTP probe, classify result, persist. */
@@ -736,6 +811,24 @@ export async function checkService(service) {
         lngetCompatible: null,
       })
     }
+  }
+
+  // ─── Protocol change detection ───────────────────────────────────────────
+  // Detect new/removed protocols after sibling loop, using already-collected detection data.
+  // No additional HTTP requests — purely post-probe analysis.
+  try {
+    // Union result.detection and result.postFallback?.detection, dedup by protocol, valid only
+    const allDetections = new Map()
+    for (const d of (result.detection || [])) {
+      if (d.valid && !allDetections.has(d.protocol)) allDetections.set(d.protocol, d)
+    }
+    for (const d of (result.postFallback?.detection || [])) {
+      if (d.valid && !allDetections.has(d.protocol)) allDetections.set(d.protocol, d)
+    }
+
+    detectProtocolChanges(url, id, protocol, allDetections, result.httpStatus)
+  } catch (err) {
+    console.warn(`[health] Protocol change detection failed for ${url}: ${err.message}`)
   }
 
   return { id, healthStatus: classification.healthStatus, httpStatus: result.httpStatus }
