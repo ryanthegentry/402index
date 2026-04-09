@@ -630,6 +630,29 @@ try {
   console.warn(`[db] domain_claims migration note: ${err.message}`)
 }
 
+// ─── Protocol Changes (detected during health checks) ───────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS protocol_changes (
+    id TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    hostname TEXT NOT NULL,
+    service_id TEXT NOT NULL,
+    registered_protocol TEXT NOT NULL,
+    detected_protocol TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('addition', 'removal')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'dismissed')),
+    detection_count INTEGER NOT NULL DEFAULT 1,
+    first_detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+    reviewed_at TEXT,
+    created_service_id TEXT,
+    contact_email TEXT,
+    UNIQUE(url, detected_protocol, type)
+  );
+  CREATE INDEX IF NOT EXISTS idx_protocol_changes_status ON protocol_changes(status);
+`)
+
 // ─── Registration Attempts (failed probe logs) ─────────────────────────────
 
 db.exec(`

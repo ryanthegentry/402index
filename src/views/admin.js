@@ -32,6 +32,7 @@ export function adminPage() {
             <button class="tab" data-tab="failed" role="tab">Failed <span id="failed-count" class="tab-count"></span></button>
             <button class="tab" data-tab="search" role="tab">Search</button>
             <button class="tab" data-tab="traffic" role="tab">Traffic</button>
+            <button class="tab" data-tab="protocol-changes" role="tab">Protocol Changes <span id="pc-count" class="tab-count"></span></button>
           </div>
 
           <!-- Pending panel -->
@@ -75,6 +76,13 @@ export function adminPage() {
           <div id="panel-traffic" class="tab-panel" style="display:none">
             <div id="traffic-content">
               <div class="empty-state">Loading traffic data...</div>
+            </div>
+          </div>
+
+          <!-- Protocol Changes panel -->
+          <div id="panel-protocol-changes" class="tab-panel" style="display:none">
+            <div id="pc-content">
+              <div class="empty-state">Loading protocol changes...</div>
             </div>
           </div>
         </div>
@@ -351,7 +359,7 @@ export function adminPage() {
 
     // ─── Tab switching ──────────────────────────────────────────────────────
 
-    var tabLoaded = { pending: false, recent: false, domains: false, failed: false, traffic: false }
+    var tabLoaded = { pending: false, recent: false, domains: false, failed: false, traffic: false, 'protocol-changes': false }
 
     function switchTab(name) {
       document.querySelectorAll('.tab').forEach(function(t) {
@@ -375,6 +383,10 @@ export function adminPage() {
       if (name === 'traffic' && !tabLoaded.traffic) {
         loadTraffic()
         tabLoaded.traffic = true
+      }
+      if (name === 'protocol-changes' && !tabLoaded['protocol-changes']) {
+        loadProtocolChanges()
+        tabLoaded['protocol-changes'] = true
       }
     }
 
@@ -801,6 +813,99 @@ export function adminPage() {
 
       el.innerHTML = html || '<div class="empty-state">No traffic data yet.</div>'
     }
+
+    // ─── Protocol Changes ──────────────────────────────────────────────────
+
+    async function loadProtocolChanges() {
+      var el = document.getElementById('pc-content')
+      el.innerHTML = '<div class="empty-state">Loading protocol changes...</div>'
+      var res = await apiFetch('/admin/protocol-changes')
+      if (!res) return
+      if (!res.ok) {
+        el.innerHTML = '<div class="empty-state">Failed to load protocol changes.</div>'
+        return
+      }
+      var d = await res.json()
+      var countEl = document.getElementById('pc-count')
+      countEl.textContent = d.total || 0
+      if (d.changes.length === 0) {
+        el.innerHTML = '<div class="empty-state">No pending protocol changes detected.</div>'
+        return
+      }
+      var html = '<table class="admin-table"><thead><tr>'
+        + '<th scope="col">URL</th><th scope="col">Registered</th><th scope="col">Detected</th><th scope="col">Type</th>'
+        + '<th scope="col">Count</th><th scope="col">First Detected</th><th scope="col">Last Detected</th>'
+        + '<th scope="col">Contact</th><th scope="col">Actions</th>'
+        + '</tr></thead><tbody>'
+      for (var i = 0; i < d.changes.length; i++) {
+        var c = d.changes[i]
+        var typeColor = c.type === 'addition' ? 'var(--green)' : 'var(--red)'
+        var first = c.first_detected_at ? new Date(c.first_detected_at + (c.first_detected_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString() : '\u2014'
+        var last = c.last_detected_at ? new Date(c.last_detected_at + (c.last_detected_at.endsWith('Z') ? '' : 'Z')).toLocaleDateString() : '\u2014'
+        html += '<tr id="pc-row-' + escHtml(c.id) + '">'
+          + '<td style="font-family:var(--mono);font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(c.url) + '</td>'
+          + '<td>' + escHtml(c.registered_protocol) + '</td>'
+          + '<td>' + escHtml(c.detected_protocol) + '</td>'
+          + '<td style="color:' + typeColor + ';font-weight:600">' + escHtml(c.type) + '</td>'
+          + '<td style="font-size:18px;font-weight:700;text-align:center">' + c.detection_count + '</td>'
+          + '<td style="white-space:nowrap">' + first + '</td>'
+          + '<td style="white-space:nowrap">' + last + '</td>'
+          + '<td>' + escHtml(c.contact_email || '\u2014') + '</td>'
+          + '<td style="white-space:nowrap">'
+        if (c.type === 'addition' && c.status === 'pending') {
+          html += '<button class="btn-pc-approve btn-approve" data-pc-id="' + escHtml(c.id) + '" style="padding:4px 12px;font-size:12px;margin-right:6px">Create Row</button>'
+        }
+        if (c.status === 'pending') {
+          html += '<button class="btn-pc-dismiss btn-reject" data-pc-id="' + escHtml(c.id) + '" style="padding:4px 12px;font-size:12px">Dismiss</button>'
+        }
+        html += '</td></tr>'
+      }
+      html += '</tbody></table>'
+      el.innerHTML = html
+    }
+
+    async function approveProtocolChange(id, btn) {
+      btn.disabled = true
+      var res = await apiFetch('/admin/protocol-changes/' + id + '/approve', { method: 'POST' })
+      if (!res) { btn.disabled = false; return }
+      if (res.ok) {
+        toast('Protocol change approved — sibling created', true)
+        tabLoaded['protocol-changes'] = false
+        loadProtocolChanges()
+      } else {
+        var body = await res.json().catch(function() { return {} })
+        toast(body.error || 'Approve failed', false)
+        btn.disabled = false
+      }
+    }
+
+    async function dismissProtocolChange(id, btn) {
+      btn.disabled = true
+      var res = await apiFetch('/admin/protocol-changes/' + id + '/dismiss', { method: 'POST' })
+      if (!res) { btn.disabled = false; return }
+      if (res.ok) {
+        var row = document.getElementById('pc-row-' + id)
+        if (row) row.remove()
+        toast('Protocol change dismissed', true)
+        var countEl = document.getElementById('pc-count')
+        var n = Math.max(0, (parseInt(countEl.textContent) || 0) - 1)
+        countEl.textContent = n
+      } else {
+        var body = await res.json().catch(function() { return {} })
+        toast(body.error || 'Dismiss failed', false)
+        btn.disabled = false
+      }
+    }
+
+    document.getElementById('panel-protocol-changes').addEventListener('click', function(e) {
+      var btn = e.target.closest('.btn-pc-approve, .btn-pc-dismiss')
+      if (!btn) return
+      if (btn.classList.contains('btn-pc-approve')) {
+        approveProtocolChange(btn.dataset.pcId, btn)
+      } else if (btn.classList.contains('btn-pc-dismiss')) {
+        dismissProtocolChange(btn.dataset.pcId, btn)
+      }
+    })
 
     // ─── Auth ────────────────────────────────────────────────────────────────
 
