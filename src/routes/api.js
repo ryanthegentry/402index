@@ -359,6 +359,24 @@ function extractBonusPricing(detection) {
   try {
     if (detection.protocol === 'x402' && detection.details?.accepts?.[0]) {
       const accept = detection.details.accepts[0]
+      // Lightning x402: extract pricing from BOLT11 invoice
+      if (accept.extra?.paymentMethod === 'lightning' && accept.extra?.invoice) {
+        try {
+          const decoded = decodeBolt11(accept.extra.invoice)
+          const amountSection = decoded.sections?.find(s => s.name === 'amount')
+          const priceSats = amountSection ? Math.floor(Number(amountSection.value) / 1000) : null
+          const btcRate = getCachedBtcUsdRate()
+          const priceUsd = priceSats && btcRate ? Number(((priceSats / 1e8) * btcRate).toFixed(6)) : null
+          return {
+            price_sats: priceSats,
+            price_usd: priceUsd,
+            payment_asset: 'BTC',
+            payment_network: accept.network || null,
+          }
+        } catch {
+          return nullPricing
+        }
+      }
       // Map known asset addresses to symbols
       const asset = accept.asset || null
       const network = accept.network || null
