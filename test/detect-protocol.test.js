@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { detectProtocol, parseMppChallenge, decodeMppRequest, getPrimaryDetection } from '../src/services/detect-protocol.js'
+import { isLightningEntry } from '../src/services/x402-utils.js'
 
 // ─── Real-world MPP fixture (captured from OpenAI) ────────────────────────────
 
@@ -159,6 +160,26 @@ describe('detectProtocol — x402', () => {
     const headerB64 = Buffer.from(JSON.stringify({ accepts: [] })).toString('base64')
     const result = detectProtocol({ paymentRequired: headerB64 })
     assert.equal(result.length, 0)
+  })
+
+  it('x402 Lightning entry: details include paymentMethod lightning', () => {
+    const VALID_BOLT11 = 'lnbc20u1p3y0x3hpp5743k2g0fsqqxj7n8qzuhns5gmkk4djeejk3wkp64ppevgekvc0jsdqcve5kzar2v9nr5gpqd4hkuetesp5ez2g297jduwc20t6lmqlsg3man0vf2jfd8ar9fh8fhn2g8yttfkqxqy9gcqcqzys9qrsgqrzjqtx3k77yrrav9hye7zar2rtqlfkytl094dsp0ms5majzth6gt7ca6uhdkxl983uywgqqqqlgqqqvx5qqjqrzjqd98kxkpyw0l9tyy8r8q57k7zpy9zjmh6sez752wj6gcumqnj3yxzhdsmg6qq56utgqqqqqqqqqqqeqqjq7jd56882gtxhrjm03c93aacyfy306m4fq0tskf83c0nmet8zc2lxyyg3saz8x6vwcp26xnrlagf9semau3qm2glysp7sv95693fphvsp54l567'
+    const lightningAccepts = [{
+      scheme: 'exact',
+      network: 'bip122:000000000019d6689c085ae165831e93',
+      amount: '13000',
+      asset: 'BTC',
+      payTo: 'anonymous',
+      maxTimeoutSeconds: 300,
+      extra: { paymentMethod: 'lightning', invoice: VALID_BOLT11 },
+    }]
+    const headerB64 = Buffer.from(JSON.stringify({ accepts: lightningAccepts })).toString('base64')
+    const result = detectProtocol({ paymentRequired: headerB64 })
+    assert.equal(result[0].protocol, 'x402')
+    assert.equal(result[0].valid, true)
+    assert.equal(result[0].details.paymentMethod, 'lightning')
+    // Asset should be recognized
+    assert.equal(result[0].details.assetKnown, true)
   })
 })
 
