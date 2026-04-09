@@ -1417,6 +1417,14 @@ router.post('/admin/protocol-changes/:id/approve', (req, res) => {
     return res.status(404).json({ error: 'Triggering service not found' })
   }
 
+  // Conflict guard: check if an active sibling already exists at (url, detected_protocol)
+  const existingSibling = db.prepare(
+    "SELECT id FROM services WHERE url = ? AND protocol = ? AND status = 'active' AND (provider_deleted = 0 OR provider_deleted IS NULL)"
+  ).get(pc.url, pc.detected_protocol)
+  if (existingSibling) {
+    return res.status(409).json({ error: 'Sibling service already exists', existing_service_id: existingSibling.id })
+  }
+
   // Create sibling via registerUpsert with null pricing
   const newId = randomUUID()
   const bonusParams = {
@@ -1439,9 +1447,9 @@ router.post('/admin/protocol-changes/:id/approve', (req, res) => {
 
   const newService = registerUpsert().get(bonusParams)
 
-  // Set to active with admin-protocol-change approval reason
+  // Set to active with admin-protocol-change approval reason and correct source
   db.prepare(
-    "UPDATE services SET status = 'active', approval_reason = 'admin-protocol-change', updated_at = datetime('now') WHERE id = ?"
+    "UPDATE services SET status = 'active', approval_reason = 'admin-protocol-change', source = 'protocol-change', updated_at = datetime('now') WHERE id = ?"
   ).run(newService.id)
 
   // Update protocol_changes row
