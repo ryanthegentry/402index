@@ -44,13 +44,16 @@ export function registerWebhook(db, { url, secret, events, protocol_filter } = {
   if (!url) throw new Error('url is required')
   if (!secret) throw new Error('secret is required')
 
-  // Validate HTTPS
+  // Validate HTTPS (exception: *.railway.internal — encrypted at infra layer)
   try {
     const parsed = new URL(url)
-    if (parsed.protocol !== 'https:') throw new Error('Webhook URL must be HTTPS')
+    const isRailwayInternal = parsed.hostname.endsWith('.railway.internal')
+    if (parsed.protocol !== 'https:' && !isRailwayInternal) {
+      throw new Error('Webhook URL must be HTTPS (exception: *.railway.internal)')
+    }
   } catch (e) {
     if (e.message.includes('HTTPS')) throw e
-    throw new Error('Webhook URL must be HTTPS')
+    throw new Error('Webhook URL must be HTTPS (exception: *.railway.internal)')
   }
 
   // Validate events
