@@ -65,6 +65,33 @@ describe('registerWebhook', () => {
     }, /HTTPS/)
   })
 
+  it('accepts HTTP URLs for *.railway.internal (Railway private networking)', () => {
+    const result = registerWebhook(db, {
+      url: 'http://herald.railway.internal:8080/webhook',
+      secret: 'my-secret-123',
+    })
+    assert.ok(result.id)
+    assert.equal(result.url, 'http://herald.railway.internal:8080/webhook')
+  })
+
+  it('rejects subdomain spoofing of railway.internal', () => {
+    assert.throws(() => {
+      registerWebhook(db, {
+        url: 'http://evil.railway.internal.attacker.com/webhook',
+        secret: 'my-secret-123',
+      })
+    }, /HTTPS/)
+  })
+
+  it('rejects invalid URLs with appropriate error', () => {
+    assert.throws(() => {
+      registerWebhook(db, {
+        url: 'not-a-url',
+        secret: 'my-secret-123',
+      })
+    }, /HTTPS/)
+  })
+
   it('rejects missing URL', () => {
     assert.throws(() => {
       registerWebhook(db, {
