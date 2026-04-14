@@ -147,6 +147,120 @@ describe('Bug C: 24h forced offset reset', () => {
   })
 })
 
+// ─── Bug C (additional): Corrupt date in bazaar_last_full_pass ───────────────
+
+describe('Bug C (additional): malformed date in bazaar_last_full_pass forces reset', () => {
+  let originalFetch
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch
+    cleanSyncState()
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+    cleanSyncState()
+    db.prepare("DELETE FROM services WHERE url LIKE 'https://bazaar-polling-test-%'").run()
+  })
+
+  it('resets offset to 0 when bazaar_last_full_pass contains a malformed date string', async () => {
+    // Seed: offset at 5000, last full pass set to garbage (NaN when parsed)
+    setSyncState('bazaar_offset', '5000')
+    setSyncState('bazaar_last_full_pass', 'not-a-valid-date')
+
+    const fetchedUrls = []
+    globalThis.fetch = async (url) => {
+      fetchedUrls.push(url)
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ pagination: { total: 0 }, items: [] }),
+      }
+    }
+
+    const { pollBazaar } = await import(`../src/aggregators/bazaar.js?t=${Date.now() + 100}`)
+    await pollBazaar()
+
+    assert.ok(fetchedUrls.length > 0, 'fetch should have been called')
+    const firstUrl = fetchedUrls[0]
+
+    // FAILS before fix: NaN comparison silently skips reset → stays at offset=5000
+    assert.ok(
+      firstUrl.includes('offset=0'),
+      `first fetch should use offset=0 when last full pass date is malformed, got: ${firstUrl}`
+    )
+  })
+})
+
+// ─── Bug B (summary): Per-page summary shows accurate per-page counts ─────────
+
+describe('Bug B (summary): per-page normalization summary shows per-page counts', () => {
+  let originalFetch
+  let originalLog
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch
+    originalLog = console.log
+    cleanSyncState()
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+    console.log = originalLog
+    cleanSyncState()
+    db.prepare("DELETE FROM services WHERE url LIKE 'https://bazaar-polling-test-%'").run()
+  })
+
+  it('summary line shows per-page counts, not cumulative, across two pages', async () => {
+    // Page 1: 2 good + 1 bad.  Page 2: 1 good + 2 bad.
+    // Cumulative after page 2: 3 succeeded, 3 failed.
+    // Per-page page 2 (correct): 1 succeeded, 2 failed.
+    // PAGE_SIZE=100, so total must be >100 to trigger a second fetch.
+    const page1Items = [makeBazaarItem('pp1a'), makeBazaarItem('pp1b'), makeBadItem(101)]
+    const page2Items = [makeBazaarItem('pp2a'), makeBadItem(102), makeBadItem(103)]
+    const totalCount = 150 // >100 triggers two fetches
+
+    let callCount = 0
+    globalThis.fetch = async (url) => {
+      callCount++
+      const isPage1 = callCount === 1
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          pagination: { total: totalCount },
+          items: isPage1 ? page1Items : page2Items,
+        }),
+      }
+    }
+
+    const summaryLines = []
+    console.log = (...args) => {
+      const line = args.map(a => String(a)).join(' ')
+      if (line.includes('[bazaar]') && line.toLowerCase().includes('normalization')) {
+        summaryLines.push(line)
+      }
+    }
+
+    const { pollBazaar } = await import(`../src/aggregators/bazaar.js?t=${Date.now() + 200}`)
+    await pollBazaar()
+
+    assert.equal(summaryLines.length, 2, `expected 2 per-page summary lines, got: ${JSON.stringify(summaryLines)}`)
+
+    // Page 1 summary must report 2 succeeded, 1 failed (not cumulative)
+    assert.ok(
+      summaryLines[0].includes('2 succeeded') && summaryLines[0].includes('1 failed'),
+      `page 1 summary should show "2 succeeded, 1 failed", got: ${summaryLines[0]}`
+    )
+
+    // Page 2 summary must report 1 succeeded, 2 failed (not cumulative 3/3)
+    assert.ok(
+      summaryLines[1].includes('1 succeeded') && summaryLines[1].includes('2 failed'),
+      `page 2 summary should show "1 succeeded, 2 failed" (per-page), got: ${summaryLines[1]}`
+    )
+  })
+})
+
 // ─── Bug B (error logging): All errors logged, not just first 5 ──────────────
 
 describe('Bug B (error logging): all normalization errors are logged', () => {
