@@ -6,6 +6,7 @@ const BAZAAR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/reso
 const PAGE_SIZE = 100
 const MAX_RETRIES = 5
 const PAGE_DELAY_MS = 1000
+const BAZAAR_FULL_PASS_TIMEOUT_HOURS = parseInt(process.env.BAZAAR_FULL_PASS_TIMEOUT_HOURS) || 24
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -18,6 +19,8 @@ function stmt(key, sql) {
   return stmts[key]
 }
 
+// Bug A fix: removed WHERE guard so re-listed soft-deleted services are reactivated.
+// Added provider_deleted = 0 and conditional approval_reason to SET clause.
 const upsert = () => stmt('upsert', `
   INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id, hostname)
   VALUES (@id, @name, @description, @url, 'x402', @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'bazaar', @source_id, @hostname)
@@ -33,11 +36,15 @@ const upsert = () => stmt('upsert', `
     provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE excluded.provider END,
     source_id = excluded.source_id,
     hostname = COALESCE(excluded.hostname, services.hostname),
+    provider_deleted = 0,
+    approval_reason = CASE WHEN services.provider_deleted = 1 THEN 'bazaar-relisted' ELSE services.approval_reason END,
     updated_at = datetime('now')
-    WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
 `)
 
-const findExisting = () => stmt('findExisting', 'SELECT id FROM services WHERE url = ? AND protocol = ?')
+// Bug A fix: exclude soft-deleted rows so stats reflect reality.
+const findExisting = () => stmt('findExisting',
+  'SELECT id FROM services WHERE url = ? AND protocol = ? AND (provider_deleted = 0 OR provider_deleted IS NULL)'
+)
 
 const getSyncState = () => stmt('getSyncState', 'SELECT value FROM sync_state WHERE key = ?')
 const setSyncState = () => stmt('setSyncState', `
@@ -51,11 +58,26 @@ export async function pollBazaar() {
   // Resume from last saved offset
   const savedOffset = getSyncState().get('bazaar_offset')
   let offset = savedOffset ? parseInt(savedOffset.value) || 0 : 0
-  if (offset > 0) console.log(`[bazaar] Resuming from saved offset ${offset}`)
+
+  // Bug C fix: force offset reset if last full pass was >BAZAAR_FULL_PASS_TIMEOUT_HOURS ago.
+  const lastFullPassRow = getSyncState().get('bazaar_last_full_pass')
+  const lastFullPassMs = lastFullPassRow ? new Date(lastFullPassRow.value).getTime() : 0
+  const timeoutMs = BAZAAR_FULL_PASS_TIMEOUT_HOURS * 60 * 60 * 1000
+  if (!lastFullPassRow || (Date.now() - lastFullPassMs) > timeoutMs) {
+    if (offset > 0) {
+      console.log(`[bazaar] Forcing offset reset to 0 (last full pass >${BAZAAR_FULL_PASS_TIMEOUT_HOURS}h ago)`)
+      offset = 0
+      setSyncState().run('bazaar_offset', '0')
+    }
+  } else if (offset > 0) {
+    console.log(`[bazaar] Resuming from saved offset ${offset}`)
+  }
+
   let total = null
   let newCount = 0
   let updatedCount = 0
   let errorCount = 0
+  let normalizedCount = 0
 
   // Track which URLs we've seen this poll to handle dupes within a single poll
   const seen = new Set()
@@ -109,10 +131,11 @@ export async function pollBazaar() {
 
         normalized.hostname = extractHostname(normalized.url)
 
-        // Check if service already exists
+        // Check if service already exists (excludes soft-deleted rows — Bug A fix)
         const existing = findExisting().get(normalized.url, 'x402')
 
         upsert().run(normalized)
+        normalizedCount++
 
         if (existing) {
           updatedCount++
@@ -121,10 +144,15 @@ export async function pollBazaar() {
         }
       } catch (err) {
         errorCount++
-        if (errorCount <= 5) {
-          console.error(`[bazaar] Error normalizing item:`, err.message)
-        }
+        // Bug B fix: log ALL errors with identifying info, no gate suppressing after 5.
+        const resourceHint = item?.resource || JSON.stringify(item)?.substring(0, 200) || 'unknown'
+        console.error(`[bazaar] Error normalizing item (resource: ${resourceHint}):`, err.message)
       }
+    }
+
+    // Bug B fix: summary log per page batch
+    if (errorCount > 0 || normalizedCount > 0) {
+      console.log(`[bazaar] Normalization: ${normalizedCount} succeeded, ${errorCount} failed`)
     }
 
     offset += PAGE_SIZE
@@ -138,20 +166,20 @@ export async function pollBazaar() {
     }
   }
 
-  // If we reached the end (or past it), reset offset for next full pass
+  // If we reached the end (or past it), reset offset for next full pass and record timestamp
   if (total !== null && offset >= total) {
     setSyncState().run('bazaar_offset', '0')
+    setSyncState().run('bazaar_last_full_pass', new Date().toISOString())
     console.log(`[bazaar] Completed full catalog pass, resetting offset to 0`)
   }
 
   const totalProcessed = newCount + updatedCount + errorCount
-  const totalSynced = newCount + updatedCount
 
   // Alert if >50% of items failed normalization — API format may have changed
   if (totalProcessed > 0 && errorCount > 0.5 * totalProcessed) {
     console.error(`[bazaar] ALERT: >50% of Bazaar items failed to normalize (${errorCount}/${totalProcessed}). API format may have changed!`)
   }
 
-  console.log(`[bazaar] Synced ${totalSynced} services from Bazaar (${newCount} new, ${updatedCount} updated${errorCount > 0 ? `, ${errorCount} errors` : ''})`)
+  console.log(`[bazaar] Synced ${newCount + updatedCount} services from Bazaar (${newCount} new, ${updatedCount} updated${errorCount > 0 ? `, ${errorCount} errors` : ''})`)
   return { new: newCount, updated: updatedCount, errors: errorCount }
 }
