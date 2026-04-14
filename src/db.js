@@ -537,6 +537,74 @@ try {
   console.warn(`[db] Incremental vacuum note: ${err.message}`)
 }
 
+// ─── FTS5 Full-Text Search Index ────────────────────────────────────────────
+
+try {
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS services_fts USING fts5(
+      name, description, category, provider,
+      content='services',
+      content_rowid='rowid'
+    )
+  `)
+} catch (err) {
+  console.warn(`[db] FTS5 table note: ${err.message}`)
+}
+
+// Sync triggers — keep FTS index in sync with services table
+try {
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS services_fts_insert AFTER INSERT ON services BEGIN
+      INSERT INTO services_fts(rowid, name, description, category, provider)
+      VALUES (new.rowid, COALESCE(new.name,''), COALESCE(new.description,''), COALESCE(new.category,''), COALESCE(new.provider,''));
+    END
+  `)
+} catch (err) {
+  console.warn(`[db] FTS5 insert trigger note: ${err.message}`)
+}
+
+try {
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS services_fts_update AFTER UPDATE ON services BEGIN
+      INSERT INTO services_fts(services_fts, rowid, name, description, category, provider)
+      VALUES ('delete', old.rowid, COALESCE(old.name,''), COALESCE(old.description,''), COALESCE(old.category,''), COALESCE(old.provider,''));
+      INSERT INTO services_fts(rowid, name, description, category, provider)
+      VALUES (new.rowid, COALESCE(new.name,''), COALESCE(new.description,''), COALESCE(new.category,''), COALESCE(new.provider,''));
+    END
+  `)
+} catch (err) {
+  console.warn(`[db] FTS5 update trigger note: ${err.message}`)
+}
+
+try {
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS services_fts_delete AFTER DELETE ON services BEGIN
+      INSERT INTO services_fts(services_fts, rowid, name, description, category, provider)
+      VALUES ('delete', old.rowid, COALESCE(old.name,''), COALESCE(old.description,''), COALESCE(old.category,''), COALESCE(old.provider,''));
+    END
+  `)
+} catch (err) {
+  console.warn(`[db] FTS5 delete trigger note: ${err.message}`)
+}
+
+// Backfill: populate FTS index from existing services (idempotent — skips if already populated)
+try {
+  const ftsCount = db.prepare('SELECT COUNT(*) as c FROM services_fts').get().c
+  if (ftsCount === 0) {
+    const serviceCount = db.prepare('SELECT COUNT(*) as c FROM services').get().c
+    if (serviceCount > 0) {
+      db.exec(`
+        INSERT INTO services_fts(rowid, name, description, category, provider)
+        SELECT rowid, COALESCE(name,''), COALESCE(description,''), COALESCE(category,''), COALESCE(provider,'')
+        FROM services
+      `)
+      console.log(`[db] FTS5 backfill: indexed ${serviceCount} services`)
+    }
+  }
+} catch (err) {
+  console.warn(`[db] FTS5 backfill note: ${err.message}`)
+}
+
 // ─── Daily Snapshots ────────────────────────────────────────────────────────
 
 db.exec(`
