@@ -55,11 +55,32 @@ export function categorizeFromDescription(description) {
  * Normalize a Bazaar API item into the internal service schema.
  * @param {object} item - Raw Bazaar API item with accepts array and resource URL
  * @returns {object} Normalized service object matching the internal schema
- * @throws {Error} If the item is missing required data (accepts array or resource URL).
+ * @throws {Error} If the item has neither an accepts array nor a resource URL.
  */
 export function normalizeItem(item) {
   const accept = item.accepts?.[0]
-  if (!accept) throw new Error('missing accepts array')
+
+  // Graceful fallback: if accepts is missing but resource URL is present,
+  // ingest with null price/schema rather than throwing.
+  if (!accept) {
+    if (!item.resource) throw new Error('missing accepts array')
+    const url = normalizeUrl(item.resource)
+    if (!url) throw new Error('missing resource URL')
+    return {
+      id: randomUUID(),
+      name: url,
+      description: null,
+      url,
+      price_usd: null,
+      payment_asset: 'USDC',
+      payment_network: 'Base',
+      category: 'uncategorized',
+      input_schema: null,
+      output_schema: null,
+      provider: extractProviderFromUrl(url),
+      source_id: url,
+    }
+  }
 
   const rawUrl = item.resource || accept.resource
   if (!rawUrl) throw new Error('missing resource URL')
