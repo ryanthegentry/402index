@@ -63,7 +63,8 @@ export async function pollBazaar() {
   const lastFullPassRow = getSyncState().get('bazaar_last_full_pass')
   const lastFullPassMs = lastFullPassRow ? new Date(lastFullPassRow.value).getTime() : 0
   const timeoutMs = BAZAAR_FULL_PASS_TIMEOUT_HOURS * 60 * 60 * 1000
-  if (!lastFullPassRow || (Date.now() - lastFullPassMs) > timeoutMs) {
+  // Guard against malformed date strings (NaN comparison always returns false)
+  if (!lastFullPassRow || isNaN(lastFullPassMs) || (Date.now() - lastFullPassMs) > timeoutMs) {
     if (offset > 0) {
       console.log(`[bazaar] Forcing offset reset to 0 (last full pass >${BAZAAR_FULL_PASS_TIMEOUT_HOURS}h ago)`)
       offset = 0
@@ -121,6 +122,10 @@ export async function pollBazaar() {
     const items = data.items || []
     if (items.length === 0) break
 
+    // Per-page counters for accurate summary line (not cumulative across pages)
+    let pageNormalizedCount = 0
+    let pageErrorCount = 0
+
     for (const item of items) {
       try {
         const normalized = normalizeItem(item)
@@ -136,6 +141,7 @@ export async function pollBazaar() {
 
         upsert().run(normalized)
         normalizedCount++
+        pageNormalizedCount++
 
         if (existing) {
           updatedCount++
@@ -144,15 +150,16 @@ export async function pollBazaar() {
         }
       } catch (err) {
         errorCount++
+        pageErrorCount++
         // Bug B fix: log ALL errors with identifying info, no gate suppressing after 5.
         const resourceHint = item?.resource || JSON.stringify(item)?.substring(0, 200) || 'unknown'
         console.error(`[bazaar] Error normalizing item (resource: ${resourceHint}):`, err.message)
       }
     }
 
-    // Bug B fix: summary log per page batch
-    if (errorCount > 0 || normalizedCount > 0) {
-      console.log(`[bazaar] Normalization: ${normalizedCount} succeeded, ${errorCount} failed`)
+    // Bug B fix: per-page summary line with accurate page-level counts
+    if (pageErrorCount > 0 || pageNormalizedCount > 0) {
+      console.log(`[bazaar] Normalization: ${pageNormalizedCount} succeeded, ${pageErrorCount} failed`)
     }
 
     offset += PAGE_SIZE
