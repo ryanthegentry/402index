@@ -31,6 +31,16 @@ export function protocolBadge(protocol) {
   return `<span class="badge ${cls}">${escapeHtml(protocol)}</span>`
 }
 
+export function verifiedBadge(service) {
+  if (service.domain_verified === 1) {
+    return '<span class="badge badge-verified-domain" title="Domain Verified — provider proved ownership via .well-known challenge"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 16l-4-4 1.41-1.41L11 14.17l6.59-6.59L19 9l-8 8z"/></svg></span>'
+  }
+  if (service.x402_payment_valid === 1 || service.health_status === 'healthy') {
+    return '<span class="badge badge-verified-payment" title="Payment Verified — endpoint returns valid payment headers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg></span>'
+  }
+  return ''
+}
+
 export function formatPrice(service, btcUsdRate) {
   if (service.price_usd != null) return `$${service.price_usd.toFixed(service.price_usd < 0.01 ? 4 : 2)}`
   if (service.price_sats != null && btcUsdRate) {
