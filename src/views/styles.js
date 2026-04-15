@@ -309,6 +309,8 @@ export const styles = `
     .badge-l402 { background: rgba(251,146,60,0.15); color: var(--orange); }
     .badge-both { background: rgba(124,138,255,0.15); color: var(--accent); }
     .badge-mpp { background: rgba(16,185,129,0.15); color: #10b981; }
+    .badge-verified-domain { color: #d4a017; margin-left: 4px; }
+    .badge-verified-payment { color: #6b7280; margin-left: 4px; }
 
     /* Health dots */
     .health-dot {
