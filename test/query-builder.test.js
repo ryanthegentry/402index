@@ -178,7 +178,7 @@ describe('buildServiceQuery', () => {
       reliability_score REAL, x402_payment_valid INTEGER,
       x402_facilitator_reachable INTEGER, x402_asset_known INTEGER,
       l402_compliant INTEGER, l402_degrade_reason TEXT, l402_format TEXT,
-      lnget_compatible INTEGER
+      lnget_compatible INTEGER, domain_verified INTEGER DEFAULT 0
     )`)
     db.exec(`INSERT INTO services (name, description, url, protocol, status, health_status)
       VALUES ('PayPerQ Image Generation', 'AI image gen', 'https://ppq.ai/api', 'MPP', 'active', 'healthy')`)
@@ -205,7 +205,7 @@ describe('buildServiceQuery', () => {
       reliability_score REAL, x402_payment_valid INTEGER,
       x402_facilitator_reachable INTEGER, x402_asset_known INTEGER,
       l402_compliant INTEGER, l402_degrade_reason TEXT, l402_format TEXT,
-      lnget_compatible INTEGER
+      lnget_compatible INTEGER, domain_verified INTEGER DEFAULT 0
     )`)
     db.exec(`INSERT INTO services (name, description, url, protocol, status, health_status)
       VALUES ('100% Uptime API', 'test', 'https://example.com', 'L402', 'active', 'healthy')`)
@@ -230,7 +230,7 @@ describe('buildServiceQuery', () => {
       reliability_score REAL, x402_payment_valid INTEGER,
       x402_facilitator_reachable INTEGER, x402_asset_known INTEGER,
       l402_compliant INTEGER, l402_degrade_reason TEXT, l402_format TEXT,
-      lnget_compatible INTEGER
+      lnget_compatible INTEGER, domain_verified INTEGER DEFAULT 0
     )`)
     db.exec(`INSERT INTO services (name, description, url, protocol, status, health_status)
       VALUES ('foo\\bar API', 'backslash test', 'https://example.com', 'L402', 'active', 'healthy')`)
