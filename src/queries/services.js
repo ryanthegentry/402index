@@ -4,11 +4,12 @@ const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'sel
 
 const RELATED_PROTOCOLS_SQL = `(SELECT CASE WHEN COUNT(*) = 0 THEN '[]' ELSE json_group_array(s2.protocol) END FROM services s2 WHERE s2.url = services.url AND s2.id != services.id AND (s2.status = 'active' OR s2.status IS NULL) AND (s2.provider_deleted = 0 OR s2.provider_deleted IS NULL)) as related_protocols`
 
-export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason, l402_format, lnget_compatible, ' + RELATED_PROTOCOLS_SQL
-export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, latency_p50_ms, reliability_score, x402_payment_valid'
+export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, domain_verified, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason, l402_format, lnget_compatible, ' + RELATED_PROTOCOLS_SQL
+export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, latency_p50_ms, reliability_score, x402_payment_valid, domain_verified'
 
 const DEFAULT_ORDER = `ORDER BY
     featured DESC,
+    domain_verified DESC,
     CASE WHEN featured = 1 THEN 0 ELSE CASE WHEN category != 'uncategorized' THEN 0 ELSE 1 END END,
     CASE health_status WHEN 'healthy' THEN 0 WHEN 'degraded' THEN 1 WHEN 'down' THEN 2 WHEN 'unknown' THEN 3 END,
     name`
@@ -26,6 +27,7 @@ const DEFAULT_ORDER = `ORDER BY
  * @param {string} [opts.max_price_usd] - Maximum price in USD (ignored if not a valid number)
  * @param {string} [opts.payment_asset]
  * @param {string} [opts.payment_valid] - 'true' or '1' to filter x402 services with valid payment requirements
+ * @param {string} [opts.verified] - 'true' or '1' to filter verified services (x402: payment_valid, L402+MPP: healthy)
  * @param {string} [opts.sort] - Sort column: 'name', 'price', 'latency', 'uptime'
  * @param {string} [opts.order] - Sort direction: 'asc' or 'desc'
  * @param {string|number} [opts.rawLimit] - Results per page (1-200, default 50)
@@ -43,6 +45,7 @@ export function buildServiceQuery(opts = {}) {
     max_price_usd,
     payment_asset,
     payment_valid,
+    verified,
     l402_compliant,
     l402_format,
     lnget_compatible,
@@ -102,6 +105,13 @@ export function buildServiceQuery(opts = {}) {
     conditions.push("((protocol = 'x402' AND x402_payment_valid = 1) OR (protocol = 'L402' AND health_status = 'healthy'))")
   } else if (payment_valid === 'false' || payment_valid === '0') {
     conditions.push("((protocol = 'x402' AND (x402_payment_valid = 0 OR x402_payment_valid IS NULL)) OR (protocol = 'L402' AND health_status != 'healthy'))")
+  }
+  if (verified === 'true' || verified === '1') {
+    conditions.push(`(
+      (protocol = 'x402' AND x402_payment_valid = 1)
+      OR (protocol = 'L402' AND health_status = 'healthy')
+      OR (protocol = 'MPP' AND health_status = 'healthy')
+    )`)
   }
   if (l402_format) {
     const sanitized = l402_format.replace(/[^a-z0-9_]/g, '')
