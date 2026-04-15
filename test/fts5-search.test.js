@@ -56,7 +56,7 @@ function insertService(overrides = {}) {
   return id
 }
 
-describe('FTS5 infrastructure (issue #118)', () => {
+describe('FTS5 infrastructure (issue #118)', { skip: 'FTS5 dropped in hotfix 33d36ab — re-enable when FTS5 is re-implemented' }, () => {
   it('services_fts virtual table exists', () => {
     const row = db.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'services_fts'"
