@@ -34,7 +34,7 @@ server.tool(
     health: z.enum(['healthy', 'degraded', 'down', 'unknown']).optional().describe('Filter by health status'),
     source: z.enum(['bazaar', 'satring', 'l402apps', 'sponge', 'l402directory', 'mpp', 'discovery', 'self-registered']).optional().describe('Filter by source'),
     featured: z.boolean().optional().describe('Only featured services'),
-    verified: z.boolean().optional().describe('Only payment-verified services. Domain-verified ranked first. Recommended for agents making payment decisions.'),
+    verified: z.boolean().optional().describe('Only payment-verified services (x402: valid payment headers, L402/MPP: healthy). Domain-verified ranked first. Recommended for agents making payment decisions.'),
     q: z.string().optional().describe('Search by name, description, or URL'),
     max_price_usd: z.number().optional().describe('Maximum price in USD'),
     sort: z.enum(['name', 'price', 'latency', 'uptime']).optional().describe('Sort field'),
