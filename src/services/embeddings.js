@@ -2,6 +2,7 @@ import db from '../db.js'
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const EMBEDDINGS_ENABLED = Boolean(OPENAI_API_KEY)
+export const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings'
 const MODEL = 'text-embedding-3-small'
 const DIMENSIONS = 1536
 const TIMEOUT_MS = 10000
@@ -49,6 +50,16 @@ const upsertEmbedding = db.prepare(`
     embedded_at = excluded.embedded_at
 `)
 
+// ─── Composition helper ──────────────────────────────────────────────────────
+
+/**
+ * Compose the embedding input text from a service row.
+ * Shared between generateEmbedding() and the backfill script.
+ */
+export function composeEmbeddingInput(service) {
+  return `${service.name}\n${service.description ?? ''}\n${service.category ?? ''}`
+}
+
 // ─── Core functions ───────────────────────────────────────────────────────────
 
 /**
@@ -60,7 +71,7 @@ async function callOpenAI(text) {
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
   try {
-    const res = await fetch('https://api.openai.com/v1/embeddings', {
+    const res = await fetch(OPENAI_EMBEDDINGS_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -113,7 +124,7 @@ export async function generateEmbedding(serviceId) {
       return
     }
 
-    const inputText = `${service.name}\n${service.description ?? ''}\n${service.category ?? ''}`
+    const inputText = composeEmbeddingInput(service)
     const embedding = await callOpenAI(inputText)
     if (!embedding) return
 
