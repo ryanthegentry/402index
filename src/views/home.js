@@ -1,5 +1,5 @@
 import { layout } from './layout.js'
-import { escapeHtml, healthDot, protocolBadge, formatPrice, sourceLink } from './helpers.js'
+import { escapeHtml, healthDot, protocolBadge, formatPrice, sourceLink, verifiedBadge } from './helpers.js'
 
 export function homePage({ services, total, limit, offset, filters, stats, categories, btcUsdRate }) {
   const currentPage = Math.floor(offset / limit) + 1
@@ -8,7 +8,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
   const rows = services.map(s => `
     <tr onclick="location.href='/service/${escapeHtml(s.id)}'">
       <td>
-        <span class="svc-name">${escapeHtml(s.name)}</span>
+        <span class="svc-name">${escapeHtml(s.name)}${verifiedBadge(s)}</span>
         <span class="svc-url">${escapeHtml(s.url)}</span>
       </td>
       <td>${protocolBadge(s.protocol)}</td>
