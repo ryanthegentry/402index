@@ -1,6 +1,7 @@
 import db from '../db.js'
 import { normalizeItem } from './bazaar-utils.js'
 import { extractHostname } from '../services/url-normalize.js'
+import { generateEmbedding } from '../services/embeddings.js'
 
 const BAZAAR_URL = 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources'
 const PAGE_SIZE = 100
@@ -39,6 +40,7 @@ const upsert = () => stmt('upsert', `
     provider_deleted = 0,
     approval_reason = CASE WHEN services.provider_deleted = 1 THEN 'bazaar-relisted' ELSE services.approval_reason END,
     updated_at = datetime('now')
+  RETURNING *
 `)
 
 // Bug A fix: exclude soft-deleted rows so stats reflect reality.
@@ -139,7 +141,7 @@ export async function pollBazaar() {
         // Check if service already exists (excludes soft-deleted rows — Bug A fix)
         const existing = findExisting().get(normalized.url, 'x402')
 
-        upsert().run(normalized)
+        const row = upsert().get(normalized)
         normalizedCount++
         pageNormalizedCount++
 
@@ -147,6 +149,9 @@ export async function pollBazaar() {
           updatedCount++
         } else {
           newCount++
+          if (row && row.registered_at === row.updated_at) {
+            setImmediate(() => generateEmbedding(row.id).catch(() => {}))
+          }
         }
       } catch (err) {
         errorCount++

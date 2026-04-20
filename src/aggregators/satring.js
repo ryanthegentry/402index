@@ -2,6 +2,7 @@ import db from '../db.js'
 import { fetchBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeRawService } from './satring-utils.js'
 import { extractHostname } from '../services/url-normalize.js'
+import { generateEmbedding } from '../services/embeddings.js'
 
 const SATRING_URL = 'https://satring.com/api/v1/services'
 
@@ -43,6 +44,7 @@ const upsert = () => stmt('upsert', `
     hostname = COALESCE(excluded.hostname, services.hostname),
     updated_at = datetime('now')
     WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
+  RETURNING *
 `)
 
 const findExisting = () => stmt('findExisting', 'SELECT id FROM services WHERE url = ? AND protocol = ?')
@@ -131,12 +133,15 @@ export async function pollSatring() {
           normalized.hostname = extractHostname(normalized.url)
           const existing = findExisting().get(normalized.url, normalized.protocol)
 
-          upsert().run(normalized)
+          const row = upsert().get(normalized)
 
           if (existing) {
             updatedCount++
           } else {
             newCount++
+            if (row && row.registered_at === row.updated_at) {
+              setImmediate(() => generateEmbedding(row.id).catch(() => {}))
+            }
           }
         }
       } catch (err) {

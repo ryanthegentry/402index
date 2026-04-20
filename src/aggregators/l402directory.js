@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { fetchBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeServices } from './l402directory-utils.js'
 import { extractHostname } from '../services/url-normalize.js'
+import { generateEmbedding } from '../services/embeddings.js'
 
 const L402DIR_URL = 'https://l402.directory/api/services'
 
@@ -36,6 +37,7 @@ const upsert = () => stmt('l402dirUpsert', `
     END,
     updated_at = datetime('now')
     WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
+  RETURNING *
 `)
 
 const findExisting = () => stmt('l402dirFind', "SELECT id FROM services WHERE url = ? AND protocol = 'L402'")
@@ -90,10 +92,15 @@ export async function pollL402Directory() {
       if (existing) {
         ep.id = existing.id
       }
-      upsert().run(ep)
+      const row = upsert().get(ep)
 
       if (existing) updatedCount++
-      else newCount++
+      else {
+        newCount++
+        if (row && row.registered_at === row.updated_at) {
+          setImmediate(() => generateEmbedding(row.id).catch(() => {}))
+        }
+      }
     } catch (err) {
       errorCount++
       if (errorCount <= 5) {
