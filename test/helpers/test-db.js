@@ -176,6 +176,17 @@ export function createTestDb() {
       last_triggered_at TEXT,
       failure_count INTEGER DEFAULT 0
     );
+
+    CREATE TABLE service_embeddings (
+      service_id TEXT PRIMARY KEY
+        REFERENCES services(id) ON DELETE NO ACTION,
+      embedding BLOB NOT NULL,
+      model TEXT NOT NULL,
+      -- embedded_at is epoch SECONDS (INTEGER), NOT ISO datetime TEXT
+      embedded_at INTEGER NOT NULL
+    );
+    CREATE INDEX idx_service_embeddings_embedded_at
+      ON service_embeddings(embedded_at);
   `)
 
   return db
