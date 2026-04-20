@@ -49,6 +49,16 @@ const upsertEmbedding = db.prepare(`
     embedded_at = excluded.embedded_at
 `)
 
+// ─── Composition helper ──────────────────────────────────────────────────────
+
+/**
+ * Compose the embedding input text from a service row.
+ * Shared between generateEmbedding() and the backfill script.
+ */
+export function composeEmbeddingInput(service) {
+  return `${service.name}\n${service.description ?? ''}\n${service.category ?? ''}`
+}
+
 // ─── Core functions ───────────────────────────────────────────────────────────
 
 /**
@@ -113,7 +123,7 @@ export async function generateEmbedding(serviceId) {
       return
     }
 
-    const inputText = `${service.name}\n${service.description ?? ''}\n${service.category ?? ''}`
+    const inputText = composeEmbeddingInput(service)
     const embedding = await callOpenAI(inputText)
     if (!embedding) return
 
