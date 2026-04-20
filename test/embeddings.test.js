@@ -145,16 +145,33 @@ describe('embeddings module (#138)', () => {
   })
 
   // ─── Test c: generateEmbedding no-op when OPENAI_API_KEY unset ──────────────
-  it('c. generateEmbedding is no-op when OPENAI_API_KEY unset (fresh module)', async () => {
-    // We test this by spawning a child process with no key
+  it('c. generateEmbedding is no-op when OPENAI_API_KEY unset (env-guard coupled)', async () => {
+    // Spawn a child process with OPENAI_API_KEY='' and a fetch stub that throws on any call.
+    // This proves: (1) the exact disabled log line is emitted at module load,
+    // (2) fetch is never called (env guard short-circuits before network),
+    // (3) generateEmbedding resolves to undefined without doing work.
+    // Gutting the env-guard in embeddings.js will cause assertions (1) and (2) to fail.
     const { execFileSync } = await import('node:child_process')
-    const absPath = join(__dirname, '..', 'src', 'services', 'embeddings.js')
     const script = `
-      import('file://${absPath}').then(m => {
-        m.generateEmbedding('nonexistent-id').then(() => {
-          process.stdout.write('resolved')
-        })
-      })
+      // Stub fetch BEFORE importing — any call means the guard failed
+      let fetchCalled = false
+      globalThis.fetch = () => { fetchCalled = true; throw new Error('fetch should not be called') }
+
+      const m = await import('./src/services/embeddings.js')
+      const result = await m.generateEmbedding('nonexistent-id')
+
+      // generateEmbedding is async — when disabled, it should resolve to undefined
+      if (result !== undefined) {
+        process.stderr.write('ERROR: generateEmbedding resolved to ' + JSON.stringify(result) + ' instead of undefined')
+        process.exit(1)
+      }
+
+      if (fetchCalled) {
+        process.stderr.write('ERROR: fetch was called despite empty OPENAI_API_KEY')
+        process.exit(1)
+      }
+
+      process.stdout.write('PASS')
     `
     const result = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
       cwd: join(__dirname, '..'),
@@ -162,7 +179,10 @@ describe('embeddings module (#138)', () => {
       encoding: 'utf8',
       timeout: 10000,
     })
-    assert.ok(result.includes('resolved'), 'generateEmbedding should resolve when API key unset')
+    // Verify the disabled log line was printed (captures module-load-time guard)
+    assert.ok(result.includes('[embeddings] disabled'), 'stdout should contain the disabled log line')
+    assert.ok(result.includes('OPENAI_API_KEY not set'), 'disabled log should mention OPENAI_API_KEY not set')
+    assert.ok(result.includes('PASS'), 'child should complete without errors')
   })
 
   // ─── Test d: embedQuery returns Float32Array or null ─────────────────────────
@@ -281,128 +301,194 @@ describe('embeddings module (#138)', () => {
   })
 
   // ─── Test h: Writer-hook integration — registerUpsert fires embedding ───────
-  it('h. writer-hook: registerUpsert fires generateEmbedding on new insert', async () => {
-    // This test imports the actual route module and verifies the hook fires
-    let embeddingCalled = false
-    let calledWithId = null
+  it('h. writer-hook: POST /api/v1/register fires generateEmbedding on new insert', async () => {
+    // This test exercises the PRODUCTION hook wiring at src/routes/api.js:797
+    // by calling the real /register endpoint through test/helpers/server.js.
+    // Deleting the setImmediate line in api.js should cause this test to FAIL.
+    const { startServer, stopServer } = await import('./helpers/server.js')
 
-    // Monkey-patch generateEmbedding to spy
-    const embeddings = await import('../src/services/embeddings.js')
-    const originalGenerate = embeddings.generateEmbedding
+    // Valid x402 payment header for probe to accept
+    // Use realistic x402 payment requirements that pass validation (real USDC on Base)
+    const x402Accepts = [{ payTo: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', amount: '10000', network: 'eip155:8453' }]
+    const paymentHeaderB64 = Buffer.from(JSON.stringify({ accepts: x402Accepts })).toString('base64')
 
-    // We can't directly mock an ES module export, so we test via the integration:
-    // Insert a new service via registerUpsert and check that service_embeddings gets a row
-    globalThis.fetch = async () => makeEmbeddingResponse()
+    const fetchCalls = []
 
-    const url = `https://hook-test-${Date.now()}.example.com/api`
-    const params = {
-      id: `hook-test-${Date.now()}`,
-      name: 'Hook Test Service',
-      description: 'Testing writer hook',
-      url,
-      protocol: 'x402',
-      price_sats: null,
-      price_usd: 100,
-      payment_asset: 'USDC',
-      payment_network: 'base-sepolia',
-      category: 'test',
-      provider: 'test-provider',
-      contact_email: null,
-      http_method: 'GET',
-      probe_body: null,
-      hostname: 'hook-test.example.com',
+    // Routing fetch stub: intercepts server-internal calls (probe + OpenAI).
+    // Test's own HTTP calls to the local server go through http module (via fetch to 127.0.0.1).
+    globalThis.fetch = async (url, opts) => {
+      const urlStr = String(url)
+
+      // Let test's calls to the local server pass through to real fetch
+      if (urlStr.includes('127.0.0.1')) {
+        return originalFetch(url, opts)
+      }
+
+      fetchCalls.push({ url: urlStr, opts })
+
+      // OpenAI embedding call
+      if (urlStr.includes('api.openai.com') && urlStr.includes('embeddings')) {
+        return makeEmbeddingResponse()
+      }
+
+      // Probe call — return 402 with valid x402 PAYMENT-REQUIRED header
+      return {
+        ok: false,
+        status: 402,
+        headers: new Headers({ 'PAYMENT-REQUIRED': paymentHeaderB64, 'content-type': 'application/json' }),
+        text: async () => '',
+        json: async () => ({}),
+        arrayBuffer: async () => new ArrayBuffer(0),
+      }
     }
 
-    // Use registerUpsert directly
-    const { default: dbInstance } = await import('../src/db.js')
-    const registerUpsert = dbInstance.prepare(`
-      INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, http_method, probe_body, health_status, status, hostname)
-      VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, @http_method, @probe_body, 'healthy', 'pending', @hostname)
-      ON CONFLICT(url, protocol) DO UPDATE SET
-        name = excluded.name,
-        updated_at = datetime('now')
-      RETURNING *
-    `)
+    let BASE
+    try {
+      BASE = await startServer()
+      const uniquePath = `/api/embed-hook-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const registerUrl = `https://example.com${uniquePath}`
 
-    const service = registerUpsert.get(params)
-    assert.ok(service, 'service should be inserted')
-    assert.equal(service.registered_at, service.updated_at, 'new insert should have registered_at === updated_at')
+      const res = await fetch(`${BASE}/api/v1/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: registerUrl,
+          name: 'Embed Hook Test',
+          protocol: 'x402',
+        }),
+      })
 
-    // The hook fires via setImmediate, so we need to wait for it
-    // Import the module that contains the hook to trigger it manually
-    // Since the hook is in api.js routes (not available here without full server),
-    // we test the direct call pattern that SHOULD be in the writer path
-    const { generateEmbedding: gen } = await import('../src/services/embeddings.js')
-    // Simulate what the hook does:
-    setImmediate(() => gen(service.id).catch(() => {}))
+      const body = await res.json()
+      assert.equal(res.status, 201, `expected 201, got ${res.status}: ${JSON.stringify(body)}`)
+      const serviceId = body.service.id
 
-    // Wait for setImmediate + async work to complete
-    await new Promise(r => setTimeout(r, 200))
+      // Poll service_embeddings — the hook fires via setImmediate so we need to wait
+      let row = null
+      const delays = [50, 100, 200, 400, 800, 1600]
+      for (const delay of delays) {
+        await new Promise(r => setTimeout(r, delay))
+        row = db.prepare('SELECT * FROM service_embeddings WHERE service_id = ?').get(serviceId)
+        if (row) break
+      }
 
-    const row = db.prepare('SELECT * FROM service_embeddings WHERE service_id = ?').get(service.id)
-    assert.ok(row, 'embedding row should be created after hook fires')
-    assert.equal(row.model, 'text-embedding-3-small')
+      assert.ok(row, 'embedding row should exist in service_embeddings after hook fires')
+      assert.equal(row.model, 'text-embedding-3-small')
+      assert.equal(row.embedding.length, 6144, 'embedding BLOB should be 1536 floats × 4 bytes = 6144')
 
-    // Cleanup
-    cleanupService(service.id)
+      // Verify fetch was called with OpenAI embeddings request
+      const openaiCalls = fetchCalls.filter(c => c.url.includes('api.openai.com') && c.url.includes('embeddings'))
+      assert.equal(openaiCalls.length, 1, 'OpenAI embeddings fetch should be called exactly once')
+      const openaiBody = JSON.parse(openaiCalls[0].opts.body)
+      assert.equal(openaiBody.model, 'text-embedding-3-small', 'should request text-embedding-3-small model')
+
+      // Cleanup
+      cleanupService(serviceId)
+    } finally {
+      globalThis.fetch = originalFetch
+      await stopServer()
+    }
   })
 
   // ─── Test i: UPSERT-update does NOT fire embedding ──────────────────────────
-  it('i. writer-hook: UPSERT-update does NOT fire embedding (registered_at !== updated_at)', async () => {
-    globalThis.fetch = async () => makeEmbeddingResponse()
+  it('i. writer-hook: UPSERT-update does NOT fire embedding (second POST same URL)', async () => {
+    // This test exercises the PRODUCTION conditional at src/routes/api.js:795
+    // (registered_at === updated_at guard). Two POSTs to /register with same URL+protocol:
+    // first fires embedding (1 OpenAI call), second must NOT fire (still 1 total).
+    // Deleting the setImmediate line in api.js should cause this test to FAIL (0 calls).
+    const { startServer, stopServer } = await import('./helpers/server.js')
 
-    const url = `https://upsert-test-${Date.now()}.example.com/api`
-    const id = `upsert-test-${Date.now()}`
-    const params = {
-      id,
-      name: 'Upsert Test Service',
-      description: 'Testing no-fire on update',
-      url,
-      protocol: 'x402',
-      price_sats: null,
-      price_usd: 100,
-      payment_asset: 'USDC',
-      payment_network: 'base-sepolia',
-      category: 'test',
-      provider: 'test-provider',
-      contact_email: null,
-      http_method: 'GET',
-      probe_body: null,
-      hostname: 'upsert-test.example.com',
+    const x402Accepts = [{ payTo: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', asset: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', amount: '10000', network: 'eip155:8453' }]
+    const paymentHeaderB64 = Buffer.from(JSON.stringify({ accepts: x402Accepts })).toString('base64')
+
+    let openaiCallCount = 0
+
+    globalThis.fetch = async (url, opts) => {
+      const urlStr = String(url)
+
+      // Let test's calls to the local server pass through
+      if (urlStr.includes('127.0.0.1')) {
+        return originalFetch(url, opts)
+      }
+
+      // OpenAI embedding call
+      if (urlStr.includes('api.openai.com') && urlStr.includes('embeddings')) {
+        openaiCallCount++
+        return makeEmbeddingResponse()
+      }
+
+      // Probe call — return 402 with valid x402 headers
+      return {
+        ok: false,
+        status: 402,
+        headers: new Headers({ 'PAYMENT-REQUIRED': paymentHeaderB64, 'content-type': 'application/json' }),
+        text: async () => '',
+        json: async () => ({}),
+        arrayBuffer: async () => new ArrayBuffer(0),
+      }
     }
 
-    const registerUpsert = db.prepare(`
-      INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, contact_email, http_method, probe_body, health_status, status, hostname)
-      VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @provider, 'self-registered', @contact_email, @http_method, @probe_body, 'healthy', 'pending', @hostname)
-      ON CONFLICT(url, protocol) DO UPDATE SET
-        name = excluded.name,
-        updated_at = datetime('now')
-      RETURNING *
-    `)
+    let BASE
+    try {
+      BASE = await startServer()
+      const uniquePath = `/api/upsert-hook-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const registerUrl = `https://example.com${uniquePath}`
 
-    // First insert
-    const service1 = registerUpsert.get(params)
-    assert.equal(service1.registered_at, service1.updated_at, 'first insert: registered_at === updated_at')
+      // First POST — new registration, hook SHOULD fire
+      const res1 = await fetch(`${BASE}/api/v1/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: registerUrl, name: 'Upsert Test', protocol: 'x402' }),
+      })
+      const body1 = await res1.json()
+      assert.equal(res1.status, 201, `first POST expected 201, got ${res1.status}: ${JSON.stringify(body1)}`)
+      const serviceId = body1.service.id
 
-    // Backdate registered_at so next upsert (same second) will have updated_at > registered_at
-    db.prepare("UPDATE services SET registered_at = datetime('now', '-1 minute') WHERE id = ?").run(service1.id)
+      // Wait for the first hook's setImmediate + async embedding to complete
+      let row = null
+      const delays = [50, 100, 200, 400, 800, 1600]
+      for (const delay of delays) {
+        await new Promise(r => setTimeout(r, delay))
+        row = db.prepare('SELECT * FROM service_embeddings WHERE service_id = ?').get(serviceId)
+        if (row) break
+      }
+      assert.ok(row, 'first POST should produce an embedding row')
+      assert.equal(openaiCallCount, 1, 'first POST should trigger exactly 1 OpenAI call')
 
-    // Second call (update) — use different id to avoid PK conflict on services.id
-    const params2 = { ...params, id: `upsert-test-2-${Date.now()}` }
-    const service2 = registerUpsert.get(params2)
-    assert.notEqual(service2.registered_at, service2.updated_at, 'second call: registered_at !== updated_at (it was an update)')
+      // Ensure at least 1 second passes so SQLite datetime('now') differs from registered_at
+      // (datetime precision is seconds — without this, the upsert's updated_at may equal registered_at)
+      const firstRegisteredAt = db.prepare('SELECT registered_at FROM services WHERE id = ?').get(serviceId).registered_at
+      while (true) {
+        const now = db.prepare("SELECT datetime('now') as t").get().t
+        if (now !== firstRegisteredAt) break
+        await new Promise(r => setTimeout(r, 100))
+      }
 
-    // The hook should NOT fire for updates
-    // Verify the condition: registered_at !== updated_at means skip
-    let hookFired = false
-    if (service2.registered_at === service2.updated_at) {
-      hookFired = true
+      // Second POST — same URL + protocol, triggers UPSERT-update branch where registered_at !== updated_at
+      const res2 = await fetch(`${BASE}/api/v1/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: registerUrl, name: 'Upsert Test Updated', protocol: 'x402' }),
+      })
+      const body2 = await res2.json()
+      assert.equal(res2.status, 201, `second POST expected 201, got ${res2.status}: ${JSON.stringify(body2)}`)
+
+      // Drain event loop — any pending setImmediate from second POST would fire here
+      await new Promise(r => setImmediate(r))
+      await new Promise(r => setTimeout(r, 200))
+
+      // Assert: still exactly 1 OpenAI call (second POST did NOT fire the hook)
+      assert.equal(openaiCallCount, 1, 'second POST (upsert-update) must NOT trigger another OpenAI call')
+
+      // Assert: still exactly 1 embedding row
+      const rowCount = db.prepare('SELECT COUNT(*) as c FROM service_embeddings WHERE service_id = ?').get(serviceId).c
+      assert.equal(rowCount, 1, 'should have exactly 1 embedding row, not 2')
+
+      // Cleanup
+      cleanupService(serviceId)
+    } finally {
+      globalThis.fetch = originalFetch
+      await stopServer()
     }
-    assert.equal(hookFired, false, 'hook should NOT fire when registered_at !== updated_at')
-
-    // Cleanup
-    cleanupService(service1.id)
-    try { db.prepare('DELETE FROM services WHERE url = ?').run(url) } catch {}
   })
 
   // ─── Test j: /api/v1/health exposes embedding_queue_depth ───────────────────
