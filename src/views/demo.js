@@ -313,6 +313,16 @@ Content-Type: application/json
       return '<span class="badge ' + cls + '">' + safe + '</span>'
     }
 
+    function verifiedBadgeHtml(svc) {
+      if (svc.domain_verified === 1) {
+        return '<span class="badge badge-verified-domain" title="Domain Verified"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 16l-4-4 1.41-1.41L11 14.17l6.59-6.59L19 9l-8 8z"/></svg></span>'
+      }
+      if (svc.x402_payment_valid === 1 || svc.health_status === 'healthy') {
+        return '<span class="badge badge-verified-payment" title="Payment Verified"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg></span>'
+      }
+      return ''
+    }
+
     function renderResults(data) {
       if (!data.services || data.services.length === 0) {
         resultsContainer.innerHTML = '<p class="demo-search-hint">No services found matching your criteria.</p>'
@@ -324,7 +334,7 @@ Content-Type: application/json
       for (const svc of visible) {
         html += '<div class="demo-result-card" data-id="' + escapeHtmlClient(svc.id) + '">'
         html += '<div class="demo-result-summary">'
-        html += '<div class="demo-result-name">' + escapeHtmlClient(svc.name) + '</div>'
+        html += '<div class="demo-result-name">' + escapeHtmlClient(svc.name) + verifiedBadgeHtml(svc) + '</div>'
         html += '<div class="demo-result-meta">'
         html += protocolBadgeHtml(svc.protocol) + ' '
         html += healthDotHtml(svc.health_status) + ' '
