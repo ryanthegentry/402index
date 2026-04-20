@@ -34,6 +34,7 @@ server.tool(
     health: z.enum(['healthy', 'degraded', 'down', 'unknown']).optional().describe('Filter by health status'),
     source: z.enum(['bazaar', 'satring', 'l402apps', 'sponge', 'l402directory', 'mpp', 'discovery', 'self-registered']).optional().describe('Filter by source'),
     featured: z.boolean().optional().describe('Only featured services'),
+    verified: z.boolean().optional().describe('Only payment-verified services (x402: valid payment headers, L402/MPP: healthy). Domain-verified ranked first. Recommended for agents making payment decisions.'),
     q: z.string().optional().describe('Search by name, description, or URL'),
     max_price_usd: z.number().optional().describe('Maximum price in USD'),
     sort: z.enum(['name', 'price', 'latency', 'uptime']).optional().describe('Sort field'),
@@ -49,6 +50,7 @@ server.tool(
       if (params.health) queryParams.health = params.health
       if (params.source) queryParams.source = params.source
       if (params.featured) queryParams.featured = 'true'
+      if (params.verified) queryParams.verified = 'true'
       if (params.q) queryParams.q = params.q
       if (params.max_price_usd !== undefined) queryParams.max_price_usd = String(params.max_price_usd)
       if (params.sort) queryParams.sort = params.sort

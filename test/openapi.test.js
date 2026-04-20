@@ -240,6 +240,24 @@ describe('llms.txt content', async () => {
   })
 })
 
+// ─── Verified param + domain_verified field — OpenAPI spec (#125) ────────────
+
+describe('OpenAPI spec — verified param and domain_verified field', async () => {
+  const { openapiSpec } = await import('../src/openapi.js')
+  const servicesPath = openapiSpec.paths['/api/v1/services']
+  const schemas = openapiSpec.components?.schemas
+
+  it('parameters include verified', () => {
+    const paramNames = servicesPath.get.parameters.map(p => p.name)
+    assert.ok(paramNames.includes('verified'), 'Missing parameter: verified')
+  })
+
+  it('Service schema includes domain_verified as integer', () => {
+    const prop = schemas.Service.properties.domain_verified
+    assert.ok(prop, 'domain_verified missing from Service schema')
+  })
+})
+
 // ─── Dual-protocol fields — OpenAPI spec (#90) ─────────────────────────────
 
 describe('OpenAPI spec — dual-protocol fields', async () => {
