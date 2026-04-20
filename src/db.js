@@ -51,6 +51,9 @@ if (process.env.DISABLE_SQLITE_VEC === '1') {
   console.log('[db] sqlite-vec disabled via DISABLE_SQLITE_VEC=1')
 } else {
   try {
+    if (process.env.FORCE_SQLITE_VEC_FAIL === '1') {
+      throw new Error('forced failure via FORCE_SQLITE_VEC_FAIL=1')
+    }
     const require = createRequire(import.meta.url)
     const sqliteVec = require('sqlite-vec')
     sqliteVec.load(db)
@@ -60,6 +63,7 @@ if (process.env.DISABLE_SQLITE_VEC === '1') {
     console.warn(`[db] sqlite-vec unavailable, falling back to pure-JS cosine: ${err.message}`)
   }
 }
+console.log(`[db] SQLITE_VEC_AVAILABLE=${SQLITE_VEC_AVAILABLE}`)
 export { SQLITE_VEC_AVAILABLE }
 
 db.exec(`
