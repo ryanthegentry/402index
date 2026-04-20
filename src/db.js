@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import { mkdirSync, unlinkSync, existsSync, statSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { createRequire } from 'module'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 export const DB_PATH = process.env.DB_PATH || join(__dirname, '..', 'data', '402index.db')
@@ -43,6 +44,27 @@ if (currentAutoVacuum !== 2) { // 2 = INCREMENTAL
   db.exec('VACUUM')
   console.log('[db] VACUUM complete, auto_vacuum=INCREMENTAL enabled')
 }
+
+// ─── sqlite-vec extension (optional) ─────────────────────────────────────────
+let SQLITE_VEC_AVAILABLE = false
+if (process.env.DISABLE_SQLITE_VEC === '1') {
+  console.log('[db] sqlite-vec disabled via DISABLE_SQLITE_VEC=1')
+} else {
+  try {
+    if (process.env.FORCE_SQLITE_VEC_FAIL === '1') {
+      throw new Error('forced failure via FORCE_SQLITE_VEC_FAIL=1')
+    }
+    const require = createRequire(import.meta.url)
+    const sqliteVec = require('sqlite-vec')
+    sqliteVec.load(db)
+    SQLITE_VEC_AVAILABLE = true
+    console.log('[db] sqlite-vec loaded')
+  } catch (err) {
+    console.warn(`[db] sqlite-vec unavailable, falling back to pure-JS cosine: ${err.message}`)
+  }
+}
+console.log(`[db] SQLITE_VEC_AVAILABLE=${SQLITE_VEC_AVAILABLE}`)
+export { SQLITE_VEC_AVAILABLE }
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS services (
@@ -548,6 +570,22 @@ try {
   console.warn(`[db] FTS5 cleanup note: ${err.message}`)
 }
 
+// ─── Service Embeddings (semantic search foundation, #136) ───────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS service_embeddings (
+    service_id TEXT PRIMARY KEY
+      REFERENCES services(id) ON DELETE NO ACTION,
+    embedding BLOB NOT NULL,
+    model TEXT NOT NULL,
+    -- embedded_at is epoch SECONDS (INTEGER), NOT ISO datetime TEXT.
+    -- Intentional break from the services-table TEXT convention: enables
+    -- fast range comparisons and compact storage for hot-path ranking queries.
+    embedded_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_service_embeddings_embedded_at
+    ON service_embeddings(embedded_at);
+`)
 
 // ─── Daily Snapshots ────────────────────────────────────────────────────────
 
