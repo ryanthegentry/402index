@@ -4,16 +4,28 @@
 // NOT wired into boot, cron, or CI. Run manually:
 //   node scripts/backfill-embeddings.mjs --yes [--dry-run] [--force] [--batch-size N] [--rate-limit N]
 
-import db from '../src/db.js'
-import { composeEmbeddingInput } from '../src/services/embeddings.js'
-
 const MODEL = 'text-embedding-3-small'
 const DIMENSIONS = 1536
+
+// ─── Usage ───────────────────────────────────────────────────────────────────
+
+function printUsage() {
+  console.log('Usage: node scripts/backfill-embeddings.mjs --yes [--dry-run] [--force] [--batch-size N] [--rate-limit N]')
+  console.log('')
+  console.log('Flags:')
+  console.log('  --help, -h     Show this help message')
+  console.log('  --yes          Required to proceed (safety gate)')
+  console.log('  --dry-run      Print counts and exit without calling OpenAI')
+  console.log('  --force        Re-embed rows that already have embeddings')
+  console.log('  --batch-size N Rows per batch (default 50)')
+  console.log('  --rate-limit N Milliseconds between batches (default 3000)')
+}
 
 // ─── Argument parsing ────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
   const args = {
+    help: false,
     yes: false,
     dryRun: false,
     force: false,
@@ -22,7 +34,8 @@ function parseArgs(argv) {
   }
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]
-    if (arg === '--yes') args.yes = true
+    if (arg === '--help' || arg === '-h') args.help = true
+    else if (arg === '--yes') args.yes = true
     else if (arg === '--dry-run') args.dryRun = true
     else if (arg === '--force') args.force = true
     else if (arg === '--batch-size' && argv[i + 1]) args.batchSize = parseInt(argv[++i], 10)
@@ -33,19 +46,20 @@ function parseArgs(argv) {
 
 // ─── OpenAI caller with retries ──────────────────────────────────────────────
 
-async function callOpenAIWithRetry(text, apiKey) {
+async function callOpenAIWithRetry(text, apiKey, url) {
   const delays = [1000, 2000, 4000]
   let lastErr
 
   for (let attempt = 0; attempt <= 2; attempt++) {
     try {
-      const res = await fetch('https://api.openai.com/v1/embeddings', {
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({ model: MODEL, input: text }),
+        signal: AbortSignal.timeout(30_000),
       })
 
       if (!res.ok) {
@@ -76,15 +90,13 @@ async function callOpenAIWithRetry(text, apiKey) {
 async function main() {
   const args = parseArgs(process.argv)
 
+  if (args.help) {
+    printUsage()
+    process.exit(0)
+  }
+
   if (!args.yes) {
-    console.log('Usage: node scripts/backfill-embeddings.mjs --yes [--dry-run] [--force] [--batch-size N] [--rate-limit N]')
-    console.log('')
-    console.log('Flags:')
-    console.log('  --yes          Required to proceed (safety gate)')
-    console.log('  --dry-run      Print counts and exit without calling OpenAI')
-    console.log('  --force        Re-embed rows that already have embeddings')
-    console.log('  --batch-size N Rows per batch (default 50)')
-    console.log('  --rate-limit N Milliseconds between batches (default 3000)')
+    printUsage()
     process.exit(1)
   }
 
@@ -93,6 +105,10 @@ async function main() {
     console.error('Error: OPENAI_API_KEY environment variable is not set')
     process.exit(1)
   }
+
+  // Dynamic imports — inside main() so the outer try/catch handles init errors
+  const { default: db } = await import('../src/db.js')
+  const { composeEmbeddingInput, OPENAI_EMBEDDINGS_URL } = await import('../src/services/embeddings.js')
 
   // Query for services needing embeddings
   const query = args.force
@@ -117,7 +133,6 @@ async function main() {
 
   const startTime = Date.now()
   let embedded = 0
-  let skipped = 0
   let failed = 0
 
   const upsert = db.prepare(`
@@ -137,7 +152,7 @@ async function main() {
       const inputText = composeEmbeddingInput(service)
 
       try {
-        const embedding = await callOpenAIWithRetry(inputText, apiKey)
+        const embedding = await callOpenAIWithRetry(inputText, apiKey, OPENAI_EMBEDDINGS_URL)
         const blob = Buffer.from(embedding.buffer)
         const embeddedAt = Math.floor(Date.now() / 1000)
         upsert.run(service.id, blob, MODEL, embeddedAt)
@@ -161,7 +176,7 @@ async function main() {
   const orphansDeleted = orphanResult.changes
 
   const elapsedSeconds = Math.round((Date.now() - startTime) / 1000)
-  const summary = { embedded, skipped: services.length - embedded - failed, failed, orphans_deleted: orphansDeleted, elapsed_seconds: elapsedSeconds }
+  const summary = { total: services.length, embedded, failed, orphans_deleted: orphansDeleted, elapsed_seconds: elapsedSeconds }
   console.log(JSON.stringify(summary))
 
   process.exit(failed > 0 ? 2 : 0)
