@@ -47,10 +47,22 @@ describe('service_embeddings schema (#136)', () => {
     assert.ok(row, 'idx_service_embeddings_embedded_at index should exist')
   })
 
-  it('migration is idempotent — importing db.js twice does not throw', () => {
-    // db.js already ran on import. Running the CREATE TABLE IF NOT EXISTS
-    // again should be safe. We verify by checking the table still exists
-    // and has the right shape (no duplicates, no errors).
+  it('migration is idempotent — re-running CREATE TABLE + INDEX does not throw', () => {
+    // Actually re-execute the migration SQL (not just re-read pragma)
+    assert.doesNotThrow(() => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS service_embeddings (
+          service_id TEXT PRIMARY KEY
+            REFERENCES services(id) ON DELETE NO ACTION,
+          embedding BLOB NOT NULL,
+          model TEXT NOT NULL,
+          embedded_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_service_embeddings_embedded_at
+          ON service_embeddings(embedded_at);
+      `)
+    })
+    // Verify schema unchanged after re-run
     const cols = db.pragma("table_info('service_embeddings')")
     assert.equal(cols.length, 4)
   })
@@ -60,17 +72,14 @@ describe('service_embeddings schema (#136)', () => {
       'SQLITE_VEC_AVAILABLE should be a boolean')
   })
 
-  it('DISABLE_SQLITE_VEC=1 results in SQLITE_VEC_AVAILABLE=false and no crash', () => {
-    // Spawn a child process with DISABLE_SQLITE_VEC=1 to test the env guard
-    const result = execFileSync(process.execPath, [
+  it('DISABLE_SQLITE_VEC=1 results in SQLITE_VEC_AVAILABLE=false (stdout verified)', () => {
+    // Spawn a child process with DISABLE_SQLITE_VEC=1, capture stdout
+    const stdout = execFileSync(process.execPath, [
       '--input-type=module',
       '-e',
       `
         import { SQLITE_VEC_AVAILABLE } from './src/db.js'
-        if (SQLITE_VEC_AVAILABLE !== false) {
-          process.exit(1)
-        }
-        process.exit(0)
+        process.exit(SQLITE_VEC_AVAILABLE === false ? 0 : 1)
       `
     ], {
       cwd: join(__dirname, '..'),
@@ -79,38 +88,38 @@ describe('service_embeddings schema (#136)', () => {
         DB_PATH: ':memory:',
         DISABLE_SQLITE_VEC: '1'
       },
+      stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 10000
     })
+    // Verify stdout contains the diagnostic line
+    const out = stdout.toString()
+    assert.ok(out.includes('SQLITE_VEC_AVAILABLE=false'),
+      `Expected stdout to contain SQLITE_VEC_AVAILABLE=false, got: ${out}`)
   })
 
-  it('extension-unavailable path sets SQLITE_VEC_AVAILABLE=false without crashing', () => {
-    // Spawn a child process where sqlite-vec will fail to load
-    // (either not installed or we force a failure via NODE_OPTIONS)
-    const result = execFileSync(process.execPath, [
+  it('FORCE_SQLITE_VEC_FAIL=1 sets SQLITE_VEC_AVAILABLE=false without crashing', () => {
+    // FORCE_SQLITE_VEC_FAIL=1 throws inside try block even when sqlite-vec is installed
+    const stdout = execFileSync(process.execPath, [
       '--input-type=module',
       '-e',
       `
-        // Simulate sqlite-vec not being available by poisoning the resolve
-        import { register } from 'node:module'
-        // Just import db.js — if sqlite-vec is not installed, it should
-        // still boot and set SQLITE_VEC_AVAILABLE=false
-        const { SQLITE_VEC_AVAILABLE } = await import('./src/db.js')
-        if (typeof SQLITE_VEC_AVAILABLE !== 'boolean') {
-          console.error('SQLITE_VEC_AVAILABLE is not a boolean')
-          process.exit(1)
-        }
-        // Server booted successfully
-        process.exit(0)
+        import { SQLITE_VEC_AVAILABLE } from './src/db.js'
+        process.exit(SQLITE_VEC_AVAILABLE === false ? 0 : 1)
       `
     ], {
       cwd: join(__dirname, '..'),
       env: {
         ...process.env,
         DB_PATH: ':memory:',
-        DISABLE_SQLITE_VEC: '0'  // don't disable — let it try and fail naturally
+        DISABLE_SQLITE_VEC: '0',
+        FORCE_SQLITE_VEC_FAIL: '1'
       },
+      stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 10000
     })
+    const out = stdout.toString()
+    assert.ok(out.includes('SQLITE_VEC_AVAILABLE=false'),
+      `Expected stdout to contain SQLITE_VEC_AVAILABLE=false, got: ${out}`)
   })
 
   it('no CREATE TRIGGER touching service_embeddings or services in db.js', () => {
@@ -130,5 +139,40 @@ describe('service_embeddings schema (#136)', () => {
       row.sql.includes('ON DELETE NO ACTION'),
       `FK should specify ON DELETE NO ACTION, got: ${row.sql}`
     )
+  })
+
+  it('vec_version() returns a valid semver when sqlite-vec is available', { skip: !SQLITE_VEC_AVAILABLE && 'sqlite-vec not loaded' }, () => {
+    const row = db.prepare('SELECT vec_version() as v').get()
+    assert.match(row.v, /^v?\d+\.\d+\.\d+/, `Expected semver, got: ${row.v}`)
+  })
+
+  it('FK runtime — DELETE parent with child embedding is rejected', () => {
+    const testId = '__fk_test_' + Date.now()
+    // Insert a service row
+    db.prepare(`
+      INSERT INTO services (id, name, url, protocol, source)
+      VALUES (?, 'FK Test', 'http://example.com', 'L402', 'test')
+    `).run(testId)
+    // Insert a child embedding row
+    db.prepare(`
+      INSERT INTO service_embeddings (service_id, embedding, model, embedded_at)
+      VALUES (?, X'00', 'test-model', 1)
+    `).run(testId)
+
+    // Deleting the parent must throw FK constraint
+    assert.throws(
+      () => db.prepare('DELETE FROM services WHERE id = ?').run(testId),
+      (err) => err.message.includes('FOREIGN KEY constraint failed'),
+      'Expected FK constraint error when deleting parent'
+    )
+
+    // Clean up (child first, then parent)
+    db.prepare('DELETE FROM service_embeddings WHERE service_id = ?').run(testId)
+    db.prepare('DELETE FROM services WHERE id = ?').run(testId)
+  })
+
+  it('PRAGMA foreign_keys is enabled', () => {
+    const fk = db.pragma('foreign_keys', { simple: true })
+    assert.equal(fk, 1, 'foreign_keys pragma should be 1 (ON)')
   })
 })
