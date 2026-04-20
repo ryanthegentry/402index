@@ -304,18 +304,6 @@ describe('backfill-embeddings script (#140)', () => {
     )
   })
 
-  it('j: existing full test suite still passes', () => {
-    execFileSync(process.execPath, [
-      '--test', join(ROOT, 'test', 'db-embeddings-schema.test.js')
-    ], {
-      cwd: ROOT,
-      env: { ...process.env, DB_PATH: ':memory:', ADMIN_SECRET: 'test-secret', DIGEST_API_KEY: 'test-digest-key' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 30000,
-    })
-    assert.ok(true, 'embeddings schema tests still pass')
-  })
-
   it('k: fatal error — unwritable DB path exits 1 with Fatal:', () => {
     const code = `
       process.argv = ['node', '${SCRIPT.replace(/\\/g, '\\\\')}', '--yes']
