@@ -1,6 +1,6 @@
 import { describe, it, before, after, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -148,8 +148,9 @@ describe('embeddings module (#138)', () => {
   it('c. generateEmbedding is no-op when OPENAI_API_KEY unset (fresh module)', async () => {
     // We test this by spawning a child process with no key
     const { execFileSync } = await import('node:child_process')
+    const absPath = join(__dirname, '..', 'src', 'services', 'embeddings.js')
     const script = `
-      import('../src/services/embeddings.js').then(m => {
+      import('file://${absPath}').then(m => {
         m.generateEmbedding('nonexistent-id').then(() => {
           process.stdout.write('resolved')
         })
@@ -383,7 +384,10 @@ describe('embeddings module (#138)', () => {
     const service1 = registerUpsert.get(params)
     assert.equal(service1.registered_at, service1.updated_at, 'first insert: registered_at === updated_at')
 
-    // Second call (update) — use different id to avoid PK conflict
+    // Backdate registered_at so next upsert (same second) will have updated_at > registered_at
+    db.prepare("UPDATE services SET registered_at = datetime('now', '-1 minute') WHERE id = ?").run(service1.id)
+
+    // Second call (update) — use different id to avoid PK conflict on services.id
     const params2 = { ...params, id: `upsert-test-2-${Date.now()}` }
     const service2 = registerUpsert.get(params2)
     assert.notEqual(service2.registered_at, service2.updated_at, 'second call: registered_at !== updated_at (it was an update)')
@@ -420,8 +424,6 @@ describe('embeddings module (#138)', () => {
 
   // ─── Test k: No CREATE TRIGGER in source ────────────────────────────────────
   it('k. no CREATE TRIGGER touching services or service_embeddings in src/', () => {
-    const { readdirSync } = await import('node:fs')
-
     // Check src/db.js
     const dbSource = readFileSync(join(__dirname, '..', 'src', 'db.js'), 'utf8')
     const triggerMatches = dbSource.match(/CREATE\s+TRIGGER/gi) || []

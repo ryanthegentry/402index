@@ -1,6 +1,7 @@
 import db from '../db.js'
 import { normalizeMppEndpoint } from './mpp-utils.js'
 import { extractHostname } from '../services/url-normalize.js'
+import { generateEmbedding } from '../services/embeddings.js'
 
 const MPP_API = 'https://mpp.dev/api/services'
 
@@ -30,6 +31,7 @@ const upsertEndpoint = () => stmt('mppUpsert', `
     END,
     updated_at = datetime('now')
     WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
+  RETURNING *
 `)
 
 const findExisting = () => stmt('mppFindExisting', "SELECT id FROM services WHERE url = ? AND protocol = 'MPP'")
@@ -66,9 +68,14 @@ export async function pollMPP() {
 
         record.hostname = extractHostname(record.url)
         const existing = findExisting().get(record.url)
-        upsertEndpoint().run(record)
+        const row = upsertEndpoint().get(record)
         if (existing) updatedCount++
-        else newCount++
+        else {
+          newCount++
+          if (row && row.registered_at === row.updated_at) {
+            setImmediate(() => generateEmbedding(row.id).catch(() => {}))
+          }
+        }
       } catch (err) {
         errorCount++
         if (errorCount <= 5) console.error(`[mpp] Error processing ${svc.name} ${ep.path}:`, err.message)
