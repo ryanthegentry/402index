@@ -2,6 +2,7 @@ import db from '../db.js'
 import { fetchBtcUsdRate, getCachedBtcUsdRate } from '../services/btc-price.js'
 import { parseL402AppsHtml, normalizeApi } from './l402apps-utils.js'
 import { extractHostname } from '../services/url-normalize.js'
+import { generateEmbedding } from '../services/embeddings.js'
 
 const L402APPS_URL = 'https://www.l402apps.com'
 
@@ -29,6 +30,7 @@ const upsertNew = () => stmt('upsertNew', `
     END,
     updated_at = datetime('now')
     WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
+  RETURNING *
 `)
 
 const findExisting = () => stmt('findExisting', "SELECT id, source FROM services WHERE url = ? AND protocol = 'L402'")
@@ -70,9 +72,14 @@ export async function pollL402Apps() {
 
       normalized.hostname = extractHostname(normalized.url)
       const existing = findExisting().get(normalized.url)
-      upsertNew().run(normalized)
+      const row = upsertNew().get(normalized)
       if (existing) updatedCount++
-      else newCount++
+      else {
+        newCount++
+        if (row && row.registered_at === row.updated_at) {
+          setImmediate(() => generateEmbedding(row.id).catch(() => {}))
+        }
+      }
     } catch (err) {
       errorCount++
       if (errorCount <= 5) console.error(`[l402apps] Error processing API ${api.name}:`, err.message)

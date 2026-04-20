@@ -15,6 +15,7 @@ import { getSnapshots } from '../services/daily-snapshot.js'
 import { openapiSpec, generateMarkdownDocs } from '../openapi.js'
 import { initiateClaim, verifyClaim, editService, revokeClaim, deleteService, bulkDeleteServices } from '../services/domain-verify.js'
 import { decode as decodeBolt11 } from 'light-bolt11-decoder'
+import { generateEmbedding, getQueueDepth } from '../services/embeddings.js'
 
 const router = Router()
 
@@ -257,6 +258,7 @@ router.get('/health', (req, res) => {
       last_l402apps_sync: lastL402AppsSync,
       last_mpp_sync: lastMppSync,
       last_health_check_run: lastHealthCheck,
+      embedding_queue_depth: getQueueDepth(),
     })
   } catch (err) {
     console.error('GET /api/v1/health error:', err)
@@ -792,6 +794,7 @@ router.post('/register', async (req, res) => {
     // Fire-and-forget event distribution (webhooks, Nostr, email — only on genuinely new registrations)
     if (service.registered_at === service.updated_at) {
       emit('service.new', service, db)
+      setImmediate(() => generateEmbedding(service.id).catch(() => {}))
     }
 
     // ── Bonus row creation for additional detected protocols ──────────────
@@ -852,6 +855,7 @@ router.post('/register', async (req, res) => {
       // Fire event for genuinely new bonus registrations
       if (bonusService.registered_at === bonusService.updated_at) {
         emit('service.new', bonusService, db)
+        setImmediate(() => generateEmbedding(bonusService.id).catch(() => {}))
       }
 
       alsoRegistered.push(bonusService)
@@ -1464,6 +1468,11 @@ router.post('/admin/protocol-changes/:id/approve', (req, res) => {
   }
 
   const newService = registerUpsert().get(bonusParams)
+
+  // Fire embedding for genuinely new protocol-change rows
+  if (newService.registered_at === newService.updated_at) {
+    setImmediate(() => generateEmbedding(newService.id).catch(() => {}))
+  }
 
   // Set to active with admin-protocol-change approval reason and correct source
   db.prepare(

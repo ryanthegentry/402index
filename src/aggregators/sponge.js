@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import db from '../db.js'
 import { normalizeUrl, extractHostname } from '../services/url-normalize.js'
 import { categorize } from './l402apps-utils.js'
+import { generateEmbedding } from '../services/embeddings.js'
 
 const SPONGE_API = 'https://api.catalog.paysponge.com/api/services'
 
@@ -29,6 +30,7 @@ const upsertEndpoint = () => stmt('spongeUpsert', `
     END,
     updated_at = datetime('now')
     WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
+  RETURNING *
 `)
 
 const findExisting = () => stmt('spongeFindExisting', "SELECT id FROM services WHERE url = ? AND protocol = 'x402'")
@@ -103,9 +105,14 @@ export async function pollSponge() {
 
         record.hostname = extractHostname(fullUrl)
         const existing = findExisting().get(fullUrl)
-        upsertEndpoint().run(record)
+        const row = upsertEndpoint().get(record)
         if (existing) updatedCount++
-        else newCount++
+        else {
+          newCount++
+          if (row && row.registered_at === row.updated_at) {
+            setImmediate(() => generateEmbedding(row.id).catch(() => {}))
+          }
+        }
       }
     } catch (err) {
       errorCount++

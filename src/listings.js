@@ -5,6 +5,7 @@ import yaml from 'js-yaml'
 import { randomUUID } from 'crypto'
 import db from './db.js'
 import { normalizeUrl, extractHostname } from './services/url-normalize.js'
+import { generateEmbedding } from './services/embeddings.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const LISTINGS_DIR = join(__dirname, '..', 'listings')
@@ -33,6 +34,7 @@ const upsert = () => stmt('upsert', `
     provider = excluded.provider,
     hostname = COALESCE(excluded.hostname, services.hostname),
     updated_at = datetime('now')
+  RETURNING *
 `)
 
 /**
@@ -58,7 +60,7 @@ export function loadListings() {
       }
 
       const listingUrl = normalizeUrl(listing.url)
-      upsert().run({
+      const row = upsert().get({
         id: randomUUID(),
         name: listing.name || 'Unknown',
         description: listing.description || null,
@@ -75,6 +77,9 @@ export function loadListings() {
         provider: listing.provider || null,
         source_id: file,
       })
+      if (row && row.registered_at === row.updated_at) {
+        setImmediate(() => generateEmbedding(row.id).catch(() => {}))
+      }
       loaded++
     } catch (err) {
       console.error(`[listings] Error loading ${file}:`, err.message)
