@@ -80,6 +80,51 @@ export const digestLimiter = rateLimit({
 })
 
 /**
+ * Query rate limiters: guard the ?q= semantic-search path against OpenAI cost abuse.
+ * Both limiters skip when ?q= is absent or '*' (no OpenAI call) and when the
+ * request is L402-verified (already paid, passes through l402Limiter instead).
+ *
+ * Env vars: QUERY_RATE_LIMIT_PER_MIN (default 30), QUERY_RATE_LIMIT_PER_HOUR (default 500).
+ */
+function isQueryRequest(req) {
+  return Boolean(req.query.q) && req.query.q !== '*' && req.l402Verified !== true
+}
+
+export const queryRateLimiterMin = rateLimit({
+  windowMs: 60_000,
+  limit: parseInt(process.env.QUERY_RATE_LIMIT_PER_MIN) || 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+  validate: { keyGeneratorIpFallback: false },
+  skip: (req) => !isQueryRequest(req),
+  handler: (_req, res) => {
+    res.status(429).set('Retry-After', '60').json({
+      error: 'Too Many Requests',
+      message: `Query rate limit exceeded. Limit: ${parseInt(process.env.QUERY_RATE_LIMIT_PER_MIN) || 30} per minute.`,
+      retry_after: 60,
+    })
+  },
+})
+
+export const queryRateLimiterHour = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: parseInt(process.env.QUERY_RATE_LIMIT_PER_HOUR) || 500,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+  validate: { keyGeneratorIpFallback: false },
+  skip: (req) => !isQueryRequest(req),
+  handler: (_req, res) => {
+    res.status(429).set('Retry-After', '3600').json({
+      error: 'Too Many Requests',
+      message: `Query rate limit exceeded. Limit: ${parseInt(process.env.QUERY_RATE_LIMIT_PER_HOUR) || 500} per hour.`,
+      retry_after: 3600,
+    })
+  },
+})
+
+/**
  * L402 tier rate limiter: 1000 req/min, only applies to L402-verified requests.
  * @type {import('express').RequestHandler}
  */
