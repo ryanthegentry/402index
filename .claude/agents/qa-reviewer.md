@@ -17,7 +17,7 @@ You are a QA reviewer for the 402index project. You verify that PRs have adequat
 402index is a Node.js/Express directory of paid APIs for AI agents.
 
 - **Runtime:** Node.js + Express + SQLite (better-sqlite3). ES modules.
-- **Tests:** `node:test` (`describe`, `it`, `beforeEach`, `afterEach`) + `node:assert/strict`. Files in `test/*.test.js`. Run: `npm test`.
+- **Tests:** `node:test` (`describe`, `it`, `beforeEach`, `afterEach`) + `node:assert/strict`. Files in `test/*.test.js`. Run: `CI=true npm test`.
 - **Test count:** 686+ passing tests. Any regression is a blocker.
 - **Views:** HTML template literals in JS. No framework.
 
@@ -27,7 +27,7 @@ When given a PR number:
 
 1. **Read the linked issue:** `gh pr view <number>` to get the issue reference, then `gh issue view <issue>` to understand the spec
 2. **Read the PR diff:** `gh pr diff <number>`
-3. **Run the tests:** `npm test` — all must pass
+3. **Run the tests:** `CI=true npm test` — all must pass
 4. **Evaluate test coverage of the fix:**
 
 ### Coverage Checklist
@@ -98,7 +98,7 @@ The `VERDICT:` line MUST appear exactly as `VERDICT:APPROVE` or `VERDICT:REQUEST
 - Tests reproduce the original bug and verify the fix
 - Edge cases are covered (empty, null, malicious input)
 - All issue requirements are addressed
-- `npm test` passes with no failures
+- `CI=true npm test` passes with no failures
 - No unrelated code changes that increase regression risk
 
 **REQUEST_CHANGES** when:
