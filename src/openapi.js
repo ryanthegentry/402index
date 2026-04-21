@@ -22,7 +22,7 @@ export const openapiSpec = {
           { name: 'category', in: 'query', schema: { type: 'string' }, description: 'Filter by category (prefix match — "crypto" matches "crypto/nft")' },
           { name: 'health', in: 'query', schema: { type: 'string', enum: ['healthy', 'degraded', 'down', 'unknown'] }, description: 'Filter by health status' },
           { name: 'source', in: 'query', schema: { type: 'string', enum: ['bazaar', 'satring', 'l402apps', 'sponge', 'l402directory', 'mpp', 'discovery', 'self-registered'] }, description: 'Filter by data source' },
-          { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Full-text search by name, description, or URL' },
+          { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Hybrid semantic + LIKE search. When q is present and no explicit sort is specified, results are re-ranked using a 5-tier composite: (A) exact name match, (B) LIKE name, (C) LIKE description, (D) cosine similarity from embeddings, (E) default order. Semantic search requires embeddings to be backfilled. Falls back to LIKE-only if the embedding service is unavailable.' },
           { name: 'featured', in: 'query', schema: { type: 'boolean' }, description: 'Only return featured services' },
           { name: 'sort', in: 'query', schema: { type: 'string', enum: ['name', 'price', 'latency', 'uptime', 'reliability'] }, description: 'Sort field' },
           { name: 'order', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] }, description: 'Sort order' },
@@ -36,6 +36,12 @@ export const openapiSpec = {
         responses: {
           '200': {
             description: 'Paginated list of services',
+            headers: {
+              'X-402index-Search-Degraded': {
+                description: 'Present when semantic search was attempted but failed. Indicates the reason the response was served from LIKE-only fallback.',
+                schema: { type: 'string', enum: ['no-api-key', 'embed-timeout', 'embed-error', 'circuit-open', 'vec-deadline', 'js-fallback-too-large'] },
+              },
+            },
             content: { 'application/json': { schema: {
               type: 'object',
               properties: {

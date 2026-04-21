@@ -144,13 +144,150 @@ export async function generateEmbedding(serviceId) {
  * Never throws.
  */
 export async function embedQuery(text) {
-  if (!EMBEDDINGS_ENABLED) return null
+  if (!process.env.OPENAI_API_KEY) return null
 
   try {
     return await callOpenAI(text)
   } catch (err) {
     console.warn(`[embeddings] embedQuery error: ${err.message}`)
     return null
+  }
+}
+
+// ─── Circuit Breaker ─────────────────────────────────────────────────────────
+let consecutiveFailures = 0
+let circuitOpenedAt = null
+const CIRCUIT_OPEN_THRESHOLD = 10
+const CIRCUIT_OPEN_DURATION_MS = 60_000
+
+// Injectable clock for deterministic testing
+let _now = () => Date.now()
+
+function recordSuccess() {
+  consecutiveFailures = 0
+  circuitOpenedAt = null // close circuit if half-open
+}
+
+function recordFailure() {
+  consecutiveFailures++
+  if (consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD) {
+    circuitOpenedAt = _now()
+    if (consecutiveFailures === CIRCUIT_OPEN_THRESHOLD) {
+      console.warn(`[embeddings] circuit OPEN after ${consecutiveFailures} consecutive failures`)
+    }
+  }
+}
+
+/**
+ * Get current circuit state. Exposed for /api/v1/health and tests.
+ */
+export function getCircuitState() {
+  const now = _now()
+  let circuit = 'closed'
+  if (circuitOpenedAt !== null) {
+    circuit = (now - circuitOpenedAt < CIRCUIT_OPEN_DURATION_MS) ? 'open' : 'half-open'
+  }
+  return {
+    circuit,
+    failures: consecutiveFailures,
+    openedAt: circuitOpenedAt,
+  }
+}
+
+/**
+ * Reset circuit state. For testing only.
+ * Accepts { advanceMs } to simulate time passage without actually waiting.
+ */
+export function resetCircuit(opts = {}) {
+  if (opts.advanceMs && circuitOpenedAt !== null) {
+    // Simulate time passage by backdating the openedAt
+    circuitOpenedAt = _now() - opts.advanceMs
+  } else {
+    consecutiveFailures = 0
+    circuitOpenedAt = null
+  }
+}
+
+/**
+ * Embed a query with a read-path timeout wall and circuit breaker.
+ * Returns Float32Array(1536) or null.
+ * Returns { embedding, degradedReason } when called as embedQueryWithTimeout.
+ * Never throws.
+ */
+export async function embedQueryWithTimeout(text, timeoutMs = 1500) {
+  if (!process.env.OPENAI_API_KEY) return null
+
+  // Circuit breaker check
+  const state = getCircuitState()
+  if (state.circuit === 'open') {
+    // Fast-fail: do NOT increment consecutiveFailures
+    return null
+  }
+
+  // Half-open or closed: let the call through
+  try {
+    const result = await Promise.race([
+      callOpenAI(text),
+      new Promise(resolve => setTimeout(() => resolve('__timeout__'), timeoutMs)),
+    ])
+
+    if (result === '__timeout__') {
+      recordFailure()
+      return null
+    }
+
+    if (result === null || (result instanceof Float32Array && result.length !== DIMENSIONS)) {
+      recordFailure()
+      return null
+    }
+
+    recordSuccess()
+    return result
+  } catch (err) {
+    console.warn(`[embeddings] embedQueryWithTimeout error: ${err.message}`)
+    recordFailure()
+    return null
+  }
+}
+
+/**
+ * Embed a query for the read path. Returns { embedding, degradedReason }.
+ * degradedReason is null on success, or one of the reason codes on failure.
+ * Never throws, never returns 5xx.
+ */
+export async function embedQueryForRead(text, timeoutMs = 1500) {
+  if (!process.env.OPENAI_API_KEY) {
+    return { embedding: null, degradedReason: 'no-api-key' }
+  }
+
+  // Circuit breaker check
+  const state = getCircuitState()
+  if (state.circuit === 'open') {
+    return { embedding: null, degradedReason: 'circuit-open' }
+  }
+
+  try {
+    const result = await Promise.race([
+      callOpenAI(text),
+      new Promise(resolve => setTimeout(() => resolve('__timeout__'), timeoutMs)),
+    ])
+
+    if (result === '__timeout__') {
+      recordFailure()
+      return { embedding: null, degradedReason: 'embed-timeout' }
+    }
+
+    if (result === null || (result instanceof Float32Array && result.length !== DIMENSIONS)) {
+      recordFailure()
+      return { embedding: null, degradedReason: 'embed-error' }
+    }
+
+    recordSuccess()
+    return { embedding: result, degradedReason: null }
+  } catch (err) {
+    console.warn(`[embeddings] embedQueryForRead error: ${err.message}`)
+    recordFailure()
+    return { embedding: null, degradedReason: 'embed-error' }
   }
 }
 

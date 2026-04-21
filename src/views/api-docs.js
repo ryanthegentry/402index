@@ -37,7 +37,7 @@ export function apiDocsPage() {
               <tr><td>health</td><td>string</td><td>Filter by health: <code>healthy</code>, <code>degraded</code>, <code>down</code>, <code>unknown</code></td></tr>
               <tr><td>source</td><td>string</td><td>Filter by source: <code>bazaar</code>, <code>satring</code>, <code>l402apps</code>, <code>sponge</code>, <code>well-known</code>, <code>exclusive</code>, <code>self-registered</code>, <code>discovery</code></td></tr>
               <tr><td>featured</td><td>boolean</td><td>Only featured services: <code>true</code></td></tr>
-              <tr><td>q</td><td>string</td><td>Search by name, description, or URL</td></tr>
+              <tr><td>q</td><td>string</td><td>Hybrid semantic + LIKE search (see below)</td></tr>
               <tr><td>max_price_usd</td><td>number</td><td>Maximum price in USD</td></tr>
               <tr><td>payment_asset</td><td>string</td><td>Filter by payment asset (e.g. <code>BTC</code>, <code>USDC</code>)</td></tr>
               <tr><td>payment_valid</td><td>boolean</td><td>Only x402 services with verified payment requirements: <code>true</code></td></tr>
@@ -63,6 +63,18 @@ export function apiDocsPage() {
             </tbody>
           </table>
           <p>Example: <code>GET /api/v1/services?q=weather&amp;verified=true</code></p>
+
+          <h4>How <code>?q=</code> works</h4>
+          <p>When <code>q</code> is present and no explicit <code>sort</code> is specified, results use a hybrid semantic + LIKE search with 5-tier composite re-rank:</p>
+          <ol>
+            <li><strong>Tier A:</strong> Exact name match (case-insensitive)</li>
+            <li><strong>Tier B:</strong> LIKE match on name</li>
+            <li><strong>Tier C:</strong> LIKE match on description</li>
+            <li><strong>Tier D:</strong> Cosine similarity from embeddings (intent matching)</li>
+            <li><strong>Tier E:</strong> Default order (featured, verified, category, health, name)</li>
+          </ol>
+          <p>If the embedding service is unavailable, results fall back to LIKE-only and the response includes an <code>X-402index-Search-Degraded</code> header with a reason code: <code>no-api-key</code>, <code>embed-timeout</code>, <code>embed-error</code>, <code>circuit-open</code>, <code>vec-deadline</code>, or <code>js-fallback-too-large</code>.</p>
+
           <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>GET /api/v1/services?protocol=l402&amp;health=healthy</div>
         </div>
 
