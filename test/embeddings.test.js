@@ -457,10 +457,14 @@ describe('embeddings module (#138)', () => {
       // Ensure at least 1 second passes so SQLite datetime('now') differs from registered_at
       // (datetime precision is seconds — without this, the upsert's updated_at may equal registered_at)
       const firstRegisteredAt = db.prepare('SELECT registered_at FROM services WHERE id = ?').get(serviceId).registered_at
-      while (true) {
+      const deadline = Date.now() + 3000
+      while (Date.now() < deadline) {
         const now = db.prepare("SELECT datetime('now') as t").get().t
         if (now !== firstRegisteredAt) break
         await new Promise(r => setTimeout(r, 100))
+      }
+      if (Date.now() >= deadline) {
+        assert.fail('datetime(now) did not advance within 3s — test infrastructure issue')
       }
 
       // Second POST — same URL + protocol, triggers UPSERT-update branch where registered_at !== updated_at
