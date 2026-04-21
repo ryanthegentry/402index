@@ -70,10 +70,11 @@ router.get('/services', async (req, res) => {
     const result = await queryServicesHybrid(db, { ...filters, rawLimit, rawOffset }, API_COLUMNS)
 
     // Set degraded header if semantic path failed
-    const { degradedReason, ...responseBody } = result
+    const { degradedReason, semantic_cap, ...responseBody } = result
     if (degradedReason) {
       res.set('X-402index-Search-Degraded', degradedReason)
     }
+    res.set('X-402index-Semantic-Cap', String(semantic_cap))
     res.json(responseBody)
 
     const { q, ...filterParams } = filters

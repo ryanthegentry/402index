@@ -41,6 +41,10 @@ export const openapiSpec = {
                 description: 'Present when semantic search was attempted but failed. Indicates the reason the response was served from LIKE-only fallback.',
                 schema: { type: 'string', enum: ['no-api-key', 'embed-timeout', 'embed-error', 'circuit-open', 'vec-deadline', 'js-fallback-too-large'] },
               },
+              'X-402index-Semantic-Cap': {
+                description: "'true' when semantic neighbors were truncated at the top-K boundary. Consumers should treat pagination beyond this window as unreliable. Always present on every /api/v1/services response.",
+                schema: { type: 'string', enum: ['true', 'false'] },
+              },
             },
             content: { 'application/json': { schema: {
               type: 'object',
