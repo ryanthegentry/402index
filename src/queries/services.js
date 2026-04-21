@@ -359,9 +359,7 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
     // (uses the host engine's Unicode tables for case folding).
     // For accented-character queries this can produce ±1 drift in `total` between the two paths.
     // Practical impact is near-zero on the current dataset, but the divergence is real.
-    // A future fix would introduce a shared normalization step: NFC + lowercase applied to both
-    // the SQL side (explicit COLLATE or normalised column) and this JS filter, or alternatively
-    // replace LIKE with a JS-side filter entirely for the post-overlap check.
+    // Follow-up: #179 — normalize LIKE and JS post-filter to shared Unicode case-folding.
     const needle = q.toLowerCase()
     semanticOnlyServices = semanticOnlyServices.filter(s => {
       const n = (s.name || '').toLowerCase()
