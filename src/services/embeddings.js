@@ -192,6 +192,7 @@ export function getCircuitState() {
     circuit,
     failures: consecutiveFailures,
     openedAt: circuitOpenedAt,
+    halfOpenTrialInFlight: halfOpenTrialInFlight === true,
   }
 }
 
