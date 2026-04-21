@@ -1,14 +1,4 @@
-import crypto from 'crypto'
-
-function constantTimeEqual(a, b) {
-  const bufA = Buffer.from(String(a))
-  const bufB = Buffer.from(String(b))
-  if (bufA.length !== bufB.length) {
-    crypto.timingSafeEqual(bufA, bufA)
-    return false
-  }
-  return crypto.timingSafeEqual(bufA, bufB)
-}
+import { constantTimeEqual } from '../util/constant-time.js'
 
 /**
  * Admin authentication middleware.

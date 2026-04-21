@@ -76,8 +76,12 @@ describe('adminAuth middleware', () => {
 
   it('uses timing-safe comparison to prevent timing attacks', () => {
     assert.ok(
-      sourceCode.includes('timingSafeEqual'),
-      'adminAuth must use crypto.timingSafeEqual instead of === or !=='
+      sourceCode.includes('constantTimeEqual'),
+      'adminAuth must use constantTimeEqual for token comparison'
+    )
+    assert.ok(
+      sourceCode.includes("from '../util/constant-time.js'"),
+      'adminAuth must import constantTimeEqual from util/constant-time.js'
     )
     assert.ok(
       !sourceCode.match(/token\s*!==\s*secret/),
@@ -122,8 +126,12 @@ describe('digestAuth middleware', () => {
 
   it('uses timing-safe comparison to prevent timing attacks', () => {
     assert.ok(
-      sourceCode.includes('timingSafeEqual'),
-      'digestAuth must use crypto.timingSafeEqual'
+      sourceCode.includes('constantTimeEqual'),
+      'digestAuth must use constantTimeEqual for token comparison'
+    )
+    assert.ok(
+      sourceCode.includes("from '../util/constant-time.js'"),
+      'digestAuth must import constantTimeEqual from util/constant-time.js'
     )
   })
 })
