@@ -225,11 +225,13 @@ export async function embedQueryWithTimeout(text, timeoutMs = 1500) {
   }
 
   // Half-open or closed: let the call through
+  let timer
   try {
     const result = await Promise.race([
       callOpenAI(text),
-      new Promise(resolve => setTimeout(() => resolve('__timeout__'), timeoutMs)),
+      new Promise(resolve => { timer = setTimeout(() => resolve('__timeout__'), timeoutMs) }),
     ])
+    clearTimeout(timer)
 
     if (result === '__timeout__') {
       recordFailure()
@@ -244,6 +246,7 @@ export async function embedQueryWithTimeout(text, timeoutMs = 1500) {
     recordSuccess()
     return result
   } catch (err) {
+    clearTimeout(timer)
     console.warn(`[embeddings] embedQueryWithTimeout error: ${err.message}`)
     recordFailure()
     return null
@@ -266,11 +269,13 @@ export async function embedQueryForRead(text, timeoutMs = 1500) {
     return { embedding: null, degradedReason: 'circuit-open' }
   }
 
+  let timer
   try {
     const result = await Promise.race([
       callOpenAI(text),
-      new Promise(resolve => setTimeout(() => resolve('__timeout__'), timeoutMs)),
+      new Promise(resolve => { timer = setTimeout(() => resolve('__timeout__'), timeoutMs) }),
     ])
+    clearTimeout(timer)
 
     if (result === '__timeout__') {
       recordFailure()
@@ -285,6 +290,7 @@ export async function embedQueryForRead(text, timeoutMs = 1500) {
     recordSuccess()
     return { embedding: result, degradedReason: null }
   } catch (err) {
+    clearTimeout(timer)
     console.warn(`[embeddings] embedQueryForRead error: ${err.message}`)
     recordFailure()
     return { embedding: null, degradedReason: 'embed-error' }

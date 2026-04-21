@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 // Store original fetch — we stub it to prevent live OpenAI calls
 const originalFetch = globalThis.fetch
 
-let db, SQLITE_VEC_AVAILABLE
+let db, SQLITE_VEC_AVAILABLE, logQuery
 let queryServices, queryServicesHybrid, buildServiceQuery, API_COLUMNS
 let embedQuery, cosineSimilarity, getCircuitState, resetCircuit
 let startServer, stopServer, API
@@ -78,6 +78,7 @@ before(async () => {
   const dbMod = await import('../src/db.js')
   db = dbMod.default
   SQLITE_VEC_AVAILABLE = dbMod.SQLITE_VEC_AVAILABLE
+  logQuery = dbMod.logQuery
 
   const queries = await import('../src/queries/services.js')
   queryServices = queries.queryServices
@@ -256,14 +257,13 @@ describe('Group B — timeouts and graceful fallback (#150)', () => {
     }
   })
 
-  it('B4: sqlite-vec query exceeding 500ms → LIKE-only, vec-deadline', async () => {
-    // This test only applies when sqlite-vec is available
-    // When not available, vec-deadline can't fire (pure-JS fallback path applies instead)
+  it('B4: sqlite-vec 500ms deadline (requires sqlite-vec; falls back to JS path otherwise)', async () => {
     stubEmbedQuery(WEATHER_QUERY_VEC)
     if (!SQLITE_VEC_AVAILABLE) {
-      // If sqlite-vec not available, verify the js-fallback path works instead
+      // sqlite-vec not available in this env — vec-deadline can't fire.
+      // Verify the pure-JS fallback path works instead.
       const result = await queryServicesHybrid(db, { q: 'weather', rawLimit: 50 }, API_COLUMNS)
-      assert.ok(result, 'should return results even without sqlite-vec')
+      assert.ok(result, 'pure-JS fallback should return results when sqlite-vec unavailable')
       return
     }
     // With sqlite-vec available: the 500ms deadline should be enforced
@@ -321,6 +321,15 @@ describe('Group B — timeouts and graceful fallback (#150)', () => {
     assert.ok(degraded, 'X-402index-Search-Degraded header must be present')
     assert.ok(['no-api-key', 'embed-timeout', 'embed-error', 'circuit-open', 'vec-deadline', 'js-fallback-too-large'].includes(degraded),
       `reason code must be from the fixed enum, got: ${degraded}`)
+  })
+
+  it('B8: logQuery persists degradedReason to query_log table', async () => {
+    // Insert a log entry with a degraded reason via logQuery
+    const before = db.prepare('SELECT MAX(id) as maxId FROM query_log').get()
+    logQuery({ queryText: 'test-b8', degradedReason: 'embed-error' })
+    const row = db.prepare('SELECT degraded_reason FROM query_log WHERE id > ?').get(before.maxId || 0)
+    assert.ok(row, 'query_log row should exist')
+    assert.equal(row.degraded_reason, 'embed-error', 'degraded_reason column should persist the reason code')
   })
 })
 

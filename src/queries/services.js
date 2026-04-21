@@ -1,3 +1,5 @@
+import { SQLITE_VEC_AVAILABLE } from '../db.js'
+
 const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_ms', uptime: 'uptime_30d', reliability: 'reliability_score', registered_at: 'registered_at' }
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
 const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'self-registered', 'sponge', 'well-known', 'discovery'])
@@ -176,9 +178,11 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
 
   // ─── Run LIKE query (always authoritative) ───────────────────────────────
   const { where, params, limit, offset } = buildServiceQuery(opts)
+  // Ensure LIKE fetch covers the requested pagination window + headroom for re-rank union
+  const likeCap = Math.max(1000, offset + limit)
   const likeServices = db.prepare(
-    `SELECT ${columns} FROM services ${where} LIMIT 1000`
-  ).all(params)
+    `SELECT ${columns} FROM services ${where} LIMIT @_likeCap`
+  ).all({ ...params, _likeCap: likeCap })
   for (const s of likeServices) {
     if (typeof s.related_protocols === 'string') s.related_protocols = JSON.parse(s.related_protocols)
   }
@@ -198,12 +202,11 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
   let semanticScores = new Map() // service_id → cosine score
   let vecDegraded = null
 
-  const { SQLITE_VEC_AVAILABLE } = await import('../db.js')
-
   if (SQLITE_VEC_AVAILABLE) {
     // sqlite-vec top-K with 500ms deadline
     const K = Math.max(50, limit)
     try {
+      let vecTimer
       const vecResult = await Promise.race([
         new Promise((resolve) => {
           const blob = Buffer.from(embedding.buffer)
@@ -212,8 +215,9 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
           ).all(blob, K)
           resolve(rows)
         }),
-        new Promise(resolve => setTimeout(() => resolve('__vec_deadline__'), 500)),
+        new Promise(resolve => { vecTimer = setTimeout(() => resolve('__vec_deadline__'), 500) }),
       ])
+      clearTimeout(vecTimer)
 
       if (vecResult === '__vec_deadline__') {
         vecDegraded = 'vec-deadline'
@@ -234,6 +238,7 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
     } else {
       // Load all embeddings and compute cosine
       try {
+        let jsTimer
         const result = await Promise.race([
           new Promise((resolve) => {
             const rows = db.prepare('SELECT service_id, embedding FROM service_embeddings').all()
@@ -247,8 +252,9 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
             }
             resolve(scores)
           }),
-          new Promise(resolve => setTimeout(() => resolve('__vec_deadline__'), 500)),
+          new Promise(resolve => { jsTimer = setTimeout(() => resolve('__vec_deadline__'), 500) }),
         ])
+        clearTimeout(jsTimer)
 
         if (result === '__vec_deadline__') {
           vecDegraded = 'vec-deadline'
