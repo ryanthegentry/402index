@@ -74,7 +74,7 @@ router.get('/services', async (req, res) => {
     if (degradedReason) {
       res.set('X-402index-Search-Degraded', degradedReason)
     }
-    res.set('X-402index-Semantic-Cap', String(semantic_cap))
+    res.set('X-402index-Semantic-Cap', String(semantic_cap ?? false))
     res.json(responseBody)
 
     const { q, ...filterParams } = filters

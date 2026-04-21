@@ -391,9 +391,8 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
 
   // Apply pagination
   const paged = allCandidates.slice(offset, offset + limit)
-  // semantic_cap = true when the vec ANN query saturated its K budget (semanticScores.size === K).
-  // semanticScores.size is used (not semanticOnlyServices.length) because the DB join in
-  // semanticOnlyServices filters out orphaned vec entries — those don't affect whether the vec
-  // window was truncated. Callers should treat pagination beyond this window as unreliable.
-  return { services: paged, total, limit, offset, degradedReason: null, semantic_cap: semanticScores.size === K }
+  // semantic_cap is true only when the sqlite-vec ANN query saturated its K budget.
+  // JS-fallback never truncates (loads all embeddings), so semantic_cap is always false in that path.
+  const vecTruncated = SQLITE_VEC_AVAILABLE && semanticScores.size === K
+  return { services: paged, total, limit, offset, degradedReason: null, semantic_cap: vecTruncated }
 }
