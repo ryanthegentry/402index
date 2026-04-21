@@ -1,5 +1,11 @@
 import { SQLITE_VEC_AVAILABLE } from '../db.js'
 
+// Replicates SQLite's default NOCASE collation: folds only ASCII A-Z → a-z.
+// Non-ASCII characters (accented letters, etc.) are left untouched, matching
+// SQLite NOCASE which is accent-sensitive. Used in JS comparisons to stay
+// consistent with the SQL LIKE path.
+const asciiLower = (s) => s.replace(/[A-Z]/g, c => c.toLowerCase())
+
 const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_ms', uptime: 'uptime_30d', reliability: 'reliability_score', registered_at: 'registered_at' }
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
 const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'self-registered', 'sponge', 'well-known', 'discovery'])
@@ -162,11 +168,11 @@ export function queryServices(db, opts, columns = API_COLUMNS) {
  * Pure function — no DB access, no side effects.
  */
 export function buildHybridComparator({ q, likeNameIdSet, likeDescIdSet, semanticScores }) {
-  const qLower = q.toLowerCase()
+  const qLower = asciiLower(q)
   return (a, b) => {
-    // Tier A: exact name match (case-insensitive equality)
-    const aExact = a.name && a.name.toLowerCase() === qLower ? 1 : 0
-    const bExact = b.name && b.name.toLowerCase() === qLower ? 1 : 0
+    // Tier A: exact name match — uses asciiLower() to match SQLite NOCASE semantics exactly
+    const aExact = a.name && asciiLower(a.name) === qLower ? 1 : 0
+    const bExact = b.name && asciiLower(b.name) === qLower ? 1 : 0
     if (bExact !== aExact) return bExact - aExact
 
     // Tier B: LIKE match on name
@@ -220,13 +226,18 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
   // q=* → match-all shortcut (no semantic)
   if (q === '*') return { ...queryServices(db, opts, columns), degradedReason: null, semantic_cap: false }
 
+  // NFC-normalize q at entry: unifies decomposed (NFD) input with NFC-stored service names,
+  // and ensures all downstream JS comparisons operate on the same normalization form as SQL.
+  const qNormalized = (typeof q === 'string' && q) ? q.normalize('NFC') : q
+  const normalizedOpts = qNormalized !== q ? { ...opts, q: qNormalized } : opts
+
   // Explicit sort → skip re-rank, run LIKE-only with requested sort
   if (sort && SORT_COLUMNS[sort]) {
-    return { ...queryServices(db, opts, columns), degradedReason: null, semantic_cap: false }
+    return { ...queryServices(db, normalizedOpts, columns), degradedReason: null, semantic_cap: false }
   }
 
   // ─── Run LIKE query (always authoritative) ───────────────────────────────
-  const { where, params, orderBy, limit, offset } = buildServiceQuery(opts)
+  const { where, params, orderBy, limit, offset } = buildServiceQuery(normalizedOpts)
   // Ensure LIKE fetch covers the requested pagination window + headroom for re-rank union
   const likeCap = Math.max(1000, offset + limit)
   const likeServices = db.prepare(
@@ -238,7 +249,7 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
 
   // ─── Attempt semantic path ───────────────────────────────────────────────
   const { embedQueryForRead, cosineSimilarity } = await import('../services/embeddings.js')
-  const { embedding, degradedReason } = await embedQueryForRead(q, 1500)
+  const { embedding, degradedReason } = await embedQueryForRead(qNormalized, 1500)
 
   if (degradedReason || !embedding) {
     // Semantic failed — return LIKE-only
@@ -350,21 +361,13 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
     for (const s of semanticOnlyServices) {
       if (typeof s.related_protocols === 'string') s.related_protocols = JSON.parse(s.related_protocols)
     }
-    // Post-filter: remove services that would LIKE-match q (prevent double-counting)
-    //
-    // ⚠ P4 — LIKE vs JS normalization divergence (documented, not fixed here):
-    // The SQL LIKE path (services.js:98-102) uses SQLite's default NOCASE collation, which is
-    // ASCII-only case-insensitive and accent-SENSITIVE (e.g., "café" ≠ "cafe").
-    // The JS post-filter below uses .toLowerCase().includes(), which is Unicode-aware
-    // (uses the host engine's Unicode tables for case folding).
-    // For accented-character queries this can produce ±1 drift in `total` between the two paths.
-    // Practical impact is near-zero on the current dataset, but the divergence is real.
-    // Follow-up: #179 — normalize LIKE and JS post-filter to shared Unicode case-folding.
-    const needle = q.toLowerCase()
+    // Post-filter: remove services that would LIKE-match q (prevent double-counting).
+    // Uses asciiLower() to match SQLite NOCASE semantics exactly; q is NFC-normalized at entry.
+    const needle = asciiLower(qNormalized)
     semanticOnlyServices = semanticOnlyServices.filter(s => {
-      const n = (s.name || '').toLowerCase()
-      const d = (s.description || '').toLowerCase()
-      const u = (s.url || '').toLowerCase()
+      const n = asciiLower(s.name || '')
+      const d = asciiLower(s.description || '')
+      const u = asciiLower(s.url || '')
       return !n.includes(needle) && !d.includes(needle) && !u.includes(needle)
     })
   }
@@ -376,16 +379,16 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
   const allCandidates = [...likeServices, ...semanticOnlyServices]
 
   // ─── 5-tier composite re-rank ────────────────────────────────────────────
-  // Build LIKE match sets using plain lowercase (no SQL escaping for JS comparison)
+  // Build LIKE match sets using asciiLower() to match SQLite NOCASE semantics
   const likeNameIdSet = new Set()
   const likeDescIdSet = new Set()
-  const qLower = q.toLowerCase()
+  const qLower = asciiLower(qNormalized)
   for (const s of allCandidates) {
-    if (s.name && s.name.toLowerCase().includes(qLower)) likeNameIdSet.add(s.id)
-    if (s.description && s.description.toLowerCase().includes(qLower)) likeDescIdSet.add(s.id)
+    if (s.name && asciiLower(s.name).includes(qLower)) likeNameIdSet.add(s.id)
+    if (s.description && asciiLower(s.description).includes(qLower)) likeDescIdSet.add(s.id)
   }
 
-  allCandidates.sort(buildHybridComparator({ q, likeNameIdSet, likeDescIdSet, semanticScores }))
+  allCandidates.sort(buildHybridComparator({ q: qNormalized, likeNameIdSet, likeDescIdSet, semanticScores }))
 
   // Apply pagination
   const paged = allCandidates.slice(offset, offset + limit)
