@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { constantTimeEqual } from '../util/constant-time.js'
 
 const VALID_EVENTS = new Set(['service.new', 'service.health_changed', 'service.down'])
 const VALID_PROTOCOLS = new Set(['L402', 'x402', 'MPP'])
@@ -28,10 +29,7 @@ export function createWebhooksTable(db) {
  * Constant-time secret comparison.
  */
 export function verifySecret(a, b) {
-  const bufA = Buffer.from(String(a))
-  const bufB = Buffer.from(String(b))
-  if (bufA.length !== bufB.length) return false
-  return crypto.timingSafeEqual(bufA, bufB)
+  return constantTimeEqual(a, b)
 }
 
 /**
