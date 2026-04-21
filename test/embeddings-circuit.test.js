@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 const originalFetch = globalThis.fetch
 
-let db, getCircuitState, resetCircuit, embedQueryWithTimeout, embedQueryForRead
+let db, getCircuitState, resetCircuit, embedQueryForRead
 let startServer, stopServer, API
 
 // Helper: make a successful OpenAI embedding response
@@ -36,6 +36,7 @@ describe('Group C — circuit breaker (#150)', () => {
   let mockClock = Date.now()
 
   before(async () => {
+    process.env.NODE_ENV = 'test'
     process.env.OPENAI_API_KEY = 'test-key-fake'
 
     const dbMod = await import('../src/db.js')
@@ -44,7 +45,6 @@ describe('Group C — circuit breaker (#150)', () => {
     const embeddings = await import('../src/services/embeddings.js')
     getCircuitState = embeddings.getCircuitState
     resetCircuit = embeddings.resetCircuit
-    embedQueryWithTimeout = embeddings.embedQueryWithTimeout
     embedQueryForRead = embeddings.embedQueryForRead
 
     const srv = await import('./helpers/server.js')
