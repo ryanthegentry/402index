@@ -23,7 +23,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           git fetch origin master
-          if ! git merge-base --is-ancestor origin/master HEAD; then
+          if ! git merge-base --is-ancestor origin/master ${{ github.event.pull_request.head.sha }}; then
             echo "::error::Branch is behind master. Run: git pull --rebase origin master && git push --force-with-lease"
             exit 1
           fi
