@@ -559,6 +559,9 @@ try {
   console.warn(`[db] Incremental vacuum note: ${err.message}`)
 }
 
+// TODO: Remove this DROP block after PRD #129 (semantic search) is
+// confirmed stable in production. Issue #135 retired the FTS5 tests;
+// this runtime DROP remains as an idempotent safety net.
 // ─── FTS5 Full-Text Search Index (DISABLED — corrupt vtab recovery) ────────
 try {
   db.exec('DROP TRIGGER IF EXISTS services_fts_insert')
