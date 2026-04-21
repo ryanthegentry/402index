@@ -32,6 +32,13 @@ describe('pipeline-hardening', () => {
       )
     })
 
+    it('git fetch does not use --depth=0 (invalid for git fetch)', () => {
+      assert.ok(
+        !ciYml.includes('--depth=0'),
+        'ci.yml must not contain "--depth=0" — git fetch requires a positive depth integer'
+      )
+    })
+
     it('rebase check runs before Install dependencies', () => {
       const mergeBaseIndex = ciYml.indexOf('git merge-base --is-ancestor origin/master HEAD')
       const installIndex = ciYml.indexOf('- name: Install dependencies')

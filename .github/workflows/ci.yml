@@ -22,7 +22,7 @@ jobs:
       - name: Check branch is rebased on master
         if: github.event_name == 'pull_request'
         run: |
-          git fetch origin master --depth=0
+          git fetch origin master
           if ! git merge-base --is-ancestor origin/master HEAD; then
             echo "::error::Branch is behind master. Run: git pull --rebase origin master && git push --force-with-lease"
             exit 1
