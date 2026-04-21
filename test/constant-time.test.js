@@ -44,12 +44,17 @@ describe('constantTimeEqual', () => {
     const secret = 'known-secret-of-length-32!@#$%^&'
     const lengths = [4, 16, 32, 64, 128]
     const N = 10000
-    const WARMUP = 1000
+    const WARMUP = 2000
     const means = []
+
+    // global warmup to stabilize JIT before any measurement
+    for (let i = 0; i < 5000; i++) {
+      constantTimeEqual('warmup-input', secret)
+    }
 
     for (const len of lengths) {
       const input = 'x'.repeat(len)
-      // warmup
+      // per-length warmup
       for (let i = 0; i < WARMUP; i++) {
         constantTimeEqual(input, secret)
       }
