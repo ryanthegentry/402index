@@ -85,6 +85,8 @@ export const digestLimiter = rateLimit({
  * request is L402-verified (already paid, passes through l402Limiter instead).
  *
  * Env vars: QUERY_RATE_LIMIT_PER_MIN (default 30), QUERY_RATE_LIMIT_PER_HOUR (default 500).
+ * Both limits are arrow functions evaluated per-request so the env vars take effect
+ * immediately without a server restart (e.g. in tests that set them after module import).
  */
 function isQueryRequest(req) {
   return Boolean(req.query.q) && req.query.q !== '*' && req.l402Verified !== true
@@ -92,7 +94,7 @@ function isQueryRequest(req) {
 
 export const queryRateLimiterMin = rateLimit({
   windowMs: 60_000,
-  limit: parseInt(process.env.QUERY_RATE_LIMIT_PER_MIN) || 30,
+  limit: () => parseInt(process.env.QUERY_RATE_LIMIT_PER_MIN) || 30,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
@@ -109,7 +111,7 @@ export const queryRateLimiterMin = rateLimit({
 
 export const queryRateLimiterHour = rateLimit({
   windowMs: 60 * 60 * 1000,
-  limit: parseInt(process.env.QUERY_RATE_LIMIT_PER_HOUR) || 500,
+  limit: () => parseInt(process.env.QUERY_RATE_LIMIT_PER_HOUR) || 500,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
