@@ -193,3 +193,33 @@ describe('list_categories summary=true shape (live API)', () => {
     }
   })
 })
+
+// ─── Tool description preservation (master enrichments) ──────────────────────
+
+describe('tool description preservation (master enrichments)', () => {
+  const src = readFileSync(join(ROOT, 'src', 'index.ts'), 'utf8')
+
+  it('search_services description includes related_protocols', () => {
+    const m = src.match(/server\.tool\(\s*'search_services',\s*'([^']+)'/s)
+    assert.ok(m, 'should find search_services tool definition')
+    assert.ok(m[1].includes('related_protocols'), 'search_services description must include "related_protocols"')
+  })
+
+  it('search_services description includes "showing other payment rails"', () => {
+    const m = src.match(/server\.tool\(\s*'search_services',\s*'([^']+)'/s)
+    assert.ok(m, 'should find search_services tool definition')
+    assert.ok(m[1].includes('showing other payment rails'), 'search_services description must include "showing other payment rails"')
+  })
+
+  it('get_service_detail description includes related_services', () => {
+    const m = src.match(/server\.tool\(\s*'get_service_detail',\s*'([^']+)'/s)
+    assert.ok(m, 'should find get_service_detail tool definition')
+    assert.ok(m[1].includes('related_services'), 'get_service_detail description must include "related_services"')
+  })
+
+  it('get_service_detail description includes "sibling payment rail"', () => {
+    const m = src.match(/server\.tool\(\s*'get_service_detail',\s*'([^']+)'/s)
+    assert.ok(m, 'should find get_service_detail tool definition')
+    assert.ok(m[1].includes('sibling payment rail'), 'get_service_detail description must include "sibling payment rail"')
+  })
+})
