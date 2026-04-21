@@ -748,23 +748,26 @@ describe('Group I — likeCap boundary: parametric tests for offset+limit combos
       }
     })
   }
+
+  after(async () => {
+    // Group I tests trip the circuit breaker by returning 500 from the embed API.
+    // Reset it here (local to Group I) so P8 and P9 get a clean semantic path.
+    process.env.NODE_ENV = 'test' // required by resetCircuit's test-only guard
+    const { resetCircuit: rc } = await import('../src/services/embeddings.js')
+    rc()
+  })
 })
 
 // ─── GROUP P8: X-402index-Semantic-Cap header (#162 P3) ──────────────────────
 
 describe('Group P8 — X-402index-Semantic-Cap response header (#162)', () => {
-  // Group I tests degrade the embed API (embed-error), which trips the circuit breaker.
-  // Reset it here so HTTP tests in this group get a live semantic path.
-  before(async () => {
-    process.env.NODE_ENV = 'test' // required by resetCircuit's test-only guard
-    const { resetCircuit: rc } = await import('../src/services/embeddings.js')
-    rc()
-  })
-
-  it('T-semantic-cap-header-truncated: header is "true" when K semantic neighbors returned (sqlite-vec path)', async () => {
+  it('T-semantic-cap-header-truncated: header is "true" when K semantic neighbors returned (sqlite-vec path)', async (t) => {
     // Requires sqlite-vec for deterministic K-cap behavior.
-    // JS-fallback loads all embeddings (no K cap) so truncation is not guaranteed.
-    if (!SQLITE_VEC_AVAILABLE) return
+    // JS-fallback loads all embeddings (no K cap) so semantic_cap is always false in that path.
+    if (!SQLITE_VEC_AVAILABLE) {
+      t.skip('sqlite-vec not available: JS-fallback never truncates, so K-saturation cannot be tested in this environment')
+      return
+    }
 
     const prefix = 'sem-cap-trunc'
     // Insert 60 services — all close to query vec (WEATHER_SERVICE_VEC), none LIKE-match query
@@ -841,6 +844,89 @@ describe('Group P8 — X-402index-Semantic-Cap response header (#162)', () => {
       ['limit', 'offset', 'services', 'total'],
       `Response body should have EXACTLY 4 keys, got: ${Object.keys(body).sort().join(', ')}`,
     )
+    // P10 — enum safety: header must always be 'true' or 'false', never 'undefined' or absent
+    assert.ok(
+      ['true', 'false'].includes(res.headers.get('x-402index-semantic-cap')),
+      `X-402index-Semantic-Cap must be 'true' or 'false', got: ${res.headers.get('x-402index-semantic-cap')}`,
+    )
+  })
+})
+
+// ─── GROUP P9: Semantic-Cap header on early-return paths (#162 second-pass) ───
+
+describe('Group P9 — Semantic-Cap header on early-return paths (#162 second-pass)', () => {
+  it('P9-1: no q → X-402index-Semantic-Cap: false', async () => {
+    const res = await originalFetch(`${API}/api/v1/services`)
+    assert.equal(res.status, 200)
+    assert.equal(res.headers.get('x-402index-semantic-cap'), 'false',
+      `header should be 'false' when q is absent, got: ${res.headers.get('x-402index-semantic-cap')}`)
+  })
+
+  it('P9-2: q=* → X-402index-Semantic-Cap: false', async () => {
+    const res = await originalFetch(`${API}/api/v1/services?q=*`)
+    assert.equal(res.status, 200)
+    assert.equal(res.headers.get('x-402index-semantic-cap'), 'false',
+      `header should be 'false' for q=*, got: ${res.headers.get('x-402index-semantic-cap')}`)
+  })
+
+  it('P9-3: sort specified → X-402index-Semantic-Cap: false', async () => {
+    // sort triggers early return before embed — no semantic path, header must still emit 'false'
+    const res = await originalFetch(`${API}/api/v1/services?q=weather&sort=price`)
+    assert.equal(res.status, 200)
+    assert.equal(res.headers.get('x-402index-semantic-cap'), 'false',
+      `header should be 'false' when sort skips re-rank, got: ${res.headers.get('x-402index-semantic-cap')}`)
+  })
+
+  it('P9-4: embed API 500 → header false + X-402index-Search-Degraded set', async () => {
+    stubOpenAIOnly(async () => ({ ok: false, status: 500, json: async () => ({}) }))
+    const res = await originalFetch(`${API}/api/v1/services?q=weather`)
+    assert.equal(res.status, 200)
+    assert.equal(res.headers.get('x-402index-semantic-cap'), 'false',
+      `header should be 'false' on embed failure, got: ${res.headers.get('x-402index-semantic-cap')}`)
+    assert.ok(res.headers.get('x-402index-search-degraded'),
+      'X-402index-Search-Degraded must be set on embed failure')
+  })
+})
+
+// ─── GROUP P11: JS-fallback never reports semantic_cap=true (#162 Fragile-1) ─
+
+describe('Group P11 — JS-fallback never reports semantic_cap=true (#162 Fragile-1)', () => {
+  it('P11-1: JS-fallback with exactly K=50 embeddings → header false (no false positive)', async () => {
+    if (SQLITE_VEC_AVAILABLE) {
+      // This test guards the JS-fallback path only. When sqlite-vec is present the vec path
+      // runs instead, and truncation semantics are handled by T-semantic-cap-header-truncated.
+      console.warn('[P11-1] SKIP: sqlite-vec is available — test guards JS-fallback path only')
+      return
+    }
+    // Insert exactly K=max(50, limit=50)=50 semantic-only services.
+    // In the JS-fallback path ALL embeddings are loaded (no K cap).
+    // Bug: semanticScores.size===K → 50===50 → true → header='true' (false positive).
+    // Fix: SQLITE_VEC_AVAILABLE && semanticScores.size===K → false && ... → false → header='false'.
+    const prefix = 'js-fb-trunc'
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', 0, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const tx = db.transaction(() => {
+      for (let i = 0; i < 50; i++) {
+        insert.run(`${prefix}-${i}`, `JsFbSvc-${i}`, `JS fallback service ${i}`, `https://js-fb-trunc-${i}.example.com/api`)
+      }
+    })
+    tx()
+    for (let i = 0; i < 50; i++) insertEmbedding(`${prefix}-${i}`, WEATHER_SERVICE_VEC)
+
+    try {
+      stubEmbedQuery(WEATHER_QUERY_VEC)
+      const res = await originalFetch(`${API}/api/v1/services?q=JsFbTruncQuery&limit=50`)
+      assert.equal(res.status, 200)
+      assert.equal(res.headers.get('x-402index-semantic-cap'), 'false',
+        `JS-fallback loads all embeddings — header must be 'false' even when semanticScores.size===K. Got: ${res.headers.get('x-402index-semantic-cap')}`)
+    } finally {
+      for (let i = 0; i < 50; i++) {
+        try { db.prepare('DELETE FROM service_embeddings WHERE service_id = ?').run(`${prefix}-${i}`) } catch {}
+        try { db.prepare('DELETE FROM services WHERE id = ?').run(`${prefix}-${i}`) } catch {}
+      }
+    }
   })
 })
 
