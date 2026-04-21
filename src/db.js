@@ -740,13 +740,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_query_log_timestamp ON query_log(timestamp);
 `)
 
+// Migration: add degraded_reason column for hybrid search degradation tracking
+try {
+  db.exec('ALTER TABLE query_log ADD COLUMN degraded_reason TEXT')
+  console.log('[db] Added column: query_log.degraded_reason')
+} catch {
+  // Column already exists
+}
+
 const logQueryStmt = db.prepare(
-  'INSERT INTO query_log (query_text, filters, result_count, response_time_ms, user_agent) VALUES (@queryText, @filters, @resultCount, @responseTimeMs, @userAgent)'
+  'INSERT INTO query_log (query_text, filters, result_count, response_time_ms, user_agent, degraded_reason) VALUES (@queryText, @filters, @resultCount, @responseTimeMs, @userAgent, @degradedReason)'
 )
 
-export function logQuery({ queryText = null, filters = null, resultCount = null, responseTimeMs = null, userAgent = null } = {}) {
+export function logQuery({ queryText = null, filters = null, resultCount = null, responseTimeMs = null, userAgent = null, degradedReason = null } = {}) {
   try {
-    logQueryStmt.run({ queryText, filters, resultCount, responseTimeMs, userAgent })
+    logQueryStmt.run({ queryText, filters, resultCount, responseTimeMs, userAgent, degradedReason })
   } catch (err) {
     console.warn(`[db] logQuery failed: ${err.message}`)
   }

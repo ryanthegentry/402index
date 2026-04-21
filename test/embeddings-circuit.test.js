@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 const originalFetch = globalThis.fetch
 
-let db, getCircuitState, resetCircuit, embedQueryWithTimeout
+let db, getCircuitState, resetCircuit, embedQueryWithTimeout, embedQueryForRead
 let startServer, stopServer, API
 
 // Helper: make a successful OpenAI embedding response
@@ -45,6 +45,7 @@ describe('Group C — circuit breaker (#150)', () => {
     getCircuitState = embeddings.getCircuitState
     resetCircuit = embeddings.resetCircuit
     embedQueryWithTimeout = embeddings.embedQueryWithTimeout
+    embedQueryForRead = embeddings.embedQueryForRead
 
     const srv = await import('./helpers/server.js')
     startServer = srv.startServer
@@ -64,14 +65,14 @@ describe('Group C — circuit breaker (#150)', () => {
     if (resetCircuit) resetCircuit()
   })
 
-  // Helper: trigger N consecutive failures
+  // Helper: trigger N consecutive failures via the production read path
   async function triggerFailures(n) {
     globalThis.fetch = async () => {
       fetchCallCount++
       return makeFailResponse()
     }
     for (let i = 0; i < n; i++) {
-      await embedQueryWithTimeout('test', 1500)
+      await embedQueryForRead('test', 1500)
     }
   }
 
@@ -90,7 +91,7 @@ describe('Group C — circuit breaker (#150)', () => {
     assert.ok(health.embedding_circuit_opened_at !== null, 'opened_at should be set')
   })
 
-  it('C2: 11th call returns null without invoking fetch', async () => {
+  it('C2: 11th call returns null without invoking fetch (production path)', async () => {
     await triggerFailures(10)
     fetchCallCount = 0
 
@@ -99,24 +100,19 @@ describe('Group C — circuit breaker (#150)', () => {
       return makeOkResponse()
     }
 
-    const result = await embedQueryWithTimeout('test', 1500)
-    assert.equal(result, null, '11th call should return null (circuit open)')
+    const result = await embedQueryForRead('test', 1500)
+    assert.equal(result.embedding, null, '11th call should return null embedding (circuit open)')
+    assert.equal(result.degradedReason, 'circuit-open', 'reason should be circuit-open')
     assert.equal(fetchCallCount, 0, 'fetch should NOT be called when circuit is open')
   })
 
   it('C3: after 60s, circuit transitions to half-open, next call invokes fetch', async () => {
     await triggerFailures(10)
 
-    // Advance clock by 60s using injectable clock
     const state = getCircuitState()
     assert.equal(state.circuit, 'open')
 
-    // Use resetCircuit with a time advance or test the exported clock injection
-    // The circuit should expose a way to inject time for testing
-    if (resetCircuit) {
-      // Reset and manually set state to simulate time passage
-      resetCircuit({ advanceMs: 60_000 })
-    }
+    resetCircuit({ advanceMs: 60_000 })
 
     fetchCallCount = 0
     globalThis.fetch = async () => {
@@ -124,22 +120,23 @@ describe('Group C — circuit breaker (#150)', () => {
       return makeOkResponse()
     }
 
-    const result = await embedQueryWithTimeout('test', 1500)
-    const newState = getCircuitState()
+    const result = await embedQueryForRead('test', 1500)
     // After 60s, circuit should have been half-open, and the successful call should close it
     assert.ok(fetchCallCount > 0, 'fetch should be called in half-open state')
+    assert.equal(result.degradedReason, null, 'successful half-open call should not degrade')
+    assert.ok(result.embedding instanceof Float32Array, 'should return embedding on success')
   })
 
   it('C4: half-open success → closed, consecutiveFailures = 0', async () => {
     await triggerFailures(10)
-    if (resetCircuit) resetCircuit({ advanceMs: 60_000 })
+    resetCircuit({ advanceMs: 60_000 })
 
     globalThis.fetch = async () => {
       fetchCallCount++
       return makeOkResponse()
     }
 
-    await embedQueryWithTimeout('test', 1500)
+    await embedQueryForRead('test', 1500)
     const state = getCircuitState()
     assert.equal(state.circuit, 'closed', 'successful half-open call should close circuit')
     assert.equal(state.failures, 0, 'consecutiveFailures should reset to 0')
@@ -149,17 +146,17 @@ describe('Group C — circuit breaker (#150)', () => {
     await triggerFailures(10)
     const openedAt1 = getCircuitState().openedAt
 
-    if (resetCircuit) resetCircuit({ advanceMs: 60_000 })
+    resetCircuit({ advanceMs: 60_000 })
 
     globalThis.fetch = async () => {
       fetchCallCount++
       return makeFailResponse()
     }
 
-    await embedQueryWithTimeout('test', 1500)
+    const result = await embedQueryForRead('test', 1500)
+    assert.equal(result.degradedReason, 'embed-error', 'failed half-open should return embed-error')
     const state = getCircuitState()
     assert.equal(state.circuit, 'open', 'failed half-open call should re-open circuit')
-    // openedAt should be refreshed (newer than the first opening)
     assert.ok(state.openedAt >= openedAt1, 'circuitOpenedAt should be refreshed')
   })
 
@@ -167,9 +164,10 @@ describe('Group C — circuit breaker (#150)', () => {
     await triggerFailures(10)
     const failuresAfterOpen = getCircuitState().failures
 
-    // Make 5 more calls while circuit is open
+    // Make 5 more calls while circuit is open via production path
     for (let i = 0; i < 5; i++) {
-      await embedQueryWithTimeout('test', 1500)
+      const r = await embedQueryForRead('test', 1500)
+      assert.equal(r.degradedReason, 'circuit-open')
     }
 
     const state = getCircuitState()
@@ -182,16 +180,18 @@ describe('Group C — circuit breaker (#150)', () => {
     assert.equal(getCircuitState().circuit, 'closed', 'circuit should still be closed after 9 failures')
 
     globalThis.fetch = async () => makeOkResponse()
-    await embedQueryWithTimeout('test', 1500)
+    const result = await embedQueryForRead('test', 1500)
 
+    assert.equal(result.degradedReason, null, 'successful call should not degrade')
     assert.equal(getCircuitState().failures, 0, 'one success should reset failures to 0')
   })
 
   it('C8: malformed 1535-dim embedding counts as a failure', async () => {
-    if (resetCircuit) resetCircuit()
+    resetCircuit()
     globalThis.fetch = async () => makeMalformedResponse()
 
-    await embedQueryWithTimeout('test', 1500)
+    const result = await embedQueryForRead('test', 1500)
+    assert.equal(result.degradedReason, 'embed-error', 'malformed embedding should return embed-error')
     const state = getCircuitState()
     assert.equal(state.failures, 1, 'malformed embedding should count as failure')
   })
