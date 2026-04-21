@@ -14,11 +14,12 @@ describe('version drift (runtime)', () => {
     const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair()
     const client = new Client({ name: 'test-client', version: '1.0.0' })
     await server.connect(serverTransport)
-    const initResult = await client.connect(clientTransport)
+    await client.connect(clientTransport)
+    const serverVersion = client.getServerVersion()
     assert.strictEqual(
-      initResult.serverInfo.version,
+      serverVersion?.version,
       expectedVersion,
-      `McpServer constructor version "${initResult.serverInfo.version}" does not match package.json version "${expectedVersion}". Update both in lockstep.`
+      `McpServer constructor version "${serverVersion?.version}" does not match package.json version "${expectedVersion}". Update both in lockstep.`
     )
     await client.close()
   })

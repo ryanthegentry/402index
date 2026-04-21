@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 
 const INDEX_URL = process.env.INDEX_URL || 'https://402index.io'
+
+export const USER_AGENT = '402index-mcp/0.3.0'
 
 async function fetchJson(path: string, params?: Record<string, string>) {
   const url = new URL(path, INDEX_URL)
@@ -12,7 +15,7 @@ async function fetchJson(path: string, params?: Record<string, string>) {
       if (v !== undefined && v !== '') url.searchParams.set(k, v)
     }
   }
-  const res = await fetch(url.toString(), { headers: { 'User-Agent': '402index-mcp/0.3.0' } })
+  const res = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } })
   if (!res.ok) {
     return { error: true, status: res.status, message: `API returned ${res.status}` }
   }
@@ -212,7 +215,11 @@ async function main() {
   console.error(`[402index-mcp] Server running, connected to ${INDEX_URL}`)
 }
 
-main().catch((err) => {
-  console.error('[402index-mcp] Fatal error:', err)
-  process.exit(1)
-})
+// Only auto-start when invoked as CLI, not when imported for tests
+const isCLI = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]
+if (isCLI) {
+  main().catch((err) => {
+    console.error('[402index-mcp] Fatal error:', err)
+    process.exit(1)
+  })
+}
