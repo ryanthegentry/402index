@@ -4,7 +4,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { notFoundHandler, errorHandler } from './middleware/error-handler.js'
 import { verifyL402 } from './middleware/l402.js'
-import { freeLimiter, l402Limiter, digestLimiter } from './middleware/rate-limit.js'
+import { freeLimiter, l402Limiter, digestLimiter, queryRateLimiterMin, queryRateLimiterHour } from './middleware/rate-limit.js'
 import { adminAuth, digestAuth } from './middleware/admin-auth.js'
 import apiRoutes from './routes/api.js'
 import pageRoutes from './routes/pages.js'
@@ -75,7 +75,7 @@ app.use('/api/v1/claim', express.json({ limit: '10kb' }), (req, res, next) => {
 
 // Rate-limited API routes: services, services/:id, categories, export
 // express.json() included for PATCH /api/v1/services/:id (domain-verified edits)
-app.use('/api/v1/services', express.json({ limit: '10kb' }), verifyL402, freeLimiter, l402Limiter)
+app.use('/api/v1/services', express.json({ limit: '10kb' }), verifyL402, queryRateLimiterMin, queryRateLimiterHour, freeLimiter, l402Limiter)
 app.use('/api/v1/categories', verifyL402, freeLimiter, l402Limiter)
 app.use('/api/v1/export.csv', verifyL402, freeLimiter, l402Limiter)
 // /api/v1/health is exempt from rate limiting (uptime monitors)

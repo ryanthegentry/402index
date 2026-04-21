@@ -276,6 +276,7 @@ router.get('/health', (req, res) => {
           embedding_circuit: cs.circuit,
           embedding_circuit_failures: cs.failures,
           embedding_circuit_opened_at: cs.openedAt ? new Date(cs.openedAt).toISOString() : null,
+          embedding_half_open_trial: cs.halfOpenTrialInFlight,
         }
       })(),
     })
