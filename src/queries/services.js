@@ -215,14 +215,14 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
   const { q, sort } = opts
 
   // No q → delegate to existing queryServices
-  if (!q) return { ...queryServices(db, opts, columns), degradedReason: null }
+  if (!q) return { ...queryServices(db, opts, columns), degradedReason: null, semantic_cap: false }
 
   // q=* → match-all shortcut (no semantic)
-  if (q === '*') return { ...queryServices(db, opts, columns), degradedReason: null }
+  if (q === '*') return { ...queryServices(db, opts, columns), degradedReason: null, semantic_cap: false }
 
   // Explicit sort → skip re-rank, run LIKE-only with requested sort
   if (sort && SORT_COLUMNS[sort]) {
-    return { ...queryServices(db, opts, columns), degradedReason: null }
+    return { ...queryServices(db, opts, columns), degradedReason: null, semantic_cap: false }
   }
 
   // ─── Run LIKE query (always authoritative) ───────────────────────────────
@@ -244,16 +244,16 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
     // Semantic failed — return LIKE-only
     const total = db.prepare(`SELECT COUNT(*) as c FROM services ${where}`).get(params).c
     const paged = likeServices.slice(offset, offset + limit)
-    return { services: paged, total, limit, offset, degradedReason: degradedReason || 'embed-error' }
+    return { services: paged, total, limit, offset, degradedReason: degradedReason || 'embed-error', semantic_cap: false }
   }
 
   // ─── Get cosine scores from embeddings ─────────────────────────────────
   let semanticScores = new Map() // service_id → cosine score
   let vecDegraded = null
+  const K = Math.max(50, limit) // top-K semantic window; semantic_cap = true when saturated
 
   if (SQLITE_VEC_AVAILABLE) {
     // sqlite-vec top-K with 500ms deadline
-    const K = Math.max(50, limit)
     try {
       let vecTimer
       const vecResult = await Promise.race([
@@ -323,7 +323,7 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
     // Vec path failed — return LIKE-only with reason
     const total = db.prepare(`SELECT COUNT(*) as c FROM services ${where}`).get(params).c
     const paged = likeServices.slice(offset, offset + limit)
-    return { services: paged, total, limit, offset, degradedReason: vecDegraded }
+    return { services: paged, total, limit, offset, degradedReason: vecDegraded, semantic_cap: false }
   }
 
   // ─── Union candidates ────────────────────────────────────────────────────
@@ -351,6 +351,15 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
       if (typeof s.related_protocols === 'string') s.related_protocols = JSON.parse(s.related_protocols)
     }
     // Post-filter: remove services that would LIKE-match q (prevent double-counting)
+    //
+    // ⚠ P4 — LIKE vs JS normalization divergence (documented, not fixed here):
+    // The SQL LIKE path (services.js:98-102) uses SQLite's default NOCASE collation, which is
+    // ASCII-only case-insensitive and accent-SENSITIVE (e.g., "café" ≠ "cafe").
+    // The JS post-filter below uses .toLowerCase().includes(), which is Unicode-aware
+    // (uses the host engine's Unicode tables for case folding).
+    // For accented-character queries this can produce ±1 drift in `total` between the two paths.
+    // Practical impact is near-zero on the current dataset, but the divergence is real.
+    // Follow-up: #179 — normalize LIKE and JS post-filter to shared Unicode case-folding.
     const needle = q.toLowerCase()
     semanticOnlyServices = semanticOnlyServices.filter(s => {
       const n = (s.name || '').toLowerCase()
@@ -380,5 +389,8 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
 
   // Apply pagination
   const paged = allCandidates.slice(offset, offset + limit)
-  return { services: paged, total, limit, offset, degradedReason: null }
+  // semantic_cap is true only when the sqlite-vec ANN query saturated its K budget.
+  // JS-fallback never truncates (loads all embeddings), so semantic_cap is always false in that path.
+  const vecTruncated = SQLITE_VEC_AVAILABLE && semanticScores.size === K
+  return { services: paged, total, limit, offset, degradedReason: null, semantic_cap: vecTruncated }
 }
