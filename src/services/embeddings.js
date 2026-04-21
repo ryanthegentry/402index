@@ -157,6 +157,7 @@ export async function embedQuery(text) {
 // ─── Circuit Breaker ─────────────────────────────────────────────────────────
 let consecutiveFailures = 0
 let circuitOpenedAt = null
+let halfOpenTrialInFlight = false
 const CIRCUIT_OPEN_THRESHOLD = 10
 const CIRCUIT_OPEN_DURATION_MS = 60_000
 
@@ -199,6 +200,7 @@ export function getCircuitState() {
  * Accepts { advanceMs } to simulate time passage without actually waiting.
  */
 export function resetCircuit(opts = {}) {
+  if (process.env.NODE_ENV !== 'test') throw new Error('resetCircuit is test-only')
   if (opts.advanceMs && circuitOpenedAt !== null) {
     // Simulate time passage by backdating the openedAt
     circuitOpenedAt = _now() - opts.advanceMs
@@ -206,51 +208,7 @@ export function resetCircuit(opts = {}) {
     consecutiveFailures = 0
     circuitOpenedAt = null
   }
-}
-
-/**
- * Embed a query with a read-path timeout wall and circuit breaker.
- * Returns Float32Array(1536) or null.
- * Returns { embedding, degradedReason } when called as embedQueryWithTimeout.
- * Never throws.
- */
-export async function embedQueryWithTimeout(text, timeoutMs = 1500) {
-  if (!process.env.OPENAI_API_KEY) return null
-
-  // Circuit breaker check
-  const state = getCircuitState()
-  if (state.circuit === 'open') {
-    // Fast-fail: do NOT increment consecutiveFailures
-    return null
-  }
-
-  // Half-open or closed: let the call through
-  let timer
-  try {
-    const result = await Promise.race([
-      callOpenAI(text),
-      new Promise(resolve => { timer = setTimeout(() => resolve('__timeout__'), timeoutMs) }),
-    ])
-    clearTimeout(timer)
-
-    if (result === '__timeout__') {
-      recordFailure()
-      return null
-    }
-
-    if (result === null || (result instanceof Float32Array && result.length !== DIMENSIONS)) {
-      recordFailure()
-      return null
-    }
-
-    recordSuccess()
-    return result
-  } catch (err) {
-    clearTimeout(timer)
-    console.warn(`[embeddings] embedQueryWithTimeout error: ${err.message}`)
-    recordFailure()
-    return null
-  }
+  halfOpenTrialInFlight = false
 }
 
 /**
@@ -267,6 +225,14 @@ export async function embedQueryForRead(text, timeoutMs = 1500) {
   const state = getCircuitState()
   if (state.circuit === 'open') {
     return { embedding: null, degradedReason: 'circuit-open' }
+  }
+
+  // Half-open: admit exactly one trial call; others fast-fail
+  if (state.circuit === 'half-open') {
+    if (halfOpenTrialInFlight) {
+      return { embedding: null, degradedReason: 'circuit-open' }
+    }
+    halfOpenTrialInFlight = true
   }
 
   let timer
@@ -294,6 +260,8 @@ export async function embedQueryForRead(text, timeoutMs = 1500) {
     console.warn(`[embeddings] embedQueryForRead error: ${err.message}`)
     recordFailure()
     return { embedding: null, degradedReason: 'embed-error' }
+  } finally {
+    if (state.circuit === 'half-open') halfOpenTrialInFlight = false
   }
 }
 

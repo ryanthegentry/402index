@@ -158,6 +158,55 @@ export function queryServices(db, opts, columns = API_COLUMNS) {
 }
 
 /**
+ * Build a 5-tier hybrid re-rank comparator.
+ * Pure function — no DB access, no side effects.
+ */
+export function buildHybridComparator({ q, likeNameIdSet, likeDescIdSet, semanticScores }) {
+  const qLower = q.toLowerCase()
+  return (a, b) => {
+    // Tier A: exact name match (case-insensitive equality)
+    const aExact = a.name && a.name.toLowerCase() === qLower ? 1 : 0
+    const bExact = b.name && b.name.toLowerCase() === qLower ? 1 : 0
+    if (bExact !== aExact) return bExact - aExact
+
+    // Tier B: LIKE match on name
+    const aName = likeNameIdSet.has(a.id) ? 1 : 0
+    const bName = likeNameIdSet.has(b.id) ? 1 : 0
+    if (bName !== aName) return bName - aName
+
+    // Tier C: LIKE match on description
+    const aDesc = likeDescIdSet.has(a.id) ? 1 : 0
+    const bDesc = likeDescIdSet.has(b.id) ? 1 : 0
+    if (bDesc !== aDesc) return bDesc - aDesc
+
+    // Tier D: cosine similarity DESC
+    const aCos = semanticScores.get(a.id) ?? 0
+    const bCos = semanticScores.get(b.id) ?? 0
+    if (bCos !== aCos) return bCos - aCos
+
+    // Tier E: DEFAULT_ORDER cascade
+    const aFeat = a.featured || 0
+    const bFeat = b.featured || 0
+    if (bFeat !== aFeat) return bFeat - aFeat
+
+    const aDv = a.domain_verified || 0
+    const bDv = b.domain_verified || 0
+    if (bDv !== aDv) return bDv - aDv
+
+    const aCat = (a.category && a.category !== 'uncategorized') ? 0 : 1
+    const bCat = (b.category && b.category !== 'uncategorized') ? 0 : 1
+    if (aCat !== bCat) return aCat - bCat
+
+    const healthOrder = { healthy: 0, degraded: 1, down: 2, unknown: 3 }
+    const aH = healthOrder[a.health_status] ?? 3
+    const bH = healthOrder[b.health_status] ?? 3
+    if (aH !== bH) return aH - bH
+
+    return (a.name || '').localeCompare(b.name || '')
+  }
+}
+
+/**
  * Hybrid query: combines LIKE results with semantic (embedding) results.
  * Falls back to LIKE-only on any semantic failure.
  * Returns { services, total, limit, offset, degradedReason }.
@@ -177,11 +226,11 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
   }
 
   // ─── Run LIKE query (always authoritative) ───────────────────────────────
-  const { where, params, limit, offset } = buildServiceQuery(opts)
+  const { where, params, orderBy, limit, offset } = buildServiceQuery(opts)
   // Ensure LIKE fetch covers the requested pagination window + headroom for re-rank union
   const likeCap = Math.max(1000, offset + limit)
   const likeServices = db.prepare(
-    `SELECT ${columns} FROM services ${where} LIMIT @_likeCap`
+    `SELECT ${columns} FROM services ${where} ${orderBy} LIMIT @_likeCap`
   ).all({ ...params, _likeCap: likeCap })
   for (const s of likeServices) {
     if (typeof s.related_protocols === 'string') s.related_protocols = JSON.parse(s.related_protocols)
@@ -244,7 +293,8 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
             const rows = db.prepare('SELECT service_id, embedding FROM service_embeddings').all()
             const scores = []
             for (const row of rows) {
-              const vec = new Float32Array(row.embedding.buffer.slice(row.embedding.byteOffset, row.embedding.byteOffset + row.embedding.byteLength))
+              if (row.embedding.byteLength % 4 !== 0) throw new Error(`Malformed embedding for ${row.service_id}: byteLength=${row.embedding.byteLength} not divisible by 4`)
+              const vec = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4)
               if (vec.length === 1536) {
                 const score = cosineSimilarity(embedding, vec)
                 scores.push({ service_id: row.service_id, score })
@@ -280,74 +330,53 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
   const likeIdSet = new Set(likeServices.map(s => s.id))
   const semanticIds = [...semanticScores.keys()].filter(id => !likeIdSet.has(id))
 
-  // Fetch semantic-only services from DB
+  // Fetch semantic-only services with ALL user filters applied (not just status/provider_deleted)
   let semanticOnlyServices = []
   if (semanticIds.length > 0) {
-    const placeholders = semanticIds.map(() => '?').join(',')
+    const noQOpts = { ...opts, q: undefined, rawLimit: undefined, rawOffset: undefined }
+    const { where: filterWhere, params: filterParams } = buildServiceQuery(noQOpts)
+    const idParams = {}
+    const idNames = semanticIds.map((id, i) => {
+      const key = `_semId${i}`
+      idParams[key] = id
+      return `@${key}`
+    })
+    const semWhere = filterWhere
+      ? `${filterWhere} AND id IN (${idNames.join(',')})`
+      : `WHERE id IN (${idNames.join(',')})`
     semanticOnlyServices = db.prepare(
-      `SELECT ${columns} FROM services WHERE id IN (${placeholders}) AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)`
-    ).all(...semanticIds)
+      `SELECT ${columns} FROM services ${semWhere}`
+    ).all({ ...filterParams, ...idParams })
     for (const s of semanticOnlyServices) {
       if (typeof s.related_protocols === 'string') s.related_protocols = JSON.parse(s.related_protocols)
     }
+    // Post-filter: remove services that would LIKE-match q (prevent double-counting)
+    const needle = q.toLowerCase()
+    semanticOnlyServices = semanticOnlyServices.filter(s => {
+      const n = (s.name || '').toLowerCase()
+      const d = (s.description || '').toLowerCase()
+      const u = (s.url || '').toLowerCase()
+      return !n.includes(needle) && !d.includes(needle) && !u.includes(needle)
+    })
   }
+
+  // True LIKE count (uncapped) + semantic-only count (post-overlap-filter)
+  const likeCount = db.prepare(`SELECT COUNT(*) as c FROM services ${where}`).get(params).c
+  const total = likeCount + semanticOnlyServices.length
 
   const allCandidates = [...likeServices, ...semanticOnlyServices]
-  const total = allCandidates.length
 
   // ─── 5-tier composite re-rank ────────────────────────────────────────────
+  // Build LIKE match sets using plain lowercase (no SQL escaping for JS comparison)
+  const likeNameIdSet = new Set()
+  const likeDescIdSet = new Set()
   const qLower = q.toLowerCase()
-
-  // Build LIKE match info for each candidate
-  const likeNameSet = new Set()
-  const likeDescSet = new Set()
-  const escaped = q.replace(/[%_\\]/g, '\\$&').toLowerCase()
   for (const s of allCandidates) {
-    if (s.name && s.name.toLowerCase().includes(escaped)) likeNameSet.add(s.id)
-    if (s.description && s.description.toLowerCase().includes(escaped)) likeDescSet.add(s.id)
+    if (s.name && s.name.toLowerCase().includes(qLower)) likeNameIdSet.add(s.id)
+    if (s.description && s.description.toLowerCase().includes(qLower)) likeDescIdSet.add(s.id)
   }
 
-  allCandidates.sort((a, b) => {
-    // Tier A: exact name match (case-insensitive equality)
-    const aExact = a.name && a.name.toLowerCase() === qLower ? 1 : 0
-    const bExact = b.name && b.name.toLowerCase() === qLower ? 1 : 0
-    if (bExact !== aExact) return bExact - aExact
-
-    // Tier B: LIKE match on name
-    const aName = likeNameSet.has(a.id) ? 1 : 0
-    const bName = likeNameSet.has(b.id) ? 1 : 0
-    if (bName !== aName) return bName - aName
-
-    // Tier C: LIKE match on description
-    const aDesc = likeDescSet.has(a.id) ? 1 : 0
-    const bDesc = likeDescSet.has(b.id) ? 1 : 0
-    if (bDesc !== aDesc) return bDesc - aDesc
-
-    // Tier D: cosine similarity DESC
-    const aCos = semanticScores.get(a.id) || 0
-    const bCos = semanticScores.get(b.id) || 0
-    if (bCos !== aCos) return bCos - aCos
-
-    // Tier E: DEFAULT_ORDER cascade (featured → domain_verified → category → health → name)
-    const aFeat = a.featured || 0
-    const bFeat = b.featured || 0
-    if (bFeat !== aFeat) return bFeat - aFeat
-
-    const aDv = a.domain_verified || 0
-    const bDv = b.domain_verified || 0
-    if (bDv !== aDv) return bDv - aDv
-
-    const aCat = (a.category && a.category !== 'uncategorized') ? 0 : 1
-    const bCat = (b.category && b.category !== 'uncategorized') ? 0 : 1
-    if (aCat !== bCat) return aCat - bCat
-
-    const healthOrder = { healthy: 0, degraded: 1, down: 2, unknown: 3 }
-    const aH = healthOrder[a.health_status] ?? 3
-    const bH = healthOrder[b.health_status] ?? 3
-    if (aH !== bH) return aH - bH
-
-    return (a.name || '').localeCompare(b.name || '')
-  })
+  allCandidates.sort(buildHybridComparator({ q, likeNameIdSet, likeDescIdSet, semanticScores }))
 
   // Apply pagination
   const paged = allCandidates.slice(offset, offset + limit)
