@@ -77,7 +77,7 @@ function cleanup() {
     try { db.prepare('DELETE FROM services WHERE id = ?').run(id) } catch {}
   }
   // Clean up bulk-inserted embeddings for B5/B6 and Phase 2 tests
-  const bulkPatterns = ['hybrid-bulk-%', 'hybrid-t2-%', 'hybrid-t3-%', 'hybrid-overlap-%', 'hybrid-empty-%']
+  const bulkPatterns = ['hybrid-bulk-%', 'hybrid-t2-%', 'hybrid-t3-%', 'hybrid-overlap-%', 'hybrid-empty-%', 'beyond-cap-%', 'likbnd-%', 'sem-cap-%']
   for (const p of bulkPatterns) {
     try { db.exec(`DELETE FROM vec_service_embeddings WHERE service_id LIKE '${p}'`) } catch {}
     try { db.exec(`DELETE FROM service_embeddings WHERE service_id LIKE '${p}'`) } catch {}
@@ -621,6 +621,216 @@ describe('Group P6 — response shape regression (#161)', () => {
       Object.keys(body).sort(),
       ['limit', 'offset', 'services', 'total'],
       `Response should have EXACTLY these top-level keys, got: ${Object.keys(body).sort().join(', ')}`,
+    )
+  })
+})
+
+// ─── GROUP H: JS post-filter overlap-dedup beyond likeCap (#162 P2) ─────────
+
+describe('Group H — overlap dedup: overlap service beyond likeCap exercised by JS post-filter (#162)', () => {
+  it('T-overlap-beyond-likecap: adding embedding for service beyond likeCap must not inflate total (post-filter dedup)', async () => {
+    // Fixture: 1500 services all matching "BeyondCapTest" in name.
+    // 1001 services are featured=1 → rank 1-1001 in DEFAULT_ORDER, filling likeCap=1000 window.
+    // The overlap service is featured=0, domain_verified=0, health_status='unknown' → rank ≥ 1002,
+    // NOT fetched by the LIKE query (beyond likeCap=1000).
+    //
+    // Strategy: query TWICE — first without overlap embedding (baseline), then with it.
+    // When the JS post-filter at services.js:355-360 is correct:
+    //   overlap enters semanticOnlyServices → post-filter removes it (name LIKE-matches "BeyondCapTest")
+    //   → total is unchanged from baseline
+    // When the post-filter is commented out:
+    //   overlap stays in semanticOnlyServices → total = baseline + 1 → strict-equal assertion fails.
+    const insertFeatured = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', 1, 1, 'ai', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const insertUnfeatured = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', 0, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const insertOverlap = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'unknown', 'active', 0, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const tx = db.transaction(() => {
+      for (let i = 0; i < 1001; i++) {
+        insertFeatured.run(`beyond-cap-feat-${i}`, `BeyondCapTest-feat-${i}`, `BeyondCapTest featured svc ${i}`, `https://beyond-cap-feat-${i}.example.com/api`)
+      }
+      // Overlap: featured=0, domain_verified=0, health_status='unknown' → rank ≥ 1002 (beyond likeCap)
+      // Name deliberately contains "BeyondCapTest" so the JS post-filter must remove it from semanticOnlyServices
+      insertOverlap.run('beyond-cap-overlap-0', 'BeyondCapTest-overlap', 'BeyondCapTest overlap service', 'https://beyond-cap-overlap.example.com/api')
+      for (let i = 0; i < 498; i++) {
+        insertUnfeatured.run(`beyond-cap-fill-${i}`, `BeyondCapTest-fill-${i}`, `BeyondCapTest fill svc ${i}`, `https://beyond-cap-fill-${i}.example.com/api`)
+      }
+    })
+    tx()
+
+    try {
+      // Step 1: baseline — overlap has no embedding, not in semanticScores
+      stubEmbedQuery(WEATHER_QUERY_VEC)
+      const baseline = await queryServicesHybrid(db, { q: 'BeyondCapTest', rawLimit: 50 }, API_COLUMNS)
+      assert.ok(baseline.total >= 1500, `baseline total should be ≥ 1500, got ${baseline.total}`)
+
+      // Step 2: give overlap an embedding — now it enters semanticScores → semanticIds → semanticOnlyServices
+      insertEmbedding('beyond-cap-overlap-0', WEATHER_SERVICE_VEC)
+      stubEmbedQuery(WEATHER_QUERY_VEC)
+      const withEmbedding = await queryServicesHybrid(db, { q: 'BeyondCapTest', rawLimit: 50 }, API_COLUMNS)
+
+      // Total must be UNCHANGED — overlap was LIKE-matched (counted in likeCount), so JS post-filter
+      // must remove it from semanticOnlyServices to avoid double-counting.
+      // Without the post-filter: total = baseline.total + 1 → strict-equal fails.
+      assert.strictEqual(withEmbedding.total, baseline.total,
+        `total must not increase when overlap embedding is added (JS post-filter must dedup). Got ${withEmbedding.total} vs baseline ${baseline.total}`)
+
+      // Overlap service must NOT appear in result.services.
+      // Without the post-filter: overlap has the best cosine score among all candidates
+      // (WEATHER_SERVICE_VEC closest to query) → ranks #1 → appears in page 1 → assertion fails.
+      const overlapCount = withEmbedding.services.filter(s => s.id === 'beyond-cap-overlap-0').length
+      assert.strictEqual(overlapCount, 0,
+        `overlap service should not appear in results (removed by JS post-filter), got ${overlapCount}`)
+    } finally {
+      db.exec("DELETE FROM service_embeddings WHERE service_id LIKE 'beyond-cap-%'")
+      try { db.exec("DELETE FROM vec_service_embeddings WHERE service_id LIKE 'beyond-cap-%'") } catch {}
+      db.exec("DELETE FROM services WHERE id LIKE 'beyond-cap-%'")
+    }
+  })
+})
+
+// ─── GROUP I: likeCap boundary arithmetic (#162 P7) ──────────────────────────
+
+describe('Group I — likeCap boundary: parametric tests for offset+limit combos (#162)', () => {
+  for (const [offset, rawLimit] of [[0, 50], [950, 100], [0, 200], [1500, 50]]) {
+    const likeCap = Math.max(1000, offset + rawLimit)
+    const totalServices = likeCap + 50 // enough to exceed likeCap
+
+    it(`T-likecap-boundary (offset=${offset}, rawLimit=${rawLimit}): likeCap=${likeCap}, total stable, no dups across pages`, async () => {
+      const prefix = `likbnd-${offset}-${rawLimit}`
+      const insert = db.prepare(`
+        INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+        VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', 0, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+      `)
+      const term = `LikecapBnd${offset}x${rawLimit}`
+      const tx = db.transaction(() => {
+        for (let i = 0; i < totalServices; i++) {
+          insert.run(`${prefix}-${i}`, `${term}-${i}`, `${term} description ${i}`, `https://${prefix}-${i}.example.com/api`)
+        }
+      })
+      tx()
+
+      try {
+        // Degrade semantic path so LIKE-only is used — cleanly isolates likeCap arithmetic
+        globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({}) })
+
+        const page1 = await queryServicesHybrid(db, { q: term, rawLimit: String(rawLimit), rawOffset: String(offset) }, API_COLUMNS)
+        const page2 = await queryServicesHybrid(db, { q: term, rawLimit: String(rawLimit), rawOffset: String(offset + rawLimit) }, API_COLUMNS)
+
+        // (a) total is stable across consecutive pages for the same fixture
+        assert.strictEqual(page1.total, page2.total, `total should be stable across pages (got ${page1.total} vs ${page2.total})`)
+
+        // (b) no duplicate IDs across consecutive pages
+        const ids1 = new Set(page1.services.map(s => s.id))
+        const ids2 = new Set(page2.services.map(s => s.id))
+        const overlap = [...ids1].filter(id => ids2.has(id))
+        assert.strictEqual(overlap.length, 0, `no duplicate IDs across consecutive pages, got ${overlap.length} dups: ${overlap.slice(0, 3).join(', ')}`)
+
+        // (c) likeCap boundary: page1 at given offset should contain rawLimit results
+        // (unless fewer remain). With totalServices = likeCap+50, offset < totalServices,
+        // so offset+rawLimit ≤ likeCap+50 ≤ totalServices — all results should be available.
+        // If likeCap were wrong (e.g., hardcoded 1000 when it should be 1550), the slice
+        // would come up short at deep offsets.
+        if (offset + rawLimit <= totalServices) {
+          assert.strictEqual(page1.services.length, rawLimit,
+            `page at offset=${offset} should have rawLimit=${rawLimit} results (likeCap boundary). Got ${page1.services.length} — possible likeCap regression`)
+        }
+      } finally {
+        db.exec(`DELETE FROM services WHERE id LIKE '${prefix}-%'`)
+      }
+    })
+  }
+})
+
+// ─── GROUP P8: X-402index-Semantic-Cap header (#162 P3) ──────────────────────
+
+describe('Group P8 — X-402index-Semantic-Cap response header (#162)', () => {
+  it('T-semantic-cap-header-truncated: header is "true" when K semantic neighbors returned (sqlite-vec path)', async () => {
+    // Requires sqlite-vec for deterministic K-cap behavior.
+    // JS-fallback loads all embeddings (no K cap) so truncation is not guaranteed.
+    if (!SQLITE_VEC_AVAILABLE) return
+
+    const prefix = 'sem-cap-trunc'
+    // Insert 60 services — all close to query vec (WEATHER_SERVICE_VEC), none LIKE-match query
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', 0, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const tx = db.transaction(() => {
+      for (let i = 0; i < 60; i++) {
+        insert.run(`${prefix}-${i}`, `SemCapSvc-${i}`, `Semantic capability service ${i}`, `https://sem-cap-trunc-${i}.example.com/api`)
+      }
+    })
+    tx()
+    for (let i = 0; i < 60; i++) insertEmbedding(`${prefix}-${i}`, WEATHER_SERVICE_VEC)
+
+    try {
+      // Query term does not match any service name/description → all 60 are semantic-only
+      // K = max(50, limit=50) = 50. Vec returns top 50 from ≥60 embeddings → K saturated.
+      // semanticOnlyServices.length === K → semantic_cap = true → header = 'true'
+      stubEmbedQuery(WEATHER_QUERY_VEC)
+      const res = await originalFetch(`${API}/api/v1/services?q=SemCapTruncQuery&limit=50`)
+      assert.equal(res.status, 200)
+      assert.equal(res.headers.get('x-402index-semantic-cap'), 'true',
+        `X-402index-Semantic-Cap should be 'true' when K=${Math.max(50, 50)} semantic neighbors returned, got: ${res.headers.get('x-402index-semantic-cap')}`)
+    } finally {
+      for (let i = 0; i < 60; i++) {
+        try { db.prepare('DELETE FROM vec_service_embeddings WHERE service_id = ?').run(`${prefix}-${i}`) } catch {}
+        db.prepare('DELETE FROM service_embeddings WHERE service_id = ?').run(`${prefix}-${i}`)
+        db.prepare('DELETE FROM services WHERE id = ?').run(`${prefix}-${i}`)
+      }
+    }
+  })
+
+  it('T-semantic-cap-header-not-truncated: header is "false" when fewer than K semantic neighbors returned', async () => {
+    const prefix = 'sem-cap-notrunc'
+    // Insert only 5 semantic-only services — far fewer than K=50
+    // semanticOnlyServices.length < K → semantic_cap = false → header = 'false'
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', 0, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const tx = db.transaction(() => {
+      for (let i = 0; i < 5; i++) {
+        insert.run(`${prefix}-${i}`, `SemCapNoSvc-${i}`, `No-trunc semantic service ${i}`, `https://sem-cap-notrunc-${i}.example.com/api`)
+      }
+    })
+    tx()
+    for (let i = 0; i < 5; i++) insertEmbedding(`${prefix}-${i}`, WEATHER_SERVICE_VEC)
+
+    try {
+      // 5 new + ~5 permanent close fixtures = ~10 total semantic neighbors << K=50
+      stubEmbedQuery(WEATHER_QUERY_VEC)
+      const res = await originalFetch(`${API}/api/v1/services?q=SemCapNoTruncQuery&limit=50`)
+      assert.equal(res.status, 200)
+      assert.equal(res.headers.get('x-402index-semantic-cap'), 'false',
+        `X-402index-Semantic-Cap should be 'false' when fewer than K semantic neighbors, got: ${res.headers.get('x-402index-semantic-cap')}`)
+    } finally {
+      for (let i = 0; i < 5; i++) {
+        try { db.prepare('DELETE FROM vec_service_embeddings WHERE service_id = ?').run(`${prefix}-${i}`) } catch {}
+        db.prepare('DELETE FROM service_embeddings WHERE service_id = ?').run(`${prefix}-${i}`)
+        db.prepare('DELETE FROM services WHERE id = ?').run(`${prefix}-${i}`)
+      }
+    }
+  })
+
+  it('T-body-shape-still-four-keys: X-402index-Semantic-Cap header does NOT appear in response body', async () => {
+    // Belt-and-suspenders guard: semantic_cap must be stripped from body and moved to header.
+    // Body must remain exactly {limit, offset, services, total} — no new keys.
+    const res = await originalFetch(`${API}/api/v1/services?q=weather`)
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    assert.deepStrictEqual(
+      Object.keys(body).sort(),
+      ['limit', 'offset', 'services', 'total'],
+      `Response body should have EXACTLY 4 keys, got: ${Object.keys(body).sort().join(', ')}`,
     )
   })
 })
