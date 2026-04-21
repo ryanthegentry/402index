@@ -1,6 +1,7 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'crypto'
+import { readFileSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { registerWebhook, deleteWebhook, getWebhook, buildWebhookPayload, verifySecret, createWebhooksTable } from '../src/services/webhooks.js'
 
@@ -240,5 +241,31 @@ describe('buildWebhookPayload', () => {
     const payload = buildWebhookPayload('service.down', { id: 'abc' })
     const parsed = new Date(payload.timestamp)
     assert.ok(!isNaN(parsed.getTime()), 'Timestamp should be valid date')
+  })
+})
+
+// ─── Timing-leak migration structural + behavioral regression (#156) ────
+
+describe('verifySecret timing-leak migration (#156)', () => {
+  const src = readFileSync(new URL('../src/services/webhooks.js', import.meta.url), 'utf8')
+
+  it('structural: does not contain bufA.length !== bufB.length', () => {
+    assert.ok(!src.includes('bufA.length !== bufB.length'), 'length-branch pattern must be removed')
+  })
+
+  it('structural: uses constantTimeEqual', () => {
+    assert.ok(src.includes('constantTimeEqual'), 'must use shared constantTimeEqual utility')
+  })
+
+  it('behavioral: deleteWebhook with wrong-length secret throws Unauthorized', () => {
+    const db = createTestDb()
+    const { id } = registerWebhook(db, {
+      url: 'https://example.com/hook',
+      secret: 'my-secret-123',
+    })
+    assert.throws(
+      () => deleteWebhook(db, id, 'wrong'),
+      /Unauthorized: secret mismatch/
+    )
   })
 })

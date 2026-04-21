@@ -1,4 +1,5 @@
-import { randomBytes, randomUUID, timingSafeEqual, createHash } from 'crypto'
+import { randomBytes, randomUUID, createHash } from 'crypto'
+import { constantTimeEqual } from '../util/constant-time.js'
 import db from '../db.js'
 import { isBlockedScheme, resolveAndCheck } from '../health/checker.js'
 
@@ -18,8 +19,7 @@ function stmt(key, sql) {
  * Constant-time token comparison to prevent timing attacks.
  */
 function tokensMatch(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b))
+  return constantTimeEqual(a, b)
 }
 
 /**
@@ -33,8 +33,7 @@ export function hashMatchesToken(receivedContent, storedToken) {
   const expectedHash = createHash('sha256').update(storedToken).digest('hex')
   const received = (receivedContent || '').trim().toLowerCase()
   const expected = expectedHash.toLowerCase()
-  if (received.length !== expected.length) return false
-  return timingSafeEqual(Buffer.from(received), Buffer.from(expected))
+  return constantTimeEqual(received, expected)
 }
 
 const MAX_LENGTHS = { name: 200, description: 2000, category: 100, payment_asset: 50, payment_network: 50 }

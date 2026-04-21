@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { randomUUID, timingSafeEqual, randomBytes, createHash } from 'crypto'
+import { randomUUID, randomBytes, createHash } from 'crypto'
+import { constantTimeEqual } from '../util/constant-time.js'
 import db, { logQuery } from '../db.js'
 import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/services.js'
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
@@ -764,15 +765,7 @@ router.post('/register', async (req, res) => {
     const golemHeader = req.get('x-golem-gateway-secret')
     let golemSecretValid = false
     if (golemSecret && golemHeader) {
-      try {
-        golemSecretValid = timingSafeEqual(
-          Buffer.from(golemSecret),
-          Buffer.from(golemHeader)
-        )
-      } catch {
-        // Length mismatch — treat as invalid
-        golemSecretValid = false
-      }
+      golemSecretValid = constantTimeEqual(golemSecret, golemHeader)
     }
     if (service.status === 'pending' && body.provider === 'golem-gateway' && golemSecretValid) {
       db.prepare(

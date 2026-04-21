@@ -12,6 +12,7 @@
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID, createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { startServer, stopServer } from './helpers/server.js'
 
 let BASE = process.env.API_BASE
@@ -1813,5 +1814,70 @@ describe('POST /api/v1/admin/domains/:domain/reset', () => {
 
     const row = db.prepare('SELECT contact_email FROM domain_claims WHERE domain = ?').get(emailDomain)
     assert.equal(row.contact_email, 'test@example.com')
+  })
+})
+
+// ─── Timing-leak migration structural + behavioral regression (#156) ────
+
+describe('domain-verify timing-leak migration (#156)', () => {
+  const src = readFileSync(new URL('../src/services/domain-verify.js', import.meta.url), 'utf8')
+
+  it('structural: tokensMatch does not contain a.length !== b.length', () => {
+    // Extract tokensMatch function body
+    const match = src.match(/function tokensMatch\([^)]*\)\s*\{([\s\S]*?)\n\}/)
+    assert.ok(match, 'tokensMatch function must exist')
+    const body = match[1]
+    assert.ok(!body.includes('a.length !== b.length'), 'length-branch pattern must be removed from tokensMatch')
+  })
+
+  it('structural: tokensMatch does not contain typeof a !== \'string\'', () => {
+    const match = src.match(/function tokensMatch\([^)]*\)\s*\{([\s\S]*?)\n\}/)
+    assert.ok(match, 'tokensMatch function must exist')
+    const body = match[1]
+    assert.ok(!body.includes("typeof a !== 'string'"), 'typeof guard must be removed from tokensMatch')
+    assert.ok(!body.includes('typeof a !== "string"'), 'typeof guard must be removed from tokensMatch')
+  })
+
+  it('structural: hashMatchesToken does not contain received.length !== expected.length', () => {
+    const match = src.match(/export function hashMatchesToken\([^)]*\)\s*\{([\s\S]*?)\n\}/)
+    assert.ok(match, 'hashMatchesToken function must exist')
+    const body = match[1]
+    assert.ok(!body.includes('received.length !== expected.length'), 'length-branch pattern must be removed from hashMatchesToken')
+  })
+
+  it('structural: file imports constantTimeEqual from ../util/constant-time.js', () => {
+    assert.ok(
+      src.includes("from '../util/constant-time.js'") || src.includes('from "../util/constant-time.js"'),
+      'must import constantTimeEqual from ../util/constant-time.js'
+    )
+  })
+
+  it('behavioral: hashMatchesToken returns false (not throw) for mismatched-length input', async () => {
+    const { hashMatchesToken } = await import('../src/services/domain-verify.js')
+    // 63-char content vs a token whose SHA-256 hex is 64 chars
+    const shortContent = 'a'.repeat(63)
+    const storedToken = 'some-token'
+    const result = hashMatchesToken(shortContent, storedToken)
+    assert.equal(result, false, 'must return false for length-mismatched input')
+  })
+
+  it('behavioral: revokeClaim with wrong-length token returns 403', async () => {
+    if (!db) return
+    const domain = `timing-test-${randomUUID().slice(0, 8)}.example.com`
+    const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '')
+
+    try {
+      db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(domain)
+      db.prepare(
+        "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
+      ).run(randomUUID(), domain, token)
+
+      const { revokeClaim } = await import('../src/services/domain-verify.js')
+      const result = revokeClaim(domain, 'wrong-length-token')
+      assert.equal(result.status, 403)
+      assert.equal(result.error, 'Invalid verification token')
+    } finally {
+      try { db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(domain) } catch {}
+    }
   })
 })
