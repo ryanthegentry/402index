@@ -533,6 +533,7 @@ describe('Group F — total accuracy and LIKE cap (#153 review)', () => {
       assert.ok(result.total >= 1200, `total should be >= 1200 (overlap counted once, not capped at 1000), got ${result.total}`)
     } finally {
       db.exec("DELETE FROM service_embeddings WHERE service_id LIKE 'hybrid-overlap-%'")
+      try { db.exec("DELETE FROM vec_service_embeddings WHERE service_id LIKE 'hybrid-overlap-%'") } catch {}
       db.exec("DELETE FROM services WHERE id LIKE 'hybrid-overlap-%'")
     }
   })
@@ -752,6 +753,14 @@ describe('Group I — likeCap boundary: parametric tests for offset+limit combos
 // ─── GROUP P8: X-402index-Semantic-Cap header (#162 P3) ──────────────────────
 
 describe('Group P8 — X-402index-Semantic-Cap response header (#162)', () => {
+  // Group I tests degrade the embed API (embed-error), which trips the circuit breaker.
+  // Reset it here so HTTP tests in this group get a live semantic path.
+  before(async () => {
+    process.env.NODE_ENV = 'test' // required by resetCircuit's test-only guard
+    const { resetCircuit: rc } = await import('../src/services/embeddings.js')
+    rc()
+  })
+
   it('T-semantic-cap-header-truncated: header is "true" when K semantic neighbors returned (sqlite-vec path)', async () => {
     // Requires sqlite-vec for deterministic K-cap behavior.
     // JS-fallback loads all embeddings (no K cap) so truncation is not guaranteed.
