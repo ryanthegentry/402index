@@ -186,6 +186,28 @@ describe('Group C — circuit breaker (#150)', () => {
     assert.equal(getCircuitState().failures, 0, 'one success should reset failures to 0')
   })
 
+  it('C9: half-open single trial — two concurrent calls, only one fetch', async () => {
+    await triggerFailures(10)
+    resetCircuit({ advanceMs: 60_000 })
+
+    fetchCallCount = 0
+    globalThis.fetch = async () => {
+      fetchCallCount++
+      await new Promise(r => setTimeout(r, 100)) // keep in-flight so both overlap
+      return makeOkResponse()
+    }
+
+    const [r1, r2] = await Promise.all([
+      embedQueryForRead('test1', 1500),
+      embedQueryForRead('test2', 1500),
+    ])
+
+    assert.equal(fetchCallCount, 1, 'only one fetch should be made in half-open state')
+    const reasons = [r1.degradedReason, r2.degradedReason]
+    assert.ok(reasons.includes(null), 'one call should succeed (the trial)')
+    assert.ok(reasons.includes('circuit-open'), 'other call should fast-fail with circuit-open')
+  })
+
   it('C8: malformed 1535-dim embedding counts as a failure', async () => {
     resetCircuit()
     globalThis.fetch = async () => makeMalformedResponse()

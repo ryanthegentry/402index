@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 const originalFetch = globalThis.fetch
 
 let db, SQLITE_VEC_AVAILABLE, logQuery
-let queryServices, queryServicesHybrid, buildServiceQuery, API_COLUMNS
+let queryServices, queryServicesHybrid, buildServiceQuery, buildHybridComparator, API_COLUMNS
 let embedQuery, cosineSimilarity, getCircuitState, resetCircuit
 let startServer, stopServer, API
 
@@ -31,6 +31,8 @@ const WEATHER_SERVICE_VEC = makeVector(1.05) // close to WEATHER_QUERY_VEC
 const SATS4AI_SERVICE_VEC = makeVector(5.0)  // far from WEATHER_QUERY_VEC
 const GENERIC_VEC_A = makeVector(2.0)
 const GENERIC_VEC_B = makeVector(3.0)
+const FILTER_SERVICE_VEC = makeVector(1.02) // close to WEATHER_QUERY_VEC for filter-bypass tests
+const PERCENT_CLOSE_VEC = makeVector(1.03)  // close to query vec for T6 percent test
 
 // Helper: insert test service into DB
 function insertService(id, name, opts = {}) {
@@ -41,35 +43,46 @@ function insertService(id, name, opts = {}) {
   const domain_verified = opts.domain_verified || 0
   const category = opts.category || 'uncategorized'
   const price_usd = opts.price_usd ?? null
+  const x402_payment_valid = opts.x402_payment_valid ?? null
   db.prepare(`
-    INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, price_usd, hostname, registered_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 'test', ?, 'active', ?, ?, ?, ?, 'test.example.com', datetime('now'), datetime('now'))
-  `).run(id, name, desc, `https://test-${id}.example.com/api`, proto, health, featured, domain_verified, category, price_usd)
+    INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, price_usd, x402_payment_valid, hostname, registered_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'test', ?, 'active', ?, ?, ?, ?, ?, 'test.example.com', datetime('now'), datetime('now'))
+  `).run(id, name, desc, `https://test-${id}.example.com/api`, proto, health, featured, domain_verified, category, price_usd, x402_payment_valid)
 }
 
-// Helper: insert embedding for a service
+// Helper: insert embedding for a service (both regular + vec table)
 function insertEmbedding(serviceId, vec) {
   const blob = Buffer.from(vec.buffer)
   db.prepare(`
     INSERT OR REPLACE INTO service_embeddings (service_id, embedding, model, embedded_at)
     VALUES (?, ?, 'text-embedding-3-small', ?)
   `).run(serviceId, blob, Math.floor(Date.now() / 1000))
+  try {
+    db.prepare('INSERT OR REPLACE INTO vec_service_embeddings(service_id, embedding) VALUES (?, ?)').run(serviceId, blob)
+  } catch {}
 }
 
 // Clean up test services
 function cleanup() {
   const ids = [
-    'hybrid-sats4ai', 'hybrid-weather-prime', 'hybrid-weather-basic',
+    'hybrid-sats4ai', 'hybrid-weather-prime', 'hybrid-prime', 'hybrid-weather-basic',
     'hybrid-tied-a', 'hybrid-tied-b', 'hybrid-generic-1', 'hybrid-generic-2',
     'hybrid-sort-price-1', 'hybrid-sort-price-2',
+    'hybrid-filter-l402', 'hybrid-filter-news', 'hybrid-filter-nopay', 'hybrid-filter-noverify',
+    'hybrid-percent-svc', 'hybrid-percent-far',
   ]
   for (const id of ids) {
+    try { db.prepare('DELETE FROM vec_service_embeddings WHERE service_id = ?').run(id) } catch {}
     try { db.prepare('DELETE FROM service_embeddings WHERE service_id = ?').run(id) } catch {}
     try { db.prepare('DELETE FROM services WHERE id = ?').run(id) } catch {}
   }
-  // Clean up bulk-inserted embeddings for B5/B6
-  try { db.exec("DELETE FROM service_embeddings WHERE service_id LIKE 'hybrid-bulk-%'") } catch {}
-  try { db.exec("DELETE FROM services WHERE id LIKE 'hybrid-bulk-%'") } catch {}
+  // Clean up bulk-inserted embeddings for B5/B6 and Phase 2 tests
+  const bulkPatterns = ['hybrid-bulk-%', 'hybrid-t2-%', 'hybrid-t3-%', 'hybrid-overlap-%', 'hybrid-empty-%']
+  for (const p of bulkPatterns) {
+    try { db.exec(`DELETE FROM vec_service_embeddings WHERE service_id LIKE '${p}'`) } catch {}
+    try { db.exec(`DELETE FROM service_embeddings WHERE service_id LIKE '${p}'`) } catch {}
+    try { db.exec(`DELETE FROM services WHERE id LIKE '${p}'`) } catch {}
+  }
 }
 
 before(async () => {
@@ -84,7 +97,13 @@ before(async () => {
   queryServices = queries.queryServices
   queryServicesHybrid = queries.queryServicesHybrid
   buildServiceQuery = queries.buildServiceQuery
+  buildHybridComparator = queries.buildHybridComparator
   API_COLUMNS = queries.API_COLUMNS
+
+  // Create vec virtual table so the sqlite-vec path actually succeeds (not throws)
+  if (SQLITE_VEC_AVAILABLE) {
+    db.exec('CREATE VIRTUAL TABLE IF NOT EXISTS vec_service_embeddings USING vec0(service_id text primary key, embedding float[1536])')
+  }
 
   const srv = await import('./helpers/server.js')
   startServer = srv.startServer
@@ -107,10 +126,32 @@ before(async () => {
   insertEmbedding('hybrid-weather-basic', GENERIC_VEC_A)        // far from weather query
   insertEmbedding('hybrid-tied-a', GENERIC_VEC_A)
   insertEmbedding('hybrid-tied-b', GENERIC_VEC_B)
+
+  // Filter-bypass test fixtures (semantic-only: names/descriptions don't contain "weather")
+  insertService('hybrid-filter-l402', 'CosmicData', {
+    protocol: 'L402', description: 'Cosmic radiation measurements', category: 'science', health_status: 'healthy'
+  })
+  insertEmbedding('hybrid-filter-l402', FILTER_SERVICE_VEC)
+
+  insertService('hybrid-filter-news', 'NewsFlash', {
+    protocol: 'x402', description: 'Breaking news aggregation', category: 'news'
+  })
+  insertEmbedding('hybrid-filter-news', FILTER_SERVICE_VEC)
+
+  insertService('hybrid-filter-nopay', 'NoPayService', {
+    protocol: 'x402', description: 'Unvalidated payment endpoint', x402_payment_valid: 0
+  })
+  insertEmbedding('hybrid-filter-nopay', FILTER_SERVICE_VEC)
+
+  insertService('hybrid-filter-noverify', 'UnverifiedSvc', {
+    protocol: 'x402', description: 'Unverified x402 endpoint', x402_payment_valid: 0, domain_verified: 0
+  })
+  insertEmbedding('hybrid-filter-noverify', FILTER_SERVICE_VEC)
 })
 
 after(async () => {
   cleanup()
+  try { db.exec('DROP TABLE IF EXISTS vec_service_embeddings') } catch {}
   globalThis.fetch = originalFetch
   await stopServer()
 })
@@ -199,11 +240,16 @@ describe('Group A — hybrid re-rank composite order (#150)', () => {
     // total should be >= the LIKE count (union includes semantic-only results)
     const likeOnly = queryServices(db, { q: 'weather', rawLimit: 200 }, API_COLUMNS)
     assert.ok(result.total >= likeOnly.total, `hybrid total (${result.total}) should be >= LIKE total (${likeOnly.total})`)
-    // When semantic is skipped, total === LIKE count
-    const noApiKey = process.env.OPENAI_API_KEY
+    // Verify degraded path actually returns LIKE-only with correct reason
+    const saved = process.env.OPENAI_API_KEY
     delete process.env.OPENAI_API_KEY
-    // Can't easily test this without re-importing module, so just check union >= LIKE
-    process.env.OPENAI_API_KEY = noApiKey
+    try {
+      const degraded = await queryServicesHybrid(db, { q: 'weather', rawLimit: 50 }, API_COLUMNS)
+      assert.equal(degraded.degradedReason, 'no-api-key', 'should report no-api-key when OPENAI_API_KEY is absent')
+      assert.ok(degraded.total > 0, 'should still return LIKE results in degraded mode')
+    } finally {
+      process.env.OPENAI_API_KEY = saved
+    }
   })
 })
 
@@ -375,6 +421,191 @@ describe('Group D — documentation (#150)', () => {
     const md = await res.text()
     assert.ok(md.toLowerCase().includes('hybrid') || md.toLowerCase().includes('semantic'),
       'docs.md should reflect hybrid/semantic search documentation')
+  })
+})
+
+// ─── GROUP E: Filter bypass on semantic-only union (#153 review) ──────────────
+
+describe('Group E — semantic-only filter bypass (#153 review)', () => {
+  beforeEach(() => {
+    stubEmbedQuery(WEATHER_QUERY_VEC)
+  })
+
+  it('T1a: protocol filter — L402 semantic match excluded by protocol=x402', async () => {
+    const result = await queryServicesHybrid(db, { q: 'weather', protocol: 'x402', rawLimit: 200 }, API_COLUMNS)
+    const ids = result.services.map(s => s.id)
+    assert.ok(!ids.includes('hybrid-filter-l402'),
+      'L402 service should be excluded when protocol=x402 filter is applied')
+    for (const s of result.services) {
+      assert.equal(s.protocol.toLowerCase(), 'x402', `service ${s.id} should be x402`)
+    }
+  })
+
+  it('T1b: category filter — news-category semantic match excluded by category=real-time-data/weather', async () => {
+    const result = await queryServicesHybrid(db, { q: 'weather', category: 'real-time-data/weather', rawLimit: 200 }, API_COLUMNS)
+    const ids = result.services.map(s => s.id)
+    assert.ok(!ids.includes('hybrid-filter-news'),
+      'News-category service should be excluded when category=real-time-data/weather')
+  })
+
+  it('T1c: payment_valid filter — invalid-payment semantic match excluded', async () => {
+    const result = await queryServicesHybrid(db, { q: 'weather', payment_valid: 'true', rawLimit: 200 }, API_COLUMNS)
+    const ids = result.services.map(s => s.id)
+    assert.ok(!ids.includes('hybrid-filter-nopay'),
+      'Service with invalid payment should be excluded when payment_valid=true')
+  })
+
+  it('T1d: verified filter — non-verified semantic match excluded', async () => {
+    const result = await queryServicesHybrid(db, { q: 'weather', verified: 'true', rawLimit: 200 }, API_COLUMNS)
+    const ids = result.services.map(s => s.id)
+    assert.ok(!ids.includes('hybrid-filter-noverify'),
+      'Non-verified service should be excluded when verified=true')
+  })
+})
+
+// ─── GROUP F: Total accuracy and LIKE cap (#153 review) ──────────────────────
+
+describe('Group F — total accuracy and LIKE cap (#153 review)', () => {
+  it('T2: LIKE cap ORDER BY — featured service appears in capped results', async () => {
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', ?, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const insertMany = db.transaction(() => {
+      for (let i = 0; i < 1001; i++) {
+        const id = `hybrid-t2-${i}`
+        const featured = i === 1000 ? 1 : 0
+        insert.run(id, `OrderTest-${i}`, `OrderTest-${i} description`, `https://t2-${i}.example.com/api`, featured)
+      }
+    })
+    insertMany()
+
+    try {
+      stubEmbedQuery(WEATHER_QUERY_VEC)
+      const result = await queryServicesHybrid(db, { q: 'OrderTest', rawLimit: 50 }, API_COLUMNS)
+      // Featured service (inserted last, highest rowid) should appear due to ORDER BY featured DESC
+      const hasFeatured = result.services.some(s => s.id === 'hybrid-t2-1000')
+      assert.ok(hasFeatured,
+        'Featured service (inserted last) should appear in capped LIKE results when ORDER BY is applied')
+    } finally {
+      db.exec("DELETE FROM services WHERE id LIKE 'hybrid-t2-%'")
+    }
+  })
+
+  it('T3: total not capped at likeCap — 1200 LIKE matches reports total=1200', async () => {
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', 0, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const insertMany = db.transaction(() => {
+      for (let i = 0; i < 1200; i++) {
+        insert.run(`hybrid-t3-${i}`, `TotalCap-${i}`, `TotalCap-${i} desc`, `https://t3-${i}.example.com/api`)
+      }
+    })
+    insertMany()
+
+    try {
+      stubEmbedQuery(WEATHER_QUERY_VEC)
+      const result = await queryServicesHybrid(db, { q: 'TotalCap', rawLimit: 50 }, API_COLUMNS)
+      assert.equal(result.total, 1200, `total should be 1200, not capped at likeCap (got ${result.total})`)
+    } finally {
+      db.exec("DELETE FROM services WHERE id LIKE 'hybrid-t3-%'")
+    }
+  })
+
+  it('T-total-overlap: 1200 LIKE + 1 overlap semantic → total === 1200 (no double-count)', async () => {
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', 0, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const insertMany = db.transaction(() => {
+      for (let i = 0; i < 1200; i++) {
+        insert.run(`hybrid-overlap-${i}`, `OverlapTest-${i}`, `OverlapTest-${i} desc`, `https://overlap-${i}.example.com/api`)
+      }
+    })
+    insertMany()
+    // Give one LIKE-matching service an embedding (it overlaps: both LIKE AND semantic)
+    insertEmbedding('hybrid-overlap-0', WEATHER_SERVICE_VEC)
+
+    try {
+      stubEmbedQuery(WEATHER_QUERY_VEC)
+      const result = await queryServicesHybrid(db, { q: 'OverlapTest', rawLimit: 50 }, API_COLUMNS)
+      assert.equal(result.total, 1200, `total should be 1200 (overlap counted once), got ${result.total}`)
+    } finally {
+      db.exec("DELETE FROM service_embeddings WHERE service_id LIKE 'hybrid-overlap-%'")
+      db.exec("DELETE FROM services WHERE id LIKE 'hybrid-overlap-%'")
+    }
+  })
+
+  it('T-empty-semantic: zero semantic-only results with >1000 LIKE → total correct', async () => {
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO services (id, name, description, url, protocol, source, health_status, status, featured, domain_verified, category, hostname, registered_at, updated_at)
+      VALUES (?, ?, ?, ?, 'x402', 'test', 'healthy', 'active', 0, 0, 'uncategorized', 'test.example.com', datetime('now'), datetime('now'))
+    `)
+    const insertMany = db.transaction(() => {
+      for (let i = 0; i < 1100; i++) {
+        insert.run(`hybrid-empty-${i}`, `EmptyTest-${i}`, `EmptyTest-${i} desc`, `https://empty-${i}.example.com/api`)
+      }
+    })
+    insertMany()
+
+    try {
+      stubEmbedQuery(WEATHER_QUERY_VEC)
+      const result = await queryServicesHybrid(db, { q: 'EmptyTest', rawLimit: 50 }, API_COLUMNS)
+      assert.equal(result.total, 1100, `total should be 1100 (no semantic-only), got ${result.total}`)
+    } finally {
+      db.exec("DELETE FROM services WHERE id LIKE 'hybrid-empty-%'")
+    }
+  })
+})
+
+// ─── GROUP G: Edge cases and comparator (#153 review) ────────────────────────
+
+describe('Group G — edge cases and comparator (#153 review)', () => {
+  it('T5: A2 fixture renamed — hybrid-prime exists, URL has no "weather"', () => {
+    const svc = db.prepare('SELECT url FROM services WHERE id = ?').get('hybrid-prime')
+    assert.ok(svc, 'hybrid-prime should exist (renamed from hybrid-weather-prime)')
+    assert.ok(!svc.url.includes('weather'), 'fixture URL should not contain "weather"')
+  })
+
+  it('T6: 50%_off query — name match ranks above cosine-only (no SQL escape in JS)', async () => {
+    insertService('hybrid-percent-svc', '50%_off deals', { description: 'Discount API' })
+    insertEmbedding('hybrid-percent-svc', GENERIC_VEC_A)
+
+    insertService('hybrid-percent-far', 'FarService', { description: 'Unrelated service' })
+    insertEmbedding('hybrid-percent-far', PERCENT_CLOSE_VEC)
+
+    try {
+      stubEmbedQuery(PERCENT_CLOSE_VEC)
+      const result = await queryServicesHybrid(db, { q: '50%_off', rawLimit: 50 }, API_COLUMNS)
+      const idx_percent = result.services.findIndex(s => s.id === 'hybrid-percent-svc')
+      const idx_far = result.services.findIndex(s => s.id === 'hybrid-percent-far')
+      assert.ok(idx_percent >= 0, '50%_off deals should appear in results')
+      assert.ok(idx_far >= 0, 'FarService should appear in results')
+      assert.ok(idx_percent < idx_far,
+        '50%_off deals (Tier B name match) should rank above FarService (Tier D cosine-only)')
+    } finally {
+      for (const id of ['hybrid-percent-svc', 'hybrid-percent-far']) {
+        try { db.prepare('DELETE FROM service_embeddings WHERE service_id = ?').run(id) } catch {}
+        try { db.prepare('DELETE FROM services WHERE id = ?').run(id) } catch {}
+      }
+    }
+  })
+
+  it('T-comparator-empty: buildHybridComparator — no LIKE matches, cosine-winner ranks first', () => {
+    assert.ok(typeof buildHybridComparator === 'function', 'buildHybridComparator should be exported')
+    const comparator = buildHybridComparator({
+      q: 'weather',
+      likeNameIdSet: new Set(),
+      likeDescIdSet: new Set(),
+      semanticScores: new Map([['a', 0.9], ['b', 0.5]]),
+    })
+    const services = [
+      { id: 'b', name: 'Beta', featured: 1, domain_verified: 1, category: 'ai', health_status: 'healthy' },
+      { id: 'a', name: 'Alpha', featured: 0, domain_verified: 0, category: 'uncategorized', health_status: 'unknown' },
+    ]
+    services.sort(comparator)
+    assert.equal(services[0].id, 'a', 'Higher cosine (0.9) should rank first despite lower featured/verified')
   })
 })
 
