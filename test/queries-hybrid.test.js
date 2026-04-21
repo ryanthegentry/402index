@@ -208,10 +208,20 @@ describe('Group A — hybrid re-rank composite order (#150)', () => {
 
 // ─── GROUP B: Timeouts and graceful fallback ─────────────────────────────────
 
+// Smart fetch stub: intercepts OpenAI calls but allows local API calls through
+function stubOpenAIOnly(handler) {
+  const real = originalFetch
+  globalThis.fetch = async (url, opts) => {
+    if (typeof url === 'string' && url.includes('openai.com')) {
+      return handler(url, opts)
+    }
+    return real(url, opts)
+  }
+}
+
 describe('Group B — timeouts and graceful fallback (#150)', () => {
   it('B1: embedQuery exceeding 1500ms → LIKE-only, X-402index-Search-Degraded: embed-timeout', async () => {
-    // Stub fetch to resolve after 1600ms (exceeds 1500ms wall)
-    globalThis.fetch = async () => {
+    stubOpenAIOnly(async () => {
       await new Promise(r => setTimeout(r, 1600))
       const embedding = Array.from(WEATHER_QUERY_VEC)
       return {
@@ -219,17 +229,17 @@ describe('Group B — timeouts and graceful fallback (#150)', () => {
         status: 200,
         json: async () => ({ data: [{ embedding }], model: 'text-embedding-3-small', usage: {} }),
       }
-    }
+    })
 
-    const res = await fetch(`${API}/api/v1/services?q=weather`)
+    const res = await originalFetch(`${API}/api/v1/services?q=weather`)
     assert.equal(res.status, 200, 'should still return 200')
     assert.equal(res.headers.get('x-402index-search-degraded'), 'embed-timeout')
   })
 
   it('B2: embedQuery returns null (HTTP error) → LIKE-only, embed-error', async () => {
-    globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({ error: { message: 'fail' } }) })
+    stubOpenAIOnly(async () => ({ ok: false, status: 500, json: async () => ({ error: { message: 'fail' } }) }))
 
-    const res = await fetch(`${API}/api/v1/services?q=weather`)
+    const res = await originalFetch(`${API}/api/v1/services?q=weather`)
     assert.equal(res.status, 200)
     assert.equal(res.headers.get('x-402index-search-degraded'), 'embed-error')
   })
@@ -238,7 +248,7 @@ describe('Group B — timeouts and graceful fallback (#150)', () => {
     const saved = process.env.OPENAI_API_KEY
     delete process.env.OPENAI_API_KEY
     try {
-      const res = await fetch(`${API}/api/v1/services?q=weather`)
+      const res = await originalFetch(`${API}/api/v1/services?q=weather`)
       assert.equal(res.status, 200)
       assert.equal(res.headers.get('x-402index-search-degraded'), 'no-api-key')
     } finally {
@@ -249,10 +259,7 @@ describe('Group B — timeouts and graceful fallback (#150)', () => {
   it('B4: sqlite-vec query exceeding 500ms → LIKE-only, vec-deadline', async () => {
     // This test only applies when sqlite-vec is available
     // When not available, vec-deadline can't fire (pure-JS fallback path applies instead)
-    // We test via the queryServicesHybrid function with a simulated slow vec query
     stubEmbedQuery(WEATHER_QUERY_VEC)
-    // We'll verify the vec-deadline code path exists by checking the function handles it
-    // Full sqlite-vec deadline testing requires sqlite-vec to be loaded
     if (!SQLITE_VEC_AVAILABLE) {
       // If sqlite-vec not available, verify the js-fallback path works instead
       const result = await queryServicesHybrid(db, { q: 'weather', rawLimit: 50 }, API_COLUMNS)
@@ -282,8 +289,11 @@ describe('Group B — timeouts and graceful fallback (#150)', () => {
     insertMany()
 
     try {
-      stubEmbedQuery(WEATHER_QUERY_VEC)
-      const res = await fetch(`${API}/api/v1/services?q=weather`)
+      stubOpenAIOnly(async () => {
+        const embedding = Array.from(WEATHER_QUERY_VEC)
+        return { ok: true, status: 200, json: async () => ({ data: [{ embedding }], model: 'text-embedding-3-small', usage: {} }) }
+      })
+      const res = await originalFetch(`${API}/api/v1/services?q=weather`)
       assert.equal(res.status, 200)
       assert.equal(res.headers.get('x-402index-search-degraded'), 'js-fallback-too-large')
     } finally {
@@ -303,9 +313,9 @@ describe('Group B — timeouts and graceful fallback (#150)', () => {
   })
 
   it('B7: any degraded response → status 200, header present, logQuery receives reason', async () => {
-    globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({ error: { message: 'fail' } }) })
+    stubOpenAIOnly(async () => ({ ok: false, status: 500, json: async () => ({ error: { message: 'fail' } }) }))
 
-    const res = await fetch(`${API}/api/v1/services?q=weather`)
+    const res = await originalFetch(`${API}/api/v1/services?q=weather`)
     assert.equal(res.status, 200, 'must be 200, never 5xx on semantic failure')
     const degraded = res.headers.get('x-402index-search-degraded')
     assert.ok(degraded, 'X-402index-Search-Degraded header must be present')

@@ -81,7 +81,8 @@ describe('Group C — circuit breaker (#150)', () => {
     const state = getCircuitState()
     assert.equal(state.circuit, 'open', 'circuit should be open after 10 failures')
 
-    // Also check health endpoint
+    // Also check health endpoint (use originalFetch to avoid OpenAI stub interference)
+    globalThis.fetch = originalFetch
     const res = await fetch(`${API}/api/v1/health`)
     const health = await res.json()
     assert.equal(health.embedding_circuit, 'open', 'health endpoint should report open')

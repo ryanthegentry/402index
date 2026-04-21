@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { randomUUID, randomBytes, createHash } from 'crypto'
 import { constantTimeEqual } from '../util/constant-time.js'
 import db, { logQuery } from '../db.js'
-import { queryServices, buildServiceQuery, API_COLUMNS } from '../queries/services.js'
+import { queryServices, queryServicesHybrid, buildServiceQuery, API_COLUMNS } from '../queries/services.js'
 import { getCachedBtcUsdRate } from '../services/btc-price.js'
 import { normalizeUrl, extractHostname } from '../services/url-normalize.js'
 import { probeEndpoint } from '../services/probe-endpoint.js'
@@ -16,7 +16,7 @@ import { getSnapshots } from '../services/daily-snapshot.js'
 import { openapiSpec, generateMarkdownDocs } from '../openapi.js'
 import { initiateClaim, verifyClaim, editService, revokeClaim, deleteService, bulkDeleteServices } from '../services/domain-verify.js'
 import { decode as decodeBolt11 } from 'light-bolt11-decoder'
-import { generateEmbedding, getQueueDepth } from '../services/embeddings.js'
+import { generateEmbedding, getQueueDepth, getCircuitState } from '../services/embeddings.js'
 
 const router = Router()
 
@@ -63,12 +63,18 @@ router.get('/docs.md', (req, res) => {
   res.type('text/markdown').send(markdownDocs)
 })
 
-router.get('/services', (req, res) => {
+router.get('/services', async (req, res) => {
   const startTime = Date.now()
   try {
     const { limit: rawLimit, offset: rawOffset, ...filters } = req.query
-    const result = queryServices(db, { ...filters, rawLimit, rawOffset }, API_COLUMNS)
-    res.json(result)
+    const result = await queryServicesHybrid(db, { ...filters, rawLimit, rawOffset }, API_COLUMNS)
+
+    // Set degraded header if semantic path failed
+    const { degradedReason, ...responseBody } = result
+    if (degradedReason) {
+      res.set('X-402index-Search-Degraded', degradedReason)
+    }
+    res.json(responseBody)
 
     const { q, ...filterParams } = filters
     logQuery({
@@ -77,7 +83,11 @@ router.get('/services', (req, res) => {
       resultCount: result.total,
       responseTimeMs: Date.now() - startTime,
       userAgent: req.get('User-Agent') || null,
+      degradedReason: degradedReason || null,
     })
+    if (degradedReason) {
+      console.log(`[search] degraded: reason=${degradedReason} q=${q} time=${Date.now() - startTime}ms`)
+    }
   } catch (err) {
     console.error('GET /api/v1/services error:', err)
     res.status(500).json({ error: 'Internal Server Error' })
@@ -260,6 +270,14 @@ router.get('/health', (req, res) => {
       last_mpp_sync: lastMppSync,
       last_health_check_run: lastHealthCheck,
       embedding_queue_depth: getQueueDepth(),
+      ...(() => {
+        const cs = getCircuitState()
+        return {
+          embedding_circuit: cs.circuit,
+          embedding_circuit_failures: cs.failures,
+          embedding_circuit_opened_at: cs.openedAt ? new Date(cs.openedAt).toISOString() : null,
+        }
+      })(),
     })
   } catch (err) {
     console.error('GET /api/v1/health error:', err)
