@@ -18,10 +18,10 @@ describe('pipeline-hardening', () => {
       )
     })
 
-    it('rebase check uses git merge-base --is-ancestor', () => {
+    it('rebase check uses git merge-base --is-ancestor with PR head sha', () => {
       assert.ok(
-        ciYml.includes('git merge-base --is-ancestor origin/master HEAD'),
-        'ci.yml must contain "git merge-base --is-ancestor origin/master HEAD"'
+        ciYml.includes('git merge-base --is-ancestor origin/master ${{ github.event.pull_request.head.sha }}'),
+        'ci.yml must contain "git merge-base --is-ancestor origin/master ${{ github.event.pull_request.head.sha }}" (not HEAD, which points to the merge commit)'
       )
     })
 
@@ -29,6 +29,13 @@ describe('pipeline-hardening', () => {
       assert.ok(
         ciYml.includes("if: github.event_name == 'pull_request'"),
         'ci.yml must contain "if: github.event_name == \'pull_request\'"'
+      )
+    })
+
+    it('rebase check does not use HEAD (merge commit defeats the check)', () => {
+      assert.ok(
+        !ciYml.includes('--is-ancestor origin/master HEAD'),
+        'ci.yml must not use HEAD — GitHub Actions checks out refs/pull/N/merge where HEAD always has origin/master as ancestor'
       )
     })
 
@@ -40,7 +47,7 @@ describe('pipeline-hardening', () => {
     })
 
     it('rebase check runs before Install dependencies', () => {
-      const mergeBaseIndex = ciYml.indexOf('git merge-base --is-ancestor origin/master HEAD')
+      const mergeBaseIndex = ciYml.indexOf('git merge-base --is-ancestor origin/master')
       const installIndex = ciYml.indexOf('- name: Install dependencies')
       assert.ok(mergeBaseIndex > -1, 'git merge-base must exist in ci.yml')
       assert.ok(installIndex > -1, 'Install dependencies step must exist in ci.yml')
