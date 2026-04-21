@@ -60,7 +60,7 @@ const server = new McpServer({
 // Tool 1: Search services
 server.tool(
   'search_services',
-  'Search and filter paid API services in the 402 Index directory. Returns services with health status, pricing, and protocol info. Example: "Find healthy L402 weather APIs under $0.01"',
+  'Search and filter paid API services in the 402 Index directory. Returns services with health status, pricing, and protocol info. Includes `related_protocols` array showing other payment rails for the same URL.',
   {
     protocol: z.enum(['L402', 'x402', 'MPP']).optional().describe('Filter by payment protocol'),
     category: z.string().optional().describe('Filter by category (prefix match — "crypto" matches "crypto/nft")'),
@@ -126,7 +126,7 @@ server.tool(
 // Tool 2: Get service detail
 server.tool(
   'get_service_detail',
-  'Get full details for a single service including health check history, pricing, and schema information. Example: "Show me full details for service abc123"',
+  'Get full details for a single service including health check history, pricing, and schema information. Includes `related_services` array with sibling payment rail details.',
   {
     id: z.string().describe('Service ID (numeric or UUID)'),
   },
