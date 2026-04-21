@@ -1,0 +1,69 @@
+import { describe, it } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const root = join(__dirname, '..')
+
+describe('pipeline-hardening', () => {
+  describe('workflow-rebase-check', () => {
+    const ciYml = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8')
+
+    it('checkout uses fetch-depth: 0', () => {
+      assert.ok(
+        ciYml.includes('fetch-depth: 0'),
+        'ci.yml must contain "fetch-depth: 0"'
+      )
+    })
+
+    it('rebase check uses git merge-base --is-ancestor', () => {
+      assert.ok(
+        ciYml.includes('git merge-base --is-ancestor origin/master HEAD'),
+        'ci.yml must contain "git merge-base --is-ancestor origin/master HEAD"'
+      )
+    })
+
+    it('rebase check is guarded by pull_request event', () => {
+      assert.ok(
+        ciYml.includes("if: github.event_name == 'pull_request'"),
+        'ci.yml must contain "if: github.event_name == \'pull_request\'"'
+      )
+    })
+
+    it('rebase check runs before Install dependencies', () => {
+      const mergeBaseIndex = ciYml.indexOf('git merge-base --is-ancestor origin/master HEAD')
+      const installIndex = ciYml.indexOf('- name: Install dependencies')
+      assert.ok(mergeBaseIndex > -1, 'git merge-base must exist in ci.yml')
+      assert.ok(installIndex > -1, 'Install dependencies step must exist in ci.yml')
+      assert.ok(
+        mergeBaseIndex < installIndex,
+        'rebase check must appear before Install dependencies'
+      )
+    })
+  })
+
+  describe('qa-reviewer-ci-env', () => {
+    const qaReviewer = readFileSync(join(root, '.claude/agents/qa-reviewer.md'), 'utf8')
+
+    it('contains CI=true npm test at least twice', () => {
+      const matches = qaReviewer.match(/CI=true npm test/g)
+      assert.ok(
+        matches && matches.length >= 2,
+        `qa-reviewer.md must contain "CI=true npm test" at least twice, found ${matches ? matches.length : 0}`
+      )
+    })
+
+    it('does not contain bare "Run: npm test" or "Run the tests: npm test"', () => {
+      assert.ok(
+        !qaReviewer.includes('Run: npm test'),
+        'qa-reviewer.md must not contain bare "Run: npm test"'
+      )
+      assert.ok(
+        !qaReviewer.includes('Run the tests: npm test'),
+        'qa-reviewer.md must not contain bare "Run the tests: npm test"'
+      )
+    })
+  })
+})
