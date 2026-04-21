@@ -609,6 +609,22 @@ describe('Group G — edge cases and comparator (#153 review)', () => {
   })
 })
 
+// ─── GROUP P6: Response shape regression ─────────────────────────────────────
+
+describe('Group P6 — response shape regression (#161)', () => {
+  it('T-shape-regression: GET /api/v1/services?q=weather returns exactly {services,total,limit,offset}', async () => {
+    // globalThis.fetch is restored to originalFetch by the outer beforeEach
+    const res = await originalFetch(`${API}/api/v1/services?q=weather`)
+    assert.equal(res.status, 200, 'Should return 200 (degrades gracefully if OpenAI fails)')
+    const body = await res.json()
+    assert.deepStrictEqual(
+      Object.keys(body).sort(),
+      ['limit', 'offset', 'services', 'total'],
+      `Response should have EXACTLY these top-level keys, got: ${Object.keys(body).sort().join(', ')}`,
+    )
+  })
+})
+
 // ─── Pure JS helper (no module import needed) ────────────────────────────────
 function cosineSimilaritySync(a, b) {
   let dot = 0, magA = 0, magB = 0

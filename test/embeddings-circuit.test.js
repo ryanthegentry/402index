@@ -217,4 +217,42 @@ describe('Group C — circuit breaker (#150)', () => {
     const state = getCircuitState()
     assert.equal(state.failures, 1, 'malformed embedding should count as failure')
   })
+
+  it('C10: getCircuitState() includes halfOpenTrialInFlight as a boolean', () => {
+    resetCircuit()
+    const state = getCircuitState()
+    assert.ok(
+      'halfOpenTrialInFlight' in state,
+      `getCircuitState() should include halfOpenTrialInFlight, got keys: ${Object.keys(state).join(', ')}`,
+    )
+    assert.equal(typeof state.halfOpenTrialInFlight, 'boolean', 'halfOpenTrialInFlight should be a boolean')
+    assert.equal(state.halfOpenTrialInFlight, false, 'halfOpenTrialInFlight should be false when no trial in flight')
+  })
+
+  it('C11: halfOpenTrialInFlight is true during in-flight half-open trial, false after', async () => {
+    await triggerFailures(10)
+    resetCircuit({ advanceMs: 60_000 })
+
+    let stateWhileInFlight = null
+
+    globalThis.fetch = async () => {
+      // Capture circuit state while the trial call is executing
+      stateWhileInFlight = getCircuitState()
+      return makeOkResponse()
+    }
+
+    await embedQueryForRead('test', 1500)
+
+    assert.ok(stateWhileInFlight !== null, 'fetch stub should have been called during half-open trial')
+    assert.equal(
+      stateWhileInFlight.halfOpenTrialInFlight, true,
+      'halfOpenTrialInFlight should be true while half-open trial is executing',
+    )
+
+    const stateAfter = getCircuitState()
+    assert.equal(
+      stateAfter.halfOpenTrialInFlight, false,
+      'halfOpenTrialInFlight should be false after trial completes',
+    )
+  })
 })
