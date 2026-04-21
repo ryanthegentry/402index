@@ -33,6 +33,7 @@ const GENERIC_VEC_A = makeVector(2.0)
 const GENERIC_VEC_B = makeVector(3.0)
 const FILTER_SERVICE_VEC = makeVector(1.02) // close to WEATHER_QUERY_VEC for filter-bypass tests
 const PERCENT_CLOSE_VEC = makeVector(1.03)  // close to query vec for T6 percent test
+const CAFE_SERVICE_VEC = makeVector(1.01)   // very close to WEATHER_QUERY_VEC for normalization tests
 
 // Helper: insert test service into DB
 function insertService(id, name, opts = {}) {
@@ -77,7 +78,7 @@ function cleanup() {
     try { db.prepare('DELETE FROM services WHERE id = ?').run(id) } catch {}
   }
   // Clean up bulk-inserted embeddings for B5/B6 and Phase 2 tests
-  const bulkPatterns = ['hybrid-bulk-%', 'hybrid-t2-%', 'hybrid-t3-%', 'hybrid-overlap-%', 'hybrid-empty-%', 'beyond-cap-%', 'likbnd-%', 'sem-cap-%']
+  const bulkPatterns = ['hybrid-bulk-%', 'hybrid-t2-%', 'hybrid-t3-%', 'hybrid-overlap-%', 'hybrid-empty-%', 'beyond-cap-%', 'likbnd-%', 'sem-cap-%', 'norm-%']
   for (const p of bulkPatterns) {
     try { db.exec(`DELETE FROM vec_service_embeddings WHERE service_id LIKE '${p}'`) } catch {}
     try { db.exec(`DELETE FROM service_embeddings WHERE service_id LIKE '${p}'`) } catch {}
@@ -926,6 +927,101 @@ describe('Group P11 — JS-fallback never reports semantic_cap=true (#162 Fragil
         try { db.prepare('DELETE FROM service_embeddings WHERE service_id = ?').run(`${prefix}-${i}`) } catch {}
         try { db.prepare('DELETE FROM services WHERE id = ?').run(`${prefix}-${i}`) } catch {}
       }
+    }
+  })
+})
+
+// ─── GROUP P12: Non-ASCII normalization — LIKE/JS divergence + NFD input (#180) ─
+// Note: P12 tests run last in this suite. Each test calls cleanup() (full teardown) at the
+// start so it owns the entire DB state. This is safe because no later groups depend on the
+// shared fixtures inserted in before().
+
+describe('Group P12 — Non-ASCII normalization: NOCASE replication + NFC-normalize q (#180)', () => {
+  it('T-norm-1 (under-count bug): q="café" finds service with name="CAFÉ API"', async () => {
+    // "CAFÉ API" has É (U+00C9). SQL LIKE '%café%' under SQLite NOCASE is ASCII-only:
+    // É (U+00C9) ≠ é (U+00E9) → LIKE misses name. Description "Premium payments endpoint"
+    // has no café → LIKE misses entirely. Service falls into semantic-only pool.
+    // Current bug: JS post-filter uses .toLowerCase() (Unicode-aware): "CAFÉ".toLowerCase()
+    // = "café" (é U+00E9), .includes("café") → true → removes service from semantic-only pool.
+    // Net: total=0 (under-count).
+    // Fix: asciiLower() only folds A-Z, leaves É as É → "café api".includes("café") →
+    // É(U+00C9) vs é(U+00E9) → false → service stays in semantic-only → total=1.
+    cleanup()
+    insertService('norm-cafe-api', 'CAFÉ API', { description: 'Premium payments endpoint' })
+    insertEmbedding('norm-cafe-api', CAFE_SERVICE_VEC)
+    stubEmbedQuery(WEATHER_QUERY_VEC)
+    try {
+      const result = await queryServicesHybrid(db, { q: 'caf\u00e9', rawLimit: 50 }, API_COLUMNS)
+      assert.equal(result.total, 1, `expected total=1 for q="café" matching "CAFÉ API", got ${result.total}`)
+      const ids = result.services.map(s => s.id)
+      assert.ok(ids.includes('norm-cafe-api'), `"CAFÉ API" must appear in results, got ids: ${ids.join(', ')}`)
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('T-norm-2 (NFD decomposed input): q="cafe\\u0301" finds NFC-stored service', async () => {
+    // A service stored with lowercase NFC "café api" (é = U+00E9) should be findable via LIKE
+    // when the user submits a query in NFD form "cafe\u0301" (e + combining acute U+0301).
+    // Without NFC normalization: params.q = "%cafe\u0301%" → "café api" LIKE "%cafe\u0301%"
+    // → NFC byte 0xC3 0xA9 ≠ NFD bytes 0x65 0xCC 0x81 → NO LIKE MATCH. Service has no
+    // embedding → not in semantic-only either → total=0 (missing service, bug).
+    // With NFC fix: q.normalize('NFC') → "café" → "café api" LIKE "%café%" → é=é → MATCH → total=1.
+    cleanup()
+    insertService('norm-cafe-api', 'café api', { description: 'NFC-stored service' })
+    // No embedding — must be found via LIKE after NFC normalization of q.
+    stubEmbedQuery(WEATHER_QUERY_VEC)
+    try {
+      const result = await queryServicesHybrid(db, { q: 'cafe\u0301', rawLimit: 50 }, API_COLUMNS)
+      assert.equal(result.total, 1, `expected total=1 for NFD q="cafe\\u0301" matching NFC-stored "café api", got ${result.total}`)
+      const ids = result.services.map(s => s.id)
+      assert.ok(ids.includes('norm-cafe-api'), `"café api" must appear in LIKE results for NFD query, got ids: ${ids.join(', ')}`)
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('T-norm-3 (ASCII regression): q="simple" still finds service with name="SimpleAPI"', async () => {
+    // Pure ASCII queries must continue to work correctly — no regression from the fix.
+    // cleanup() removes all other test services so only SimpleAPI is in the DB.
+    cleanup()
+    insertService('norm-simple-api', 'SimpleAPI', { description: 'Basic JSON service' })
+    insertEmbedding('norm-simple-api', GENERIC_VEC_B)
+    stubEmbedQuery(WEATHER_QUERY_VEC)
+    try {
+      const result = await queryServicesHybrid(db, { q: 'simple', rawLimit: 50 }, API_COLUMNS)
+      assert.equal(result.total, 1, `expected total=1 for q="simple" matching "SimpleAPI", got ${result.total}`)
+      const ids = result.services.map(s => s.id)
+      assert.ok(ids.includes('norm-simple-api'), `"SimpleAPI" must appear in results, got ids: ${ids.join(', ')}`)
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('T-norm-4 (ranking consistency): both accented services appear for q="café", order is stable', async () => {
+    // "CAFÉ Exact" (É, U+00C9): SQL LIKE misses → semantic-only candidate.
+    //   Current bug: JS post-filter .toLowerCase() folds É→é → drops service → not in results.
+    //   Fix: asciiLower keeps É → post-filter keeps it → appears.
+    // "Some café provider" (é, U+00E9): SQL LIKE '%café%' matches → always in likeServices.
+    // After fix: both appear. Ordering must be stable across repeated calls.
+    cleanup()
+    insertService('norm-cafe-exact', 'CAFÉ Exact', { description: 'Premium endpoint' })
+    insertEmbedding('norm-cafe-exact', CAFE_SERVICE_VEC)
+    insertService('norm-cafe-provider', 'Some café provider', { description: 'General payments' })
+    insertEmbedding('norm-cafe-provider', makeVector(1.02))
+    stubEmbedQuery(WEATHER_QUERY_VEC)
+    try {
+      const r1 = await queryServicesHybrid(db, { q: 'caf\u00e9', rawLimit: 50 }, API_COLUMNS)
+      const ids1 = r1.services.map(s => s.id)
+      assert.ok(ids1.includes('norm-cafe-exact'), `"CAFÉ Exact" must appear in results, got: ${ids1.join(', ')}`)
+      assert.ok(ids1.includes('norm-cafe-provider'), `"Some café provider" must appear in results, got: ${ids1.join(', ')}`)
+
+      // Ordering must be stable (same query, same order)
+      const r2 = await queryServicesHybrid(db, { q: 'caf\u00e9', rawLimit: 50 }, API_COLUMNS)
+      const ids2 = r2.services.map(s => s.id)
+      assert.deepEqual(ids1, ids2, 'result order must be stable across identical calls')
+    } finally {
+      cleanup()
     }
   })
 })
