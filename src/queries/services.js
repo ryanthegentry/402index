@@ -1,3 +1,5 @@
+import { SQLITE_VEC_AVAILABLE } from '../db.js'
+
 const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_ms', uptime: 'uptime_30d', reliability: 'reliability_score', registered_at: 'registered_at' }
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
 const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'self-registered', 'sponge', 'well-known', 'discovery'])
@@ -153,4 +155,230 @@ export function queryServices(db, opts, columns = API_COLUMNS) {
     }
   }
   return { services, total, limit, offset }
+}
+
+/**
+ * Build a 5-tier hybrid re-rank comparator.
+ * Pure function — no DB access, no side effects.
+ */
+export function buildHybridComparator({ q, likeNameIdSet, likeDescIdSet, semanticScores }) {
+  const qLower = q.toLowerCase()
+  return (a, b) => {
+    // Tier A: exact name match (case-insensitive equality)
+    const aExact = a.name && a.name.toLowerCase() === qLower ? 1 : 0
+    const bExact = b.name && b.name.toLowerCase() === qLower ? 1 : 0
+    if (bExact !== aExact) return bExact - aExact
+
+    // Tier B: LIKE match on name
+    const aName = likeNameIdSet.has(a.id) ? 1 : 0
+    const bName = likeNameIdSet.has(b.id) ? 1 : 0
+    if (bName !== aName) return bName - aName
+
+    // Tier C: LIKE match on description
+    const aDesc = likeDescIdSet.has(a.id) ? 1 : 0
+    const bDesc = likeDescIdSet.has(b.id) ? 1 : 0
+    if (bDesc !== aDesc) return bDesc - aDesc
+
+    // Tier D: cosine similarity DESC
+    const aCos = semanticScores.get(a.id) ?? 0
+    const bCos = semanticScores.get(b.id) ?? 0
+    if (bCos !== aCos) return bCos - aCos
+
+    // Tier E: DEFAULT_ORDER cascade
+    const aFeat = a.featured || 0
+    const bFeat = b.featured || 0
+    if (bFeat !== aFeat) return bFeat - aFeat
+
+    const aDv = a.domain_verified || 0
+    const bDv = b.domain_verified || 0
+    if (bDv !== aDv) return bDv - aDv
+
+    const aCat = (a.category && a.category !== 'uncategorized') ? 0 : 1
+    const bCat = (b.category && b.category !== 'uncategorized') ? 0 : 1
+    if (aCat !== bCat) return aCat - bCat
+
+    const healthOrder = { healthy: 0, degraded: 1, down: 2, unknown: 3 }
+    const aH = healthOrder[a.health_status] ?? 3
+    const bH = healthOrder[b.health_status] ?? 3
+    if (aH !== bH) return aH - bH
+
+    return (a.name || '').localeCompare(b.name || '')
+  }
+}
+
+/**
+ * Hybrid query: combines LIKE results with semantic (embedding) results.
+ * Falls back to LIKE-only on any semantic failure.
+ * Returns { services, total, limit, offset, degradedReason }.
+ */
+export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
+  const { q, sort } = opts
+
+  // No q → delegate to existing queryServices
+  if (!q) return { ...queryServices(db, opts, columns), degradedReason: null }
+
+  // q=* → match-all shortcut (no semantic)
+  if (q === '*') return { ...queryServices(db, opts, columns), degradedReason: null }
+
+  // Explicit sort → skip re-rank, run LIKE-only with requested sort
+  if (sort && SORT_COLUMNS[sort]) {
+    return { ...queryServices(db, opts, columns), degradedReason: null }
+  }
+
+  // ─── Run LIKE query (always authoritative) ───────────────────────────────
+  const { where, params, orderBy, limit, offset } = buildServiceQuery(opts)
+  // Ensure LIKE fetch covers the requested pagination window + headroom for re-rank union
+  const likeCap = Math.max(1000, offset + limit)
+  const likeServices = db.prepare(
+    `SELECT ${columns} FROM services ${where} ${orderBy} LIMIT @_likeCap`
+  ).all({ ...params, _likeCap: likeCap })
+  for (const s of likeServices) {
+    if (typeof s.related_protocols === 'string') s.related_protocols = JSON.parse(s.related_protocols)
+  }
+
+  // ─── Attempt semantic path ───────────────────────────────────────────────
+  const { embedQueryForRead, cosineSimilarity } = await import('../services/embeddings.js')
+  const { embedding, degradedReason } = await embedQueryForRead(q, 1500)
+
+  if (degradedReason || !embedding) {
+    // Semantic failed — return LIKE-only
+    const total = db.prepare(`SELECT COUNT(*) as c FROM services ${where}`).get(params).c
+    const paged = likeServices.slice(offset, offset + limit)
+    return { services: paged, total, limit, offset, degradedReason: degradedReason || 'embed-error' }
+  }
+
+  // ─── Get cosine scores from embeddings ─────────────────────────────────
+  let semanticScores = new Map() // service_id → cosine score
+  let vecDegraded = null
+
+  if (SQLITE_VEC_AVAILABLE) {
+    // sqlite-vec top-K with 500ms deadline
+    const K = Math.max(50, limit)
+    try {
+      let vecTimer
+      const vecResult = await Promise.race([
+        new Promise((resolve) => {
+          const blob = Buffer.from(embedding.buffer)
+          const rows = db.prepare(
+            `SELECT service_id, distance FROM vec_service_embeddings WHERE embedding MATCH ? ORDER BY distance LIMIT ?`
+          ).all(blob, K)
+          resolve(rows)
+        }),
+        new Promise(resolve => { vecTimer = setTimeout(() => resolve('__vec_deadline__'), 500) }),
+      ])
+      clearTimeout(vecTimer)
+
+      if (vecResult === '__vec_deadline__') {
+        vecDegraded = 'vec-deadline'
+      } else {
+        for (const row of vecResult) {
+          // sqlite-vec returns distance (lower = more similar), convert to similarity
+          semanticScores.set(row.service_id, 1 - row.distance)
+        }
+      }
+    } catch {
+      vecDegraded = 'vec-deadline'
+    }
+  } else {
+    // Pure-JS fallback with row count guard
+    const countRow = db.prepare('SELECT COUNT(*) as c FROM service_embeddings').get()
+    if (countRow.c > 5000) {
+      vecDegraded = 'js-fallback-too-large'
+    } else {
+      // Load all embeddings and compute cosine
+      try {
+        let jsTimer
+        const result = await Promise.race([
+          new Promise((resolve) => {
+            const rows = db.prepare('SELECT service_id, embedding FROM service_embeddings').all()
+            const scores = []
+            for (const row of rows) {
+              if (row.embedding.byteLength % 4 !== 0) throw new Error(`Malformed embedding for ${row.service_id}: byteLength=${row.embedding.byteLength} not divisible by 4`)
+              const vec = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4)
+              if (vec.length === 1536) {
+                const score = cosineSimilarity(embedding, vec)
+                scores.push({ service_id: row.service_id, score })
+              }
+            }
+            resolve(scores)
+          }),
+          new Promise(resolve => { jsTimer = setTimeout(() => resolve('__vec_deadline__'), 500) }),
+        ])
+        clearTimeout(jsTimer)
+
+        if (result === '__vec_deadline__') {
+          vecDegraded = 'vec-deadline'
+        } else {
+          for (const { service_id, score } of result) {
+            semanticScores.set(service_id, score)
+          }
+        }
+      } catch {
+        vecDegraded = 'vec-deadline'
+      }
+    }
+  }
+
+  if (vecDegraded) {
+    // Vec path failed — return LIKE-only with reason
+    const total = db.prepare(`SELECT COUNT(*) as c FROM services ${where}`).get(params).c
+    const paged = likeServices.slice(offset, offset + limit)
+    return { services: paged, total, limit, offset, degradedReason: vecDegraded }
+  }
+
+  // ─── Union candidates ────────────────────────────────────────────────────
+  const likeIdSet = new Set(likeServices.map(s => s.id))
+  const semanticIds = [...semanticScores.keys()].filter(id => !likeIdSet.has(id))
+
+  // Fetch semantic-only services with ALL user filters applied (not just status/provider_deleted)
+  let semanticOnlyServices = []
+  if (semanticIds.length > 0) {
+    const noQOpts = { ...opts, q: undefined, rawLimit: undefined, rawOffset: undefined }
+    const { where: filterWhere, params: filterParams } = buildServiceQuery(noQOpts)
+    const idParams = {}
+    const idNames = semanticIds.map((id, i) => {
+      const key = `_semId${i}`
+      idParams[key] = id
+      return `@${key}`
+    })
+    const semWhere = filterWhere
+      ? `${filterWhere} AND id IN (${idNames.join(',')})`
+      : `WHERE id IN (${idNames.join(',')})`
+    semanticOnlyServices = db.prepare(
+      `SELECT ${columns} FROM services ${semWhere}`
+    ).all({ ...filterParams, ...idParams })
+    for (const s of semanticOnlyServices) {
+      if (typeof s.related_protocols === 'string') s.related_protocols = JSON.parse(s.related_protocols)
+    }
+    // Post-filter: remove services that would LIKE-match q (prevent double-counting)
+    const needle = q.toLowerCase()
+    semanticOnlyServices = semanticOnlyServices.filter(s => {
+      const n = (s.name || '').toLowerCase()
+      const d = (s.description || '').toLowerCase()
+      const u = (s.url || '').toLowerCase()
+      return !n.includes(needle) && !d.includes(needle) && !u.includes(needle)
+    })
+  }
+
+  // True LIKE count (uncapped) + semantic-only count (post-overlap-filter)
+  const likeCount = db.prepare(`SELECT COUNT(*) as c FROM services ${where}`).get(params).c
+  const total = likeCount + semanticOnlyServices.length
+
+  const allCandidates = [...likeServices, ...semanticOnlyServices]
+
+  // ─── 5-tier composite re-rank ────────────────────────────────────────────
+  // Build LIKE match sets using plain lowercase (no SQL escaping for JS comparison)
+  const likeNameIdSet = new Set()
+  const likeDescIdSet = new Set()
+  const qLower = q.toLowerCase()
+  for (const s of allCandidates) {
+    if (s.name && s.name.toLowerCase().includes(qLower)) likeNameIdSet.add(s.id)
+    if (s.description && s.description.toLowerCase().includes(qLower)) likeDescIdSet.add(s.id)
+  }
+
+  allCandidates.sort(buildHybridComparator({ q, likeNameIdSet, likeDescIdSet, semanticScores }))
+
+  // Apply pagination
+  const paged = allCandidates.slice(offset, offset + limit)
+  return { services: paged, total, limit, offset, degradedReason: null }
 }
