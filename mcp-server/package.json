@@ -1,18 +1,49 @@
 {
   "name": "@402index/mcp-server",
-  "version": "0.1.0",
-  "description": "MCP server for 402 Index — AI agent service discovery",
+  "mcpName": "io.github.ryanthegentry/402index",
+  "version": "0.3.0",
+  "description": "MCP server for 402 Index — search 15,000+ paid API endpoints across L402, x402, and MPP protocols with real-time health monitoring",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "402index-mcp": "dist/index.js"
+    "mcp-server": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
-    "test": "node --test test/**/*.test.js"
+    "test": "node --test test/**/*.test.js",
+    "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "402-index",
+    "paid-api",
+    "api-directory",
+    "l402",
+    "x402",
+    "mpp",
+    "lightning",
+    "bitcoin",
+    "agent-commerce",
+    "micropayments",
+    "api-discovery",
+    "health-monitoring"
+  ],
+  "author": "Ryan Gentry <hello@402index.io>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ryanthegentry/402index.git",
+    "directory": "mcp-server"
+  },
+  "homepage": "https://402index.io",
+  "bugs": {
+    "url": "https://github.com/ryanthegentry/402index/issues"
+  },
+  "files": ["dist", "README.md", "LICENSE", "llms-install.md"],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "zod": "^3.25.0"
