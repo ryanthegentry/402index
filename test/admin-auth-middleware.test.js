@@ -1,8 +1,12 @@
 /**
- * Tests for admin HTML page server-side auth gate (GitHub issue #14).
+ * Tests for the adminAuth middleware (mounted on /api/v1/admin/* at
+ * src/server.js:97) and the adminPage() view renderer.
  *
- * The admin page at /admin must use adminAuth middleware so that
- * unauthenticated requests get 401 (not the dashboard markup).
+ * The /admin HTML route is intentionally OPEN — no Bearer middleware.
+ * See src/routes/pages.js (the "Admin dashboard — auth is client-side"
+ * comment block) and PR #197 (issue #194) for rationale. Do NOT add
+ * server-side Bearer auth to /admin — browsers don't send Bearer on
+ * plain GET, and the route would be unreachable.
  */
 
 import { describe, it, before, after } from 'node:test'
@@ -65,9 +69,9 @@ import { adminPage } from '../src/views/admin.js'
 
 let BASE = process.env.API_BASE
 
-// ─── adminAuth middleware unit tests (used by /admin route) ──────────────────
+// ─── adminAuth middleware unit tests (used on /api/v1/admin/* endpoints) ─────
 
-describe('Admin page auth gate (issue #14)', () => {
+describe('adminAuth middleware + adminPage() rendering (issue #198)', () => {
   const originalSecret = process.env.ADMIN_SECRET
 
   before(async () => {
