@@ -502,19 +502,140 @@ echo "CHECK_RAN_OK"
       )
     })
 
-    // T14: Multiple direct children → all killed (pkill -P kills all)
-    it('T14: pkill -P $$ kills all direct children', () => {
+    // T14: pkill -P $BASHPID kills only this wrapper's children, not siblings (#204)
+    it('T14: pkill -P $BASHPID kills only this wrapper\'s children', () => {
       const spawnStart = content.indexOf('# Spawn handler in background subshell')
       const subshellEnd = content.indexOf(') &', spawnStart)
       const subshellBody = content.slice(spawnStart, subshellEnd)
 
-      // pkill -P $$ targets all direct children, not a specific PID
-      const pkillLine = subshellBody.split('\n').find(l => l.includes('pkill -P'))
-      assert.ok(pkillLine, 'Must have pkill -P in trap')
-      assert.ok(
-        pkillLine.includes('$$'),
-        `pkill -P must target $$ (all children of wrapper), got: ${pkillLine}`
-      )
+      const pkillLines = subshellBody.split('\n').filter(l => /pkill\b.*-P\b/.test(l))
+      assert.ok(pkillLines.length >= 2, `Must have at least 2 pkill -P lines (SIGTERM + SIGKILL), got ${pkillLines.length}`)
+
+      for (const pkillLine of pkillLines) {
+        assert.ok(
+          pkillLine.includes('$BASHPID'),
+          `pkill -P must target $BASHPID (this wrapper's children only, not siblings), got: ${pkillLine}`
+        )
+        assert.ok(
+          !pkillLine.includes('$$'),
+          `pkill -P must NOT use $$ — in a subshell $$ is the parent PID and would kill sibling wrappers, got: ${pkillLine}`
+        )
+      }
+    })
+
+    // T15: Behavioral sibling-survival test — exiting one subshell must not kill siblings (#204)
+    // Uses `bash -c '...' &` so $$ resolves to the subshell's own PID (same as $BASHPID
+    // would in a ( ... ) & subshell). This makes the test work on bash 3.2 (macOS default)
+    // while validating the same scoped-kill semantics the $BASHPID fix provides.
+    it('T15: exiting one subshell does not kill sibling subshells or their children', async () => {
+      const pidFile = path.join(os.tmpdir(), `sibling-pids-${Date.now()}.txt`)
+      const parentScript = path.join(os.tmpdir(), `sibling-parent-${Date.now()}.sh`)
+      const childScript = path.join(os.tmpdir(), `sibling-child-${Date.now()}.sh`)
+
+      // Child script: each invocation gets its own PID via $$, scoped kill via pkill -P $$
+      fs.writeFileSync(childScript, `#!/bin/bash
+trap 'pkill -P $$ 2>/dev/null; sleep 0.2; pkill -9 -P $$ 2>/dev/null' EXIT
+sleep 10 &
+child_pid=$!
+echo "SUB\${1}_PID=$$ CHILD\${1}_PID=$child_pid" >> "\${2}"
+sleep 30
+`)
+      fs.chmodSync(childScript, 0o755)
+
+      // Parent script: spawns 3 child scripts in background
+      fs.writeFileSync(parentScript, `#!/bin/bash
+PIDFILE="${pidFile}"
+> "\$PIDFILE"
+
+for i in 1 2 3; do
+  bash "${childScript}" "\$i" "\$PIDFILE" &
+done
+
+# Wait for all subshells to register
+for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  count=\$(wc -l < "\$PIDFILE" 2>/dev/null || echo 0)
+  if [ "\$count" -ge 3 ] 2>/dev/null; then break; fi
+  sleep 0.1
+done
+
+wait
+`)
+      fs.chmodSync(parentScript, 0o755)
+
+      let sub1Pid, sub2Pid, sub3Pid, child1Pid, child2Pid, child3Pid
+      const allPids = []
+
+      try {
+        const proc = spawn('bash', [parentScript], { stdio: ['pipe', 'pipe', 'pipe'] })
+        allPids.push(proc.pid)
+
+        // Wait for PID file to be populated
+        for (let i = 0; i < 40; i++) {
+          await new Promise(r => setTimeout(r, 100))
+          if (fs.existsSync(pidFile)) {
+            const lines = fs.readFileSync(pidFile, 'utf-8').trim().split('\n').filter(Boolean)
+            if (lines.length >= 3) break
+          }
+        }
+
+        const pidContent = fs.readFileSync(pidFile, 'utf-8').trim()
+        const lines = pidContent.split('\n').filter(Boolean)
+        assert.ok(lines.length >= 3, `Expected 3 PID lines, got ${lines.length}: ${pidContent}`)
+
+        for (const line of lines) {
+          const subMatch = line.match(/SUB(\d+)_PID=(\d+)/)
+          const childMatch = line.match(/CHILD(\d+)_PID=(\d+)/)
+          if (subMatch && childMatch) {
+            const idx = parseInt(subMatch[1])
+            const sPid = parseInt(subMatch[2])
+            const cPid = parseInt(childMatch[2])
+            if (idx === 1) { sub1Pid = sPid; child1Pid = cPid }
+            if (idx === 2) { sub2Pid = sPid; child2Pid = cPid }
+            if (idx === 3) { sub3Pid = sPid; child3Pid = cPid }
+            allPids.push(sPid, cPid)
+          }
+        }
+
+        assert.ok(sub1Pid && sub2Pid && sub3Pid, 'All 3 subshell PIDs must be captured')
+        assert.ok(child1Pid && child2Pid && child3Pid, 'All 3 child PIDs must be captured')
+
+        // Kill subshell #1 — its EXIT trap should fire and kill only its own children
+        process.kill(sub1Pid, 'SIGTERM')
+
+        // Wait for trap to complete (generous margin for CI)
+        await new Promise(r => setTimeout(r, 500))
+
+        // Assert subshell #1's child is dead
+        let child1Alive = true
+        try { process.kill(child1Pid, 0) } catch { child1Alive = false }
+        assert.ok(
+          !child1Alive,
+          `Subshell #1's child (PID ${child1Pid}) should be dead after its parent's EXIT trap fired`
+        )
+
+        // Assert subshells #2 and #3 are still alive
+        let sub2Alive = false, sub3Alive = false
+        try { process.kill(sub2Pid, 0); sub2Alive = true } catch {}
+        try { process.kill(sub3Pid, 0); sub3Alive = true } catch {}
+        assert.ok(sub2Alive, `Subshell #2 (PID ${sub2Pid}) must survive sibling #1's exit`)
+        assert.ok(sub3Alive, `Subshell #3 (PID ${sub3Pid}) must survive sibling #1's exit`)
+
+        // Assert children of #2 and #3 are still alive
+        let child2Alive = false, child3Alive = false
+        try { process.kill(child2Pid, 0); child2Alive = true } catch {}
+        try { process.kill(child3Pid, 0); child3Alive = true } catch {}
+        assert.ok(child2Alive, `Subshell #2's child (PID ${child2Pid}) must survive sibling #1's exit`)
+        assert.ok(child3Alive, `Subshell #3's child (PID ${child3Pid}) must survive sibling #1's exit`)
+
+        proc.kill('SIGTERM')
+      } finally {
+        for (const pid of allPids) {
+          try { process.kill(pid, 'SIGKILL') } catch {}
+        }
+        try { fs.unlinkSync(parentScript) } catch {}
+        try { fs.unlinkSync(childScript) } catch {}
+        try { fs.unlinkSync(pidFile) } catch {}
+      }
     })
   })
 
