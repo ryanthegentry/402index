@@ -36,7 +36,9 @@ DRY_RUN=false
 WATCH=false
 POLL_INTERVAL=300
 MAX_REVISIONS=3
-MAX_CONCURRENT="${MAX_CONCURRENT:-3}"
+# MAX_CONCURRENT is a legacy env var — if set by the operator, apply_concurrency_config
+# distributes it proportionally with a deprecation warning. Do NOT assign a default here;
+# the detection logic in apply_concurrency_config must distinguish "user-set" from "unset".
 
 # All dispatch labels the script watches for
 DISPATCH_LABELS=(
@@ -291,6 +293,232 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ── PID pool tracking (bash 3.x compatible — no associative arrays) ──
+# Each PIDS_<POOL> variable stores space-separated PID:ISSUE:POOL:STARTTIME tuples.
+PIDS_REDTEAM=""
+PIDS_IMPL=""
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+get_pool_name() {
+    case "$1" in
+        ready-for-red-team)  echo "REDTEAM" ;;
+        ready-for-impl)      echo "IMPL" ;;
+        ready-for-security)  echo "SECURITY" ;;
+        ready-for-qa)        echo "QA" ;;
+        ready-for-chore)     echo "CHORE" ;;
+        ready-for-revision)  echo "REVISION" ;;
+    esac
+}
+
+reap_pool() {
+    local pool_var="PIDS_$1"
+    local live=""
+    for tuple in ${!pool_var}; do
+        local pid="${tuple%%:*}"
+        if kill -0 "$pid" 2>/dev/null; then
+            live="$live $tuple"
+        fi
+    done
+    eval "$pool_var=\"\${live# }\""
+}
+
+pool_count() {
+    local pool_var="PIDS_$1"
+    local val="${!pool_var}"
+    if [[ -z "$val" ]]; then
+        echo 0
+    else
+        echo "$val" | wc -w | tr -d ' '
+    fi
+}
+
+reap_all_pools() {
+    local pool
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        reap_pool "$pool"
+    done
+}
+
+total_tracked_count() {
+    local total=0
+    local pool
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        local c
+        c=$(pool_count "$pool")
+        total=$((total + c))
+    done
+    echo "$total"
+}
+
+emit_status_line() {
+    reap_all_pools
+
+    local tracked
+    tracked=$(total_tracked_count)
+
+    # Build pools= field
+    local pools_str=""
+    local pool max_var
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        local c
+        c=$(pool_count "$pool")
+        max_var="MAX_CONCURRENT_${pool}"
+        local max="${!max_var:-0}"
+        local lpool
+        lpool=$(echo "$pool" | tr '[:upper:]' '[:lower:]')
+        if [[ -n "$pools_str" ]]; then
+            pools_str="${pools_str},"
+        fi
+        pools_str="${pools_str}${lpool}:${c}/${max}"
+    done
+
+    # Build jobs= field
+    local jobs_str=""
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        local pool_var="PIDS_$pool"
+        for tuple in ${!pool_var}; do
+            local pid issue pname start_time
+            pid="${tuple%%:*}"
+            local rest="${tuple#*:}"
+            issue="${rest%%:*}"
+            rest="${rest#*:}"
+            pname="${rest%%:*}"
+            start_time="${rest#*:}"
+            local now elapsed_min
+            now=$(date +%s)
+            elapsed_min=$(( (now - start_time) / 60 ))
+            if [[ -n "$jobs_str" ]]; then
+                jobs_str="${jobs_str},"
+            fi
+            jobs_str="${jobs_str}#${issue}:${pname}:${elapsed_min}m:PID${pid}"
+        done
+    done
+
+    local status_line="STATUS: in_flight=${tracked} pools=${pools_str}"
+    if [[ "$tracked" -gt 0 && -n "$jobs_str" ]]; then
+        status_line="${status_line} jobs=${jobs_str}"
+    fi
+
+    # Check for orphaned background jobs
+    local bg_count
+    bg_count=$(jobs -rp 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "$bg_count" -gt "$tracked" ]]; then
+        local orphan_count=$(( bg_count - tracked ))
+        status_line="${status_line}; orphans=${orphan_count}"
+    fi
+
+    log "$status_line"
+}
+
+# ── Per-stage concurrency config ──────────────────────────────────
+
+# Apply per-stage concurrency limits. Call once at startup.
+# If per-stage vars are set, use them. If only MAX_CONCURRENT is set,
+# distribute proportionally with a deprecation warning.
+apply_concurrency_config() {
+    local any_per_stage=false
+    local pool
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        local var="MAX_CONCURRENT_${pool}"
+        if [[ -n "${!var+x}" ]]; then
+            any_per_stage=true
+            break
+        fi
+    done
+
+    if $any_per_stage; then
+        # Per-stage vars take precedence — apply defaults for unset pools
+        MAX_CONCURRENT_REDTEAM="${MAX_CONCURRENT_REDTEAM:-4}"
+        MAX_CONCURRENT_IMPL="${MAX_CONCURRENT_IMPL:-2}"
+        MAX_CONCURRENT_SECURITY="${MAX_CONCURRENT_SECURITY:-2}"
+        MAX_CONCURRENT_QA="${MAX_CONCURRENT_QA:-2}"
+        MAX_CONCURRENT_CHORE="${MAX_CONCURRENT_CHORE:-1}"
+        MAX_CONCURRENT_REVISION="${MAX_CONCURRENT_REVISION:-1}"
+        if [[ -n "${MAX_CONCURRENT:-}" ]]; then
+            log "WARNING: MAX_CONCURRENT is set alongside per-stage vars — per-stage vars take precedence, MAX_CONCURRENT ignored"
+        fi
+    elif [[ -n "${MAX_CONCURRENT:-}" ]]; then
+        # Legacy: distribute MAX_CONCURRENT proportionally
+        log "DEPRECATION: MAX_CONCURRENT is deprecated — use per-stage vars (MAX_CONCURRENT_REDTEAM, etc.) instead"
+        local mc="$MAX_CONCURRENT"
+        # ceil(mc * 0.4) for redteam, ceil(mc * 0.3) for impl, rest split
+        MAX_CONCURRENT_REDTEAM=$(( (mc * 4 + 9) / 10 ))
+        MAX_CONCURRENT_IMPL=$(( (mc * 3 + 9) / 10 ))
+        local remainder=$(( mc - MAX_CONCURRENT_REDTEAM - MAX_CONCURRENT_IMPL ))
+        if [[ "$remainder" -lt 2 ]]; then remainder=2; fi
+        MAX_CONCURRENT_SECURITY=$(( (remainder + 1) / 2 ))
+        MAX_CONCURRENT_QA=$(( (remainder + 1) / 2 ))
+        MAX_CONCURRENT_CHORE=1
+        MAX_CONCURRENT_REVISION=1
+    else
+        # No config at all — use defaults
+        MAX_CONCURRENT_REDTEAM=4
+        MAX_CONCURRENT_IMPL=2
+        MAX_CONCURRENT_SECURITY=2
+        MAX_CONCURRENT_QA=2
+        MAX_CONCURRENT_CHORE=1
+        MAX_CONCURRENT_REVISION=1
+    fi
+}
+
+# ── Fresh worktree enforcement (Defect 4) ─────────────────────────
+
+get_branch_name_for_issue() {
+    local issue_number="$1"
+    local dispatch_label="$2"
+    case "$dispatch_label" in
+        ready-for-chore) echo "chore/issue-${issue_number}" ;;
+        *)               echo "fix/issue-${issue_number}" ;;
+    esac
+}
+
+is_commit_producing_stage() {
+    case "$1" in
+        ready-for-impl|ready-for-revision|ready-for-chore) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Prepare the working tree for a commit-producing dispatch.
+# Ensures HEAD is on the correct branch, rebased on origin/master.
+# Returns 1 on conflict (labels issue dispatch-conflict).
+prepare_branch_for_dispatch() {
+    local issue_number="$1"
+    local dispatch_label="$2"
+
+    local branch_name
+    branch_name=$(get_branch_name_for_issue "$issue_number" "$dispatch_label")
+
+    # Fetch latest origin state
+    git fetch origin "$DEFAULT_BRANCH" --quiet 2>/dev/null || true
+
+    if git rev-parse --verify "origin/${branch_name}" &>/dev/null; then
+        # Branch exists on remote — check it out and rebase
+        git checkout "$branch_name" --quiet 2>/dev/null || git checkout -b "$branch_name" "origin/${branch_name}" --quiet
+        git reset --hard "origin/${branch_name}" --quiet 2>/dev/null
+        if ! git rebase "origin/${DEFAULT_BRANCH}" --quiet 2>/dev/null; then
+            git rebase --abort 2>/dev/null || true
+            log "ERROR: Rebase conflict for #${issue_number} on ${branch_name} — aborting dispatch"
+            gh issue edit "$issue_number" --repo "$REPO" --add-label "dispatch-conflict" 2>/dev/null || true
+            return 1
+        fi
+    else
+        # Branch does not exist — create from origin/master
+        git checkout -B "$branch_name" "origin/${DEFAULT_BRANCH}" --quiet
+    fi
+
+    # Verify HEAD is on the expected branch
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+    if [[ "$current_branch" != "$branch_name" ]]; then
+        log "ERROR: Expected HEAD on ${branch_name} but found ${current_branch}"
+        return 1
+    fi
+}
+
 # ── Helpers ────────────────────────────────────────────────────────
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 err() { log "ERROR: $*" >&2; }
@@ -334,6 +562,7 @@ ensure_labels() {
         "red-team-complete:0075CA:Red-team review complete"
         "needs-manual-review:B60205:Revision limit reached — needs human review"
         "review-failed:B60205:Bot review crashed — needs investigation"
+        "dispatch-conflict:B60205:Rebase conflict — needs manual resolution"
     )
     for entry in "${labels[@]}"; do
         IFS=: read -r name color desc <<< "$entry"
@@ -1192,7 +1421,7 @@ dispatch_issue() {
     # Intra-cycle dedup: skip if already dispatched this scan cycle
     if [[ "$dispatched_this_cycle" == *" ${issue_number} "* ]]; then
         log "Skipping #${issue_number} — already dispatched this cycle"
-        return 0
+        return 2
     fi
     dispatched_this_cycle="${dispatched_this_cycle}${issue_number} "
 
@@ -1208,15 +1437,24 @@ dispatch_issue() {
     issue_labels=$(gh issue view "$issue_number" --repo "$REPO" --json labels -q '[.labels[].name] | join(",")' 2>/dev/null)
     if echo "$issue_labels" | grep -q "in-progress"; then
         log "Skipping #${issue_number} — already in-progress"
-        return 0
+        return 2
     fi
 
-    # Check concurrency — jobs -rp only returns running processes (completed are reaped)
-    local running
-    running=$(jobs -rp | wc -l | tr -d ' ')
-    if [[ "$running" -ge "$MAX_CONCURRENT" ]]; then
-        log "Concurrency limit reached (${running}/${MAX_CONCURRENT}) — skipping #${issue_number}"
-        return 0
+    # Check per-pool concurrency (reap stale PIDs first)
+    local pool_name
+    pool_name=$(get_pool_name "$dispatch_label")
+    if [[ -n "$pool_name" ]]; then
+        reap_pool "$pool_name"
+        local pool_running pool_max_var pool_max
+        pool_running=$(pool_count "$pool_name")
+        pool_max_var="MAX_CONCURRENT_${pool_name}"
+        pool_max="${!pool_max_var:-0}"
+        if [[ "$pool_running" -ge "$pool_max" ]]; then
+            local lpool
+            lpool=$(echo "$pool_name" | tr '[:upper:]' '[:lower:]')
+            log "Pool ${lpool} at capacity (${pool_running}/${pool_max}) — skipping #${issue_number}"
+            return 2
+        fi
     fi
 
     # Swap label: dispatch → in-progress (before spawning background job to prevent double-dispatch)
@@ -1242,6 +1480,14 @@ dispatch_issue() {
             workdir=$(mktemp -d "${REPO_DIR}/.worktrees/issue-${issue_number}-XXXXXX")
             git -C "$REPO_DIR" worktree add --detach "$workdir" "$DEFAULT_BRANCH" --quiet
             cd "$workdir"
+
+            # For commit-producing stages: enforce correct branch (Defect 4 fix)
+            if is_commit_producing_stage "$dispatch_label"; then
+                if ! prepare_branch_for_dispatch "$issue_number" "$dispatch_label"; then
+                    log "Branch preparation failed for #${issue_number} — aborting dispatch"
+                    exit 1
+                fi
+            fi
         fi
 
         # Route to the appropriate handler
@@ -1270,13 +1516,35 @@ dispatch_issue() {
         echo "status=${status} issue=${issue_number} mode=${mode} ended=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             > "${LOG_DIR}/issue-${issue_number}.status"
     ) &
-    log "Background job spawned for #${issue_number} (PID $!)"
+    local spawned_pid=$!
+    log "Background job spawned for #${issue_number} (PID ${spawned_pid})"
+
+    # Track PID in the appropriate pool
+    local pool_name
+    pool_name=$(get_pool_name "$dispatch_label")
+    if [[ -n "$pool_name" ]]; then
+        local pool_var="PIDS_${pool_name}"
+        local start_time
+        start_time=$(date +%s)
+        local lpool
+        lpool=$(echo "$pool_name" | tr '[:upper:]' '[:lower:]')
+        local existing="${!pool_var}"
+        if [[ -n "$existing" ]]; then
+            eval "$pool_var=\"${existing} ${spawned_pid}:${issue_number}:${lpool}:${start_time}\""
+        else
+            eval "$pool_var=\"${spawned_pid}:${issue_number}:${lpool}:${start_time}\""
+        fi
+    fi
 }
 
 # ── Main loop ──────────────────────────────────────────────────────
 run_once() {
-    local total=0
+    local spawned=0
+    local skipped=0
     dispatched_this_cycle=" "
+
+    # Emit STATUS line at the start of each cycle
+    emit_status_line
 
     for label in "${DISPATCH_LABELS[@]}"; do
         log "Scanning ${REPO} for '${label}'..."
@@ -1290,15 +1558,23 @@ run_once() {
         fi
 
         while IFS=$'\t' read -r number title; do
-            dispatch_issue "$number" "$title" "$label"
-            total=$((total + 1))
+            local rc=0
+            dispatch_issue "$number" "$title" "$label" || rc=$?
+            if [[ "$rc" -eq 0 ]]; then
+                spawned=$((spawned + 1))
+            elif [[ "$rc" -eq 2 ]]; then
+                skipped=$((skipped + 1))
+            fi
         done <<< "$issues"
     done
 
+    local total=$((spawned + skipped))
     if [ "$total" -eq 0 ]; then
         log "No dispatch labels found. Nothing to do."
+    elif [ "$skipped" -eq 0 ]; then
+        log "Dispatched ${spawned} issue(s)."
     else
-        log "Dispatched ${total} issue(s)."
+        log "Dispatched ${spawned} issue(s); skipped ${skipped} (concurrency/in-progress)."
     fi
 }
 
@@ -1306,12 +1582,13 @@ run_once() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     ensure_deps
     ensure_labels
+    apply_concurrency_config
 
     # Kill all background agents on shutdown
     trap 'log "Shutting down — killing background agents"; kill $(jobs -rp) 2>/dev/null; wait; exit 130' INT TERM
 
     if $WATCH; then
-        log "Watch mode: polling every ${POLL_INTERVAL}s (${#DISPATCH_LABELS[@]} labels, max ${MAX_CONCURRENT} concurrent). Ctrl-C to stop."
+        log "Watch mode: polling every ${POLL_INTERVAL}s (${#DISPATCH_LABELS[@]} labels, pools: redteam=${MAX_CONCURRENT_REDTEAM} impl=${MAX_CONCURRENT_IMPL} security=${MAX_CONCURRENT_SECURITY} qa=${MAX_CONCURRENT_QA} chore=${MAX_CONCURRENT_CHORE} revision=${MAX_CONCURRENT_REVISION}). Ctrl-C to stop."
         while true; do
             run_once
             log "Sleeping ${POLL_INTERVAL}s..."

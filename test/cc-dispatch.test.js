@@ -1287,16 +1287,16 @@ echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
   // ── Fix 1: Background execution, concurrency, worktrees ──────────
 
   describe('background execution', () => {
-    it('MAX_CONCURRENT variable exists with default value', () => {
+    it('per-stage MAX_CONCURRENT_* defaults exist in apply_concurrency_config', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       assert.ok(
         content.includes('MAX_CONCURRENT'),
         'MAX_CONCURRENT variable must exist for concurrency control'
       )
-      // Should have a default value
+      // Per-stage defaults must be set in apply_concurrency_config
       assert.ok(
-        content.match(/MAX_CONCURRENT=.*[0-9]/),
-        'MAX_CONCURRENT must have a numeric default'
+        content.match(/MAX_CONCURRENT_REDTEAM=\d/),
+        'MAX_CONCURRENT_REDTEAM must have a numeric default in apply_concurrency_config'
       )
     })
 
