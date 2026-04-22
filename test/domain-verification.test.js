@@ -15,6 +15,9 @@ import { randomUUID, createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { startServer, stopServer } from './helpers/server.js'
 
+/** Hash a raw token for storage (mirrors production: SHA-256 at rest). */
+function hashToken(raw) { return createHash('sha256').update(raw).digest('hex') }
+
 let BASE = process.env.API_BASE
 let API
 
@@ -228,7 +231,7 @@ describe('POST /api/v1/claim/verify — Verification Logic', () => {
     try { db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(domain) } catch {}
     db.prepare(
       "INSERT INTO domain_claims (id, domain, verification_token, status, expires_at) VALUES (?, ?, ?, 'pending', datetime('now', '+3 days'))"
-    ).run(claimId, domain, token)
+    ).run(claimId, domain, hashToken(token))
     return claimId
   }
 
@@ -388,7 +391,7 @@ describe('PATCH /api/v1/services/:id — Listing Edits', () => {
       // Insert verified claim
       db.prepare(
         "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-      ).run(randomUUID(), DOMAIN, TOKEN)
+      ).run(randomUUID(), DOMAIN, hashToken(TOKEN))
 
       // Insert matching service (URL hostname = DOMAIN)
       db.prepare(
@@ -592,7 +595,7 @@ describe('POST /api/v1/claim/revoke — Token Revocation', () => {
       // Insert verified claim for revocation tests
       db.prepare(
         "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-      ).run(randomUUID(), REVOKE_DOMAIN, REVOKE_TOKEN)
+      ).run(randomUUID(), REVOKE_DOMAIN, hashToken(REVOKE_TOKEN))
     } catch (err) {
       console.log('Revoke test setup failed:', err.message)
       skipAll = true
@@ -623,7 +626,7 @@ describe('POST /api/v1/claim/revoke — Token Revocation', () => {
     db.prepare("DELETE FROM domain_claims WHERE domain = ?").run('revoke-wrong.example.com')
     db.prepare(
       "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-    ).run(randomUUID(), 'revoke-wrong.example.com', 'correcttoken' + 'a'.repeat(52))
+    ).run(randomUUID(), 'revoke-wrong.example.com', hashToken('correcttoken' + 'a'.repeat(52)))
 
     const r = await apiRevoke({ domain: 'revoke-wrong.example.com', verification_token: 'wrongtoken' + 'b'.repeat(54) })
     assert.equal(r.status, 403)
@@ -986,7 +989,7 @@ describe('domain_verified flag lifecycle', () => {
       // Insert pending claim
       db.prepare(
         "INSERT INTO domain_claims (id, domain, verification_token, status, expires_at) VALUES (?, ?, ?, 'pending', datetime('now', '+3 days'))"
-      ).run(randomUUID(), domain, token)
+      ).run(randomUUID(), domain, hashToken(token))
 
       // Insert 3 services under the domain with domain_verified=0 (hostname must match for verify update)
       for (let i = 0; i < svcIds.length; i++) {
@@ -1027,7 +1030,7 @@ describe('domain_verified flag lifecycle', () => {
     // Insert verified claim
     db.prepare(
       "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-    ).run(randomUUID(), domain, token)
+    ).run(randomUUID(), domain, hashToken(token))
 
     // Insert 3 services with domain_verified=1 (hostname must match for revoke reset)
     for (let i = 1; i <= 3; i++) {
@@ -1061,7 +1064,7 @@ describe('domain_verified flag lifecycle', () => {
     // Insert verified claim
     db.prepare(
       "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-    ).run(randomUUID(), domain, token)
+    ).run(randomUUID(), domain, hashToken(token))
 
     // Insert service with domain_verified=0
     db.prepare(
@@ -1137,7 +1140,7 @@ describe('DELETE /api/v1/services/:id — Provider Soft Delete', () => {
 
       db.prepare(
         "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-      ).run(randomUUID(), DOMAIN, TOKEN)
+      ).run(randomUUID(), DOMAIN, hashToken(TOKEN))
 
       db.prepare(
         "INSERT INTO services (id, name, url, protocol, source, category, status) VALUES (?, ?, ?, ?, ?, ?, 'active')"
@@ -1242,7 +1245,7 @@ describe('POST /api/v1/services/bulk-delete — Bulk Soft Delete', () => {
 
       db.prepare(
         "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-      ).run(randomUUID(), DOMAIN, TOKEN)
+      ).run(randomUUID(), DOMAIN, hashToken(TOKEN))
 
       for (const id of SVC_IDS) {
         db.prepare(
@@ -1504,7 +1507,7 @@ describe('Admin Restore (POST /admin/services/:id/restore)', () => {
 
       db.prepare(
         "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-      ).run(randomUUID(), DOMAIN, TOKEN)
+      ).run(randomUUID(), DOMAIN, hashToken(TOKEN))
 
       // Soft-deleted service
       db.prepare(
@@ -1582,7 +1585,7 @@ describe('Soft Delete Edge Cases', () => {
 
       db.prepare(
         "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-      ).run(randomUUID(), DOMAIN, TOKEN)
+      ).run(randomUUID(), DOMAIN, hashToken(TOKEN))
 
       // Pre-deleted service
       db.prepare(
@@ -1592,7 +1595,7 @@ describe('Soft Delete Edge Cases', () => {
       // Revoke edge case setup
       db.prepare(
         "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-      ).run(randomUUID(), REVOKE_EDGE_DOMAIN, REVOKE_EDGE_TOKEN)
+      ).run(randomUUID(), REVOKE_EDGE_DOMAIN, hashToken(REVOKE_EDGE_TOKEN))
 
       db.prepare(
         "INSERT INTO services (id, name, url, protocol, source, category, status, provider_deleted, deleted_at) VALUES (?, ?, ?, ?, ?, ?, 'active', 1, datetime('now'))"
@@ -1785,21 +1788,22 @@ describe('POST /api/v1/admin/domains/:domain/reset', () => {
   it('78. after reset + re-verify: new token works', async (t) => {
     if (skipAll) return t.skip('test setup failed')
 
-    // Get the current token from DB (set by the reset in test 71)
-    const row = db.prepare('SELECT verification_token FROM domain_claims WHERE domain = ?').get(RESET_DOMAIN)
-    const newToken = row.verification_token
-    const newHash = createHash('sha256').update(newToken).digest('hex')
+    // Re-initiate claim to get a fresh raw token (admin reset returns token in response, but
+    // test 71 already consumed it — re-claim to get a new one via API)
+    const claim = await apiClaim({ domain: RESET_DOMAIN })
+    assert.ok(claim.status === 200 || claim.status === 201, `re-claim failed: ${JSON.stringify(claim.body)}`)
+    const newRawToken = claim.body.verification_token
 
-    // Simulate verification by setting status to verified + updating hash check
+    // Simulate verification by setting status to verified
     db.prepare(
       `UPDATE domain_claims SET status = 'verified', verified_at = datetime('now')
        WHERE domain = ?`
     ).run(RESET_DOMAIN)
 
-    // PATCH with the new token should work
+    // PATCH with the raw token should work (server hashes before comparing)
     const r = await apiPatch(RESET_SVC, {
       domain: RESET_DOMAIN,
-      verification_token: newToken,
+      verification_token: newRawToken,
       description: 'Updated after reset',
     })
     assert.equal(r.status, 200)
@@ -1854,10 +1858,10 @@ describe('domain-verify timing-leak migration (#156)', () => {
 
   it('behavioral: hashMatchesToken returns false (not throw) for mismatched-length input', async () => {
     const { hashMatchesToken } = await import('../src/services/domain-verify.js')
-    // 63-char content vs a token whose SHA-256 hex is 64 chars
+    // 63-char content vs a stored hash which is 64 hex chars
     const shortContent = 'a'.repeat(63)
-    const storedToken = 'some-token'
-    const result = hashMatchesToken(shortContent, storedToken)
+    const storedHash = createHash('sha256').update('some-token').digest('hex')
+    const result = hashMatchesToken(shortContent, storedHash)
     assert.equal(result, false, 'must return false for length-mismatched input')
   })
 
@@ -1870,7 +1874,7 @@ describe('domain-verify timing-leak migration (#156)', () => {
       db.prepare("DELETE FROM domain_claims WHERE domain = ?").run(domain)
       db.prepare(
         "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+30 days'))"
-      ).run(randomUUID(), domain, token)
+      ).run(randomUUID(), domain, hashToken(token))
 
       const { revokeClaim } = await import('../src/services/domain-verify.js')
       const result = revokeClaim(domain, 'wrong-length-token')

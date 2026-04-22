@@ -17,22 +17,23 @@ function stmt(key, sql) {
 
 /**
  * Constant-time token comparison to prevent timing attacks.
+ * The stored value (a) is already SHA-256(token). Hash the submitted value (b) before comparing.
  */
-function tokensMatch(a, b) {
-  return constantTimeEqual(a, b)
+function tokensMatch(storedHash, submittedRaw) {
+  const submittedHash = createHash('sha256').update(submittedRaw).digest('hex')
+  return constantTimeEqual(storedHash, submittedHash)
 }
 
 /**
- * Compare received .well-known content against the SHA-256 hash of the stored token.
- * Used for domain verification — providers post the HASH publicly, keep raw token for API auth.
+ * Compare received .well-known content against the stored hash.
+ * Both sides are SHA-256(token) — direct constant-time comparison.
  * @param {string} receivedContent - Content from .well-known file (may have whitespace)
- * @param {string} storedToken - Raw token from database
+ * @param {string} storedHash - SHA-256 hash of token from database
  * @returns {boolean}
  */
-export function hashMatchesToken(receivedContent, storedToken) {
-  const expectedHash = createHash('sha256').update(storedToken).digest('hex')
+export function hashMatchesToken(receivedContent, storedHash) {
   const received = (receivedContent || '').trim().toLowerCase()
-  const expected = expectedHash.toLowerCase()
+  const expected = (storedHash || '').toLowerCase()
   return constantTimeEqual(received, expected)
 }
 
@@ -104,23 +105,23 @@ export function initiateClaim(domain, contactEmail) {
 
   if (existing && existing.status === 'pending') {
     stmt('updatePendingClaim',
-      "UPDATE domain_claims SET verification_token = ?, expires_at = ?, contact_email = ?, claimed_at = datetime('now') WHERE domain = ? AND status = 'pending'"
-    ).run(token, expiresAt, contactEmail || null, normalizedDomain)
+      "UPDATE domain_claims SET verification_token = ?, token_hashed = 1, expires_at = ?, contact_email = ?, claimed_at = datetime('now') WHERE domain = ? AND status = 'pending'"
+    ).run(hash, expiresAt, contactEmail || null, normalizedDomain)
     return { status: 200, data }
   }
 
   // Expired or revoked claims get replaced
   if (existing && (existing.status === 'expired' || existing.status === 'revoked')) {
     stmt('replaceExpiredOrRevokedClaim',
-      "UPDATE domain_claims SET verification_token = ?, status = 'pending', expires_at = ?, contact_email = ?, claimed_at = datetime('now'), verified_at = NULL WHERE domain = ? AND status IN ('expired', 'revoked')"
-    ).run(token, expiresAt, contactEmail || null, normalizedDomain)
+      "UPDATE domain_claims SET verification_token = ?, token_hashed = 1, status = 'pending', expires_at = ?, contact_email = ?, claimed_at = datetime('now'), verified_at = NULL WHERE domain = ? AND status IN ('expired', 'revoked')"
+    ).run(hash, expiresAt, contactEmail || null, normalizedDomain)
     return { status: 201, data }
   }
 
   // New claim
   stmt('insertClaim',
-    'INSERT INTO domain_claims (id, domain, verification_token, status, expires_at, contact_email) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(randomUUID(), normalizedDomain, token, 'pending', expiresAt, contactEmail || null)
+    'INSERT INTO domain_claims (id, domain, verification_token, token_hashed, status, expires_at, contact_email) VALUES (?, ?, ?, 1, ?, ?, ?)'
+  ).run(randomUUID(), normalizedDomain, hash, 'pending', expiresAt, contactEmail || null)
 
   return { status: 201, data }
 }

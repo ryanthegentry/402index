@@ -44,12 +44,15 @@ describe('initiateClaim — hash changes', () => {
     assert.equal(result.data.verification_hash, expectedHash)
   })
 
-  it('stores raw token in DB (unchanged for API auth)', () => {
+  it('stores hashed token in DB (not the raw token)', () => {
     const domain = uniqueDomain()
     const result = initiateClaim(domain)
     const claim = db.prepare('SELECT verification_token FROM domain_claims WHERE domain = ?').get(domain)
     assert.ok(claim, 'claim should exist in DB')
-    assert.equal(claim.verification_token, result.data.verification_token)
+    // DB should store SHA-256(raw token), not the raw token
+    const expectedHash = createHash('sha256').update(result.data.verification_token).digest('hex')
+    assert.equal(claim.verification_token, expectedHash)
+    assert.notEqual(claim.verification_token, result.data.verification_token)
   })
 
   it('instructions tell provider to post the HASH, not the raw token', () => {
@@ -68,27 +71,28 @@ describe('initiateClaim — hash changes', () => {
 // ─── hashMatchesToken ────────────────────────────────────────────────────────
 
 describe('hashMatchesToken', () => {
-  const storedToken = 'a1b2c3d4e5f67890abcdef1234567890'
-  const correctHash = createHash('sha256').update(storedToken).digest('hex')
+  // Both arguments are now hashes — storedHash is SHA-256(rawToken), receivedContent is the .well-known content
+  const rawToken = 'a1b2c3d4e5f67890abcdef1234567890'
+  const storedHash = createHash('sha256').update(rawToken).digest('hex')
 
-  it('SHA-256 hash of token matches → true', () => {
-    assert.equal(hashMatchesToken(correctHash, storedToken), true)
+  it('matching hash content → true', () => {
+    assert.equal(hashMatchesToken(storedHash, storedHash), true)
   })
 
-  it('raw token does NOT match → false (breaking change from old flow)', () => {
-    assert.equal(hashMatchesToken(storedToken, storedToken), false)
+  it('raw token does NOT match stored hash → false', () => {
+    assert.equal(hashMatchesToken(rawToken, storedHash), false)
   })
 
   it('hash with leading/trailing whitespace → true (trimmed)', () => {
-    assert.equal(hashMatchesToken(`  ${correctHash}  \n`, storedToken), true)
+    assert.equal(hashMatchesToken(`  ${storedHash}  \n`, storedHash), true)
   })
 
   it('wrong hash → false', () => {
     const wrongHash = 'deadbeef'.repeat(8) // 64 hex chars, same length as SHA-256
-    assert.equal(hashMatchesToken(wrongHash, storedToken), false)
+    assert.equal(hashMatchesToken(wrongHash, storedHash), false)
   })
 
   it('hash comparison is case-insensitive', () => {
-    assert.equal(hashMatchesToken(correctHash.toUpperCase(), storedToken), true)
+    assert.equal(hashMatchesToken(storedHash.toUpperCase(), storedHash), true)
   })
 })
