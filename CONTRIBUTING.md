@@ -111,6 +111,19 @@ ASSERTION-REFACTOR: switch assert.equal to assert.strictEqual for consistency
 
 The error message will show the exact file, hunk, and assertion pair that triggered the detection, along with instructions for adding the appropriate keyword.
 
+## Dispatch Recovery
+
+If a wrapper subshell gets stuck, the dispatch loop will auto-kill it via `check_timeouts()` (per-stage thresholds in `MAX_SESSION_MINUTES_*` env vars). No manual action required.
+
+If the dispatch loop itself becomes unresponsive (rare):
+
+1. Find the loop PID: `pgrep -f 'cc-dispatch.sh --watch'`
+2. Send SIGTERM to trigger the global shutdown trap: `kill <pid>`
+3. The global trap kills all background wrappers via `kill $(jobs -rp)`. Each wrapper's EXIT trap then kills its `claude` child and cleans state.
+4. If wrappers don't exit within ~15s: `pkill -9 -f 'cc-dispatch.sh'` and `pkill -9 -f 'claude --print'` as a last resort, then manually `gh issue edit --remove-label in-progress` on any issues left in-progress.
+
+A standalone `scripts/cc-dispatch-killstuck.sh` operator script is **deferred** as a follow-up. Defects 1+2 should make manual intervention rare; the script is justified only if production observation shows it's needed.
+
 ## Questions?
 
 Open an issue on this repo or email hello@402index.io.
