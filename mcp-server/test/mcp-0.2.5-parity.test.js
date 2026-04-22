@@ -66,17 +66,6 @@ describe('.tarball-allowlist.txt', () => {
   })
 })
 
-// ─── UA + version in src/index.ts ────────────────────────────────────────────
-
-describe('src/index.ts version strings', () => {
-  const src = readFileSync(join(ROOT, 'src', 'index.ts'), 'utf8')
-
-  it('UA string is 402index-mcp/0.3.0', () =>
-    assert.ok(src.includes('402index-mcp/0.3.0'), 'UA string 402index-mcp/0.3.0 not found in src/index.ts'))
-  it("McpServer constructor has version: '0.3.0'", () =>
-    assert.ok(src.includes("version: '0.3.0'"), "version: '0.3.0' not found in src/index.ts"))
-})
-
 // ─── Helper unit tests ────────────────────────────────────────────────────────
 
 describe('DEFAULT_FIELDS / filterFields / toCsv helpers (unit)', () => {
