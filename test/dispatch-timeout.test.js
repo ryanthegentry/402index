@@ -660,6 +660,80 @@ echo "KILL_COMPLETED"
   })
 
   // ══════════════════════════════════════════════════════════════════
+  // Revision 1 — reviewer feedback
+  // ══════════════════════════════════════════════════════════════════
+
+  describe('bash 3.x compatibility', () => {
+    // R1: kill_wrapper must not use ${pool^^} (bash 4+ only)
+    it('R1: kill_wrapper does not use bash 4+ uppercase syntax', () => {
+      const killStart = content.indexOf('kill_wrapper()')
+      assert.ok(killStart !== -1, 'kill_wrapper function must exist')
+      const killEnd = content.indexOf('\n}', killStart + 1)
+      const killBody = content.slice(killStart, killEnd)
+
+      assert.ok(
+        !killBody.includes('${pool^^}'),
+        `kill_wrapper must not use \${pool^^} (bash 4+ only), found bash 4+ syntax in kill_wrapper body`
+      )
+    })
+  })
+
+  describe('post-timeout label handling', () => {
+    // R2: After timeout, issue retains ready-for-revision label for re-dispatch
+    it('R2: timeout leaves ready-for-revision label on issue for re-dispatch', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+source "${SCRIPT_PATH}"
+
+kill() {
+  if [[ "\$1" == "-0" ]]; then return 1; fi
+}
+export -f kill
+
+pkill() { :; }
+export -f pkill
+
+gh_calls=""
+gh() {
+  gh_calls="\${gh_calls}|GH:\$*"
+  echo "GH_CALLED: \$*"
+}
+export -f gh
+
+tail() { echo "(log tail)"; }
+export -f tail
+
+MAX_SESSION_MINUTES_IMPL=90
+MIN_KILL_AGE_SECONDS=0
+KILL_GRACE_SECONDS=1
+REPO="test/repo"
+LOG_DIR="/tmp"
+
+now=\$(command date +%s)
+start_time=\$((now - 91 * 60))
+PIDS_IMPL="99999:42:impl:\${start_time}"
+
+check_timeouts 2>&1
+echo "GH_CALLS:\$gh_calls"
+`)
+      // Must add ready-for-revision
+      assert.ok(
+        output.includes('--add-label') && output.includes('ready-for-revision'),
+        `Expected ready-for-revision label to be added, got: ${output}`
+      )
+      // Must NOT immediately remove it (issue needs to stay in pipeline)
+      // Check all output lines for a gh call that removes the ready-for-revision label
+      const removesRevision = output.split('\n').some(l =>
+        l.includes('GH') && l.includes('--remove-label') && l.includes('ready-for-revision')
+      )
+      assert.ok(
+        !removesRevision,
+        `ready-for-revision label must NOT be removed after timeout — issue would be dropped from pipeline. Got: ${output}`
+      )
+    })
+  })
+
+  // ══════════════════════════════════════════════════════════════════
   // Structural: check_timeouts exists and is wired in
   // ══════════════════════════════════════════════════════════════════
 

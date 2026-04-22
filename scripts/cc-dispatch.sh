@@ -410,13 +410,13 @@ $(tail -20 "${logfile}" 2>/dev/null || echo "(log file not available)")
 EOFCOMMENT
 )" 2>/dev/null
 
-    # Timeout counts against revision counter — add ready-for-revision label event
-    # so that revision_count increments and prevents infinite timeout loops (MAX_REVISIONS=3)
+    # Timeout counts against revision counter — add ready-for-revision label
+    # so that revision_count increments and prevents infinite timeout loops (MAX_REVISIONS=3).
+    # Label is intentionally kept (not removed) so the issue re-enters the dispatch pipeline.
     gh issue edit "$issue" --repo "$REPO" --add-label "ready-for-revision" 2>/dev/null
-    gh issue edit "$issue" --repo "$REPO" --remove-label "ready-for-revision" 2>/dev/null
 
-    # Remove entry from pool
-    local pool_var="PIDS_${pool^^}"
+    # Remove entry from pool (pool is already uppercase from check_timeouts caller)
+    local pool_var="PIDS_${pool}"
     local new_val=""
     for tuple in ${!pool_var}; do
         local tpid="${tuple%%:*}"
@@ -426,8 +426,8 @@ EOFCOMMENT
     done
     eval "$pool_var=\"\${new_val# }\""
 
-    # Clear warned state
-    local warned_var="WARNED_${pool^^}"
+    # Clear warned state (pool is already uppercase from check_timeouts caller)
+    local warned_var="WARNED_${pool}"
     local new_warned=""
     for wpid in ${!warned_var}; do
         if [[ "$wpid" != "$pid" ]]; then
