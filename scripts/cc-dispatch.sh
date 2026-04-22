@@ -36,7 +36,9 @@ DRY_RUN=false
 WATCH=false
 POLL_INTERVAL=300
 MAX_REVISIONS=3
-MAX_CONCURRENT="${MAX_CONCURRENT:-3}"
+# MAX_CONCURRENT is a legacy env var — if set by the operator, apply_concurrency_config
+# distributes it proportionally with a deprecation warning. Do NOT assign a default here;
+# the detection logic in apply_concurrency_config must distinguish "user-set" from "unset".
 
 # All dispatch labels the script watches for
 DISPATCH_LABELS=(
@@ -364,7 +366,7 @@ emit_status_line() {
         local c
         c=$(pool_count "$pool")
         max_var="MAX_CONCURRENT_${pool}"
-        local max="${!max_var:-${MAX_CONCURRENT}}"
+        local max="${!max_var:-0}"
         local lpool
         lpool=$(echo "$pool" | tr '[:upper:]' '[:lower:]')
         if [[ -n "$pools_str" ]]; then
@@ -435,10 +437,10 @@ apply_concurrency_config() {
         MAX_CONCURRENT_QA="${MAX_CONCURRENT_QA:-2}"
         MAX_CONCURRENT_CHORE="${MAX_CONCURRENT_CHORE:-1}"
         MAX_CONCURRENT_REVISION="${MAX_CONCURRENT_REVISION:-1}"
-        if [[ -n "${MAX_CONCURRENT+x}" ]]; then
+        if [[ -n "${MAX_CONCURRENT:-}" ]]; then
             log "WARNING: MAX_CONCURRENT is set alongside per-stage vars — per-stage vars take precedence, MAX_CONCURRENT ignored"
         fi
-    elif [[ -n "${MAX_CONCURRENT+x}" ]]; then
+    elif [[ -n "${MAX_CONCURRENT:-}" ]]; then
         # Legacy: distribute MAX_CONCURRENT proportionally
         log "DEPRECATION: MAX_CONCURRENT is deprecated — use per-stage vars (MAX_CONCURRENT_REDTEAM, etc.) instead"
         local mc="$MAX_CONCURRENT"
@@ -1446,7 +1448,7 @@ dispatch_issue() {
         local pool_running pool_max_var pool_max
         pool_running=$(pool_count "$pool_name")
         pool_max_var="MAX_CONCURRENT_${pool_name}"
-        pool_max="${!pool_max_var:-${MAX_CONCURRENT}}"
+        pool_max="${!pool_max_var:-0}"
         if [[ "$pool_running" -ge "$pool_max" ]]; then
             local lpool
             lpool=$(echo "$pool_name" | tr '[:upper:]' '[:lower:]')
@@ -1586,7 +1588,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     trap 'log "Shutting down — killing background agents"; kill $(jobs -rp) 2>/dev/null; wait; exit 130' INT TERM
 
     if $WATCH; then
-        log "Watch mode: polling every ${POLL_INTERVAL}s (${#DISPATCH_LABELS[@]} labels, max ${MAX_CONCURRENT} concurrent). Ctrl-C to stop."
+        log "Watch mode: polling every ${POLL_INTERVAL}s (${#DISPATCH_LABELS[@]} labels, pools: redteam=${MAX_CONCURRENT_REDTEAM} impl=${MAX_CONCURRENT_IMPL} security=${MAX_CONCURRENT_SECURITY} qa=${MAX_CONCURRENT_QA} chore=${MAX_CONCURRENT_CHORE} revision=${MAX_CONCURRENT_REVISION}). Ctrl-C to stop."
         while true; do
             run_once
             log "Sleeping ${POLL_INTERVAL}s..."
