@@ -4,6 +4,7 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.dispatch
 docs/bazaar-sample.json
 mcp-server/node_modules/
 mcp-server/dist/*.tsbuildinfo
