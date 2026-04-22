@@ -1385,6 +1385,8 @@ trap 'rm -rf "\$ORIGIN" "\$LOCAL"' EXIT
 git init --bare "\$ORIGIN" --quiet
 git clone --quiet "\$ORIGIN" "\$LOCAL" 2>/dev/null
 cd "\$LOCAL"
+git config user.email "test@example.com"
+git config user.name "Test"
 git checkout -b master --quiet 2>/dev/null
 echo "initial" > file.txt
 git add file.txt
@@ -1430,6 +1432,8 @@ trap 'rm -rf "\$ORIGIN" "\$LOCAL"' EXIT
 git init --bare "\$ORIGIN" --quiet
 git clone --quiet "\$ORIGIN" "\$LOCAL" 2>/dev/null
 cd "\$LOCAL"
+git config user.email "test@example.com"
+git config user.name "Test"
 git checkout -b master --quiet 2>/dev/null
 echo "initial" > file.txt
 git add file.txt
@@ -1490,6 +1494,8 @@ trap 'rm -rf "\$ORIGIN" "\$LOCAL"' EXIT
 git init --bare "\$ORIGIN" --quiet
 git clone --quiet "\$ORIGIN" "\$LOCAL" 2>/dev/null
 cd "\$LOCAL"
+git config user.email "test@example.com"
+git config user.name "Test"
 git checkout -b master --quiet 2>/dev/null
 echo "line1" > conflict.txt
 git add conflict.txt
