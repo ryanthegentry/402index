@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { adminAuth } from '../middleware/admin-auth.js'
 import { readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -352,9 +351,14 @@ router.get('/demo', (req, res) => {
   res.redirect(301, '/')
 })
 
-// Admin dashboard — server-side auth gate (issue #14)
-// Reuses adminAuth middleware; unauthenticated requests get 401 JSON.
-router.get('/admin', adminAuth, (req, res) => {
+// Admin dashboard — auth is client-side via API calls.
+// The /api/v1/admin/* endpoints are server-side gated at src/server.js:97.
+// Do NOT add Bearer-token middleware here — browsers do not send Bearer
+// tokens on plain GET, and this route would be unreachable from a browser.
+// See issue #184 / PR #28 for prior failed attempt; defense-in-depth for
+// this HTML page (if ever desired) must use cookie-session or HTTP Basic
+// Auth, not Bearer.
+router.get('/admin', (req, res) => {
   res.send(adminPage())
 })
 
