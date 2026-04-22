@@ -69,6 +69,48 @@ Use one of these categories (or propose a new one):
 
 Want your service featured (pinned to the top)? Open an issue or mention it in your PR. Featured listings must be healthy and actively maintained.
 
+## Assertion Guardrail
+
+This project has a structural check (`scripts/check-assertion-flips.sh`) that detects when an existing test assertion is modified — specifically, when an assertion is removed and a new one is added within the same diff hunk. This prevents accidental regression-cementing, where a test is silently changed to match buggy behavior instead of catching it.
+
+### When you modify an existing test assertion
+
+Add one of these keywords to your **commit message body** (not the subject line):
+
+**`BEHAVIOR-CHANGE: <summary>`** — Use when the user-facing behavior is intentionally changing.
+
+```
+fix: add auth gate to admin dashboard
+
+The admin page now requires authentication instead of being publicly
+accessible.
+
+BEHAVIOR-CHANGE: admin page now requires server-side auth gate
+```
+
+**`ASSERTION-REFACTOR: <summary>`** — Use for cosmetic changes that don't alter behavioral contracts (variable renames, switching assertion methods, reformatting).
+
+```
+refactor: use strictEqual in admin tests
+
+ASSERTION-REFACTOR: switch assert.equal to assert.strictEqual for consistency
+```
+
+### What triggers the check
+
+- A diff hunk in `test/**/*.test.js` that contains both a removed (`-`) and added (`+`) line matching common assertion methods (`assert.equal`, `assert.ok`, `assert.deepEqual`, `assert.strictEqual`, etc.)
+
+### What does NOT trigger the check
+
+- Adding new assertions (no removals in the same hunk)
+- Deleting assertions without replacement
+- Changes to non-test files (`src/`, `scripts/`, etc.)
+- Modifications in separate hunks (a deletion in one hunk and an addition in a different hunk)
+
+### If the check fires
+
+The error message will show the exact file, hunk, and assertion pair that triggered the detection, along with instructions for adding the appropriate keyword.
+
 ## Questions?
 
 Open an issue on this repo or email hello@402index.io.
