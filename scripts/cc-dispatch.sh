@@ -668,6 +668,21 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     # Truncate to ~4000 chars to stay within GitHub's limits
     cc_summary="${cc_summary:0:4000}"
 
+    # Assertion-flip guardrail: block if test assertions were modified without justification
+    local _script_dir
+    _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if ! "${_script_dir}/check-assertion-flips.sh" --base "origin/${DEFAULT_BRANCH}" --head HEAD 2>"${logfile}.af-err"; then
+        local af_err
+        af_err=$(cat "${logfile}.af-err")
+        rm -f "${logfile}.af-err"
+        log "ASSERTION-FLIP guardrail fired for issue #${issue_number}: ${af_err}"
+        gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress" --add-label "ready-for-revision"
+        gh issue comment "$issue_number" --repo "$REPO" \
+            --body "$(printf '### ASSERTION-FLIP DETECTED\n\nThe assertion-flip guardrail blocked stage advancement.\n\n```\n%s\n```\n\nSee issue spec for BEHAVIOR-CHANGE / ASSERTION-REFACTOR keyword requirements.' "$af_err")"
+        return 1
+    fi
+    rm -f "${logfile}.af-err"
+
     _create_or_adopt_pr "$issue_number" "$issue_title" "$branch" "$cc_summary" "$superseded_issue" "$dispatch_label" "$done_label"
 }
 
@@ -1135,6 +1150,21 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     rm -f "$tmpfile"
 
     gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress"
+
+    # Assertion-flip guardrail: block if test assertions were modified without justification
+    local _script_dir
+    _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if ! "${_script_dir}/check-assertion-flips.sh" --base "origin/${DEFAULT_BRANCH}" --head HEAD 2>"${logfile}.af-err"; then
+        local af_err
+        af_err=$(cat "${logfile}.af-err")
+        rm -f "${logfile}.af-err"
+        log "ASSERTION-FLIP guardrail fired for issue #${issue_number}: ${af_err}"
+        gh issue edit "$issue_number" --repo "$REPO" --add-label "ready-for-revision"
+        gh pr comment "$pr_number" --repo "$REPO" \
+            --body "$(printf '### ASSERTION-FLIP DETECTED\n\nThe assertion-flip guardrail blocked stage advancement.\n\n```\n%s\n```\n\nSee issue spec for BEHAVIOR-CHANGE / ASSERTION-REFACTOR keyword requirements.' "$af_err")"
+        return 1
+    fi
+    rm -f "${logfile}.af-err"
 
     # Chain back to security review
     chain_next_stage "$issue_number" "$dispatch_label"
