@@ -7,6 +7,58 @@
 
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+// ─── repo-meta: file naming + header accuracy (issue #210) ──────────────────
+
+describe('repo-meta: file naming + header accuracy', () => {
+  const thisFile = fileURLToPath(import.meta.url)
+  const contents = readFileSync(thisFile, 'utf-8')
+  const header = contents.slice(0, 800)
+
+  it('filename matches content: admin-auth-middleware.test.js', () => {
+    assert.ok(
+      thisFile.endsWith('admin-auth-middleware.test.js'),
+      `expected filename to end with admin-auth-middleware.test.js, got ${thisFile}`
+    )
+  })
+
+  it('header does not misframe the route', () => {
+    // Split stale string so this assertion doesn't self-match when reading own source
+    const staleHeader = 'must use adminAuth' + ' middleware'
+    assert.ok(
+      !header.includes(staleHeader),
+      'header should not claim /admin must use adminAuth middleware'
+    )
+    assert.ok(
+      header.includes('intentionally OPEN'),
+      'header should state /admin is intentionally OPEN'
+    )
+  })
+
+  it('section comment fixed', () => {
+    // Split stale string so this assertion doesn't self-match
+    const staleComment = 'adminAuth middleware unit tests (used by' + ' /admin route)'
+    assert.ok(
+      !contents.includes(staleComment),
+      'should not contain stale section comment referencing /admin route'
+    )
+  })
+
+  it('describe label fixed', () => {
+    // Split stale string so this assertion doesn't self-match
+    const staleLabel = 'Admin page auth gate' + ' (issue #14)'
+    assert.ok(
+      !contents.includes(staleLabel),
+      'should not contain stale describe label'
+    )
+    assert.ok(
+      contents.includes('adminAuth middleware + adminPage() rendering'),
+      'should contain updated describe label'
+    )
+  })
+})
 import { startServer, stopServer } from './helpers/server.js'
 import { adminAuth } from '../src/middleware/admin-auth.js'
 import { adminPage } from '../src/views/admin.js'
