@@ -115,13 +115,13 @@ rm -f "\$STUB_LOG"
         'Script must define post_pr_open_bookkeeping() function')
     })
 
-    it('dispatch_implement calls post_pr_open_bookkeeping', () => {
+    it('dispatch_implement calls _create_or_adopt_pr', () => {
       const fnStart = content.indexOf('dispatch_implement()')
       const fnEnd = content.indexOf('\n}', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
       assert.ok(
-        fnBody.includes('post_pr_open_bookkeeping'),
-        'dispatch_implement must call post_pr_open_bookkeeping')
+        fnBody.includes('_create_or_adopt_pr'),
+        'dispatch_implement must call _create_or_adopt_pr')
     })
 
     it('post_pr_open_bookkeeping runs all four bookkeeping operations (behavioral)', () => {
@@ -321,8 +321,8 @@ echo "EXIT_CODE=\${exit_code}"
   // ── Part 2: adopt-or-create PR ────────────────────────────────
 
   describe('adopt-or-create PR pattern', () => {
-    it('gh pr create in dispatch_implement captures stderr (2>&1)', () => {
-      const fnStart = content.indexOf('dispatch_implement()')
+    it('gh pr create in _create_or_adopt_pr captures stderr (2>&1)', () => {
+      const fnStart = content.indexOf('_create_or_adopt_pr()')
       const fnEnd = content.indexOf('\n}', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
 
@@ -332,14 +332,14 @@ echo "EXIT_CODE=\${exit_code}"
         'gh pr create must capture stderr (2>&1)')
     })
 
-    it('dispatch_implement has adopt-PR fallback using gh pr list --head', () => {
-      const fnStart = content.indexOf('dispatch_implement()')
+    it('_create_or_adopt_pr has adopt fallback using gh pr list --head', () => {
+      const fnStart = content.indexOf('_create_or_adopt_pr()')
       const fnEnd = content.indexOf('\n}', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
 
       assert.ok(
         fnBody.includes('gh pr list') && fnBody.includes('--head'),
-        'dispatch_implement must have adopt-PR fallback using gh pr list --head "$branch"')
+        '_create_or_adopt_pr must have adopt-PR fallback using gh pr list --head "$branch"')
     })
 
     it('adopts existing PR and runs bookkeeping when gh pr create fails (behavioral)', () => {

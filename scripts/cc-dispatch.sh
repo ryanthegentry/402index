@@ -112,7 +112,11 @@ chain_next_stage() {
 
     if [[ -n "$next_label" ]]; then
         log "Chaining: #${issue_number} → ${next_label}"
-        gh issue edit "$issue_number" --repo "$REPO" --add-label "$next_label"
+        local _chain_err
+        if ! _chain_err=$(gh issue edit "$issue_number" --repo "$REPO" --add-label "$next_label" 2>&1 >/dev/null); then
+            log "WARNING: chain_next_stage failed for issue #${issue_number} (${current_label} → ${next_label}) — gh: ${_chain_err}"
+            return 1
+        fi
     fi
 }
 
@@ -257,48 +261,6 @@ submit_review() {
     $review_ok
 }
 
-# Wait for CI checks to complete on a PR.
-# Returns 0 if all checks pass, 1 if any check fails or times out.
-# Outputs check results on failure (for inclusion in issue comments).
-wait_for_ci() {
-    local pr_number="$1"
-    local max_attempts="${2:-30}"  # 30 * 20s = 10 min
-    local interval=20
-
-    log "Waiting for CI on PR #${pr_number}..."
-
-    local attempt=0
-    while [[ $attempt -lt $max_attempts ]]; do
-        local checks
-        checks=$(gh pr checks "$pr_number" --repo "$REPO" 2>&1) || true
-
-        if [[ -z "$checks" ]]; then
-            attempt=$((attempt + 1))
-            [[ $attempt -lt $max_attempts ]] && sleep "$interval"
-            continue
-        fi
-
-        # If any check has failed, bail immediately
-        if echo "$checks" | grep -qiE '\bfail'; then
-            log "CI failed for PR #${pr_number}"
-            echo "$checks"
-            return 1
-        fi
-
-        # If no checks are pending/in-progress, all must have passed
-        if ! echo "$checks" | grep -qiE 'pending|queued|in_progress|waiting'; then
-            log "CI passed for PR #${pr_number}"
-            return 0
-        fi
-
-        attempt=$((attempt + 1))
-        [[ $attempt -lt $max_attempts ]] && sleep "$interval"
-    done
-
-    log "CI timed out for PR #${pr_number} after $((max_attempts * interval))s"
-    echo "CI checks did not complete within $((max_attempts * interval))s"
-    return 1
-}
 
 # Set commit status on the PR HEAD SHA for the dispatch/review context.
 # Used as a merge-blocking signal when branch protection is configured.
@@ -470,6 +432,95 @@ validate_cc_output() {
 
 mkdir -p "$LOG_DIR"
 
+# ── Post-PR bookkeeping helper ──────────────────────────────────
+# Runs all bookkeeping after a PR is created or adopted. Each gh call is
+# individually guarded — a single failure emits a WARNING but does not abort
+# the remaining steps.
+# Usage: post_pr_open_bookkeeping <issue_number> <pr_url> <pr_number> <dispatch_label> <done_label>
+post_pr_open_bookkeeping() {
+    local issue_number="$1" pr_url="$2" pr_number="$3"
+    local dispatch_label="$4" done_label="$5"
+    local _bk_err
+
+    # (a) Add done_label to PR if set
+    if [[ -n "$done_label" ]]; then
+        if ! _bk_err=$(gh pr edit "$pr_number" --repo "$REPO" --add-label "$done_label" 2>&1 >/dev/null); then
+            log "WARNING: Failed to add label '${done_label}' to PR #${pr_number} (issue #${issue_number}, ${pr_url}) — gh: ${_bk_err}"
+        fi
+    fi
+
+    # (b) Remove in-progress from issue
+    if ! _bk_err=$(gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress" 2>&1 >/dev/null); then
+        log "WARNING: Failed to remove 'in-progress' from issue #${issue_number} (PR ${pr_url}) — gh: ${_bk_err}"
+    fi
+
+    # (c) Post PR comment on issue
+    if ! _bk_err=$(gh issue comment "$issue_number" --repo "$REPO" --body "PR opened: ${pr_url}" 2>&1 >/dev/null); then
+        log "WARNING: Failed to post PR comment on issue #${issue_number} (PR ${pr_url}) — gh: ${_bk_err}"
+    fi
+
+    # (d) Chain to next stage
+    if ! _bk_err=$(chain_next_stage "$issue_number" "$dispatch_label" 2>&1); then
+        log "WARNING: chain_next_stage failed for issue #${issue_number} / ${pr_url} — output: ${_bk_err}"
+    fi
+}
+
+# ── Create-or-adopt PR helper ─────────────────────────────────────
+# Attempts gh pr create; if that fails (e.g., PR already exists for the branch),
+# falls back to adopting an existing PR via gh pr list --head. Runs
+# post_pr_open_bookkeeping on success.
+_create_or_adopt_pr() {
+    local issue_number="$1" issue_title="$2" branch="$3"
+    local cc_summary="$4" superseded_issue="$5"
+    local dispatch_label="$6" done_label="$7"
+
+    # Attempt to create the PR, capturing stderr for diagnostics
+    local pr_url pr_create_stderr
+    if pr_url=$(gh pr create --repo "$REPO" \
+        --title "fix: #${issue_number} — ${issue_title}" \
+        --body "$(cat <<PRBODY
+## Summary
+
+Automated fix for #${issue_number}: ${issue_title}
+
+## What changed
+
+${cc_summary}
+
+## Linked Issue
+
+Closes #${issue_number}${superseded_issue:+
+Closes #${superseded_issue}}
+
+---
+*Dispatched by cc-dispatch.sh at $(date '+%Y-%m-%d %H:%M:%S')*
+PRBODY
+)" \
+        --head "$branch" --base "$DEFAULT_BRANCH" 2>&1); then
+        log "PR created: ${pr_url}"
+    else
+        pr_create_stderr="$pr_url"
+        pr_url=""
+        log "gh pr create failed for issue #${issue_number}: ${pr_create_stderr}"
+
+        # Attempt to adopt an existing PR on this branch
+        pr_url=$(gh pr list --repo "$REPO" --head "$branch" --state open --json url --jq '.[0].url') || true
+        local adopted_number
+        adopted_number=$(gh pr list --repo "$REPO" --head "$branch" --state open --json number --jq '.[0].number') || true
+
+        if [[ -n "$pr_url" && -n "$adopted_number" ]]; then
+            log "Adopted existing PR #${adopted_number}: ${pr_url}"
+        else
+            err "Failed to create or adopt PR for issue #${issue_number} (branch: ${branch}). Original error: ${pr_create_stderr}"
+            return 1
+        fi
+    fi
+
+    local pr_number
+    pr_number=$(echo "$pr_url" | grep -o '[0-9]*$')
+    post_pr_open_bookkeeping "$issue_number" "$pr_url" "$pr_number" "$dispatch_label" "$done_label"
+}
+
 # ── Implement mode: branch → CC → commit → PR ────────────────────
 dispatch_implement() {
     local issue_number="$1" issue_title="$2" issue_body="$3"
@@ -488,7 +539,7 @@ dispatch_implement() {
     git checkout -B "$branch" "origin/${DEFAULT_BRANCH}"
 
     local main_sha
-    main_sha=$(git rev-parse "$DEFAULT_BRANCH")
+    main_sha=$(git rev-parse "origin/${DEFAULT_BRANCH}")
 
     # Build prompt — agent personas have their own system prompts
     local cc_prompt
@@ -498,7 +549,9 @@ dispatch_implement() {
 ISSUE BODY:
 ${issue_body}
 
-Follow your implementation protocol. Issue #${issue_number} in repo ${REPO}."
+Follow your implementation protocol. Issue #${issue_number} in repo ${REPO}.
+
+IMPORTANT: Do NOT open a pull request. Push your branch only; the dispatch wrapper will create or adopt the PR."
     else
         cc_prompt="Fix GitHub issue #${issue_number}: ${issue_title}
 
@@ -511,7 +564,9 @@ INSTRUCTIONS:
 3. Run any existing tests to verify nothing breaks.
 4. Do NOT commit yet — I will review the changes first.
 
-When done, summarize what you changed and why."
+When done, summarize what you changed and why.
+
+IMPORTANT: Do NOT open a pull request. Push your branch only; the dispatch wrapper will create or adopt the PR."
     fi
 
     log "Starting CC implement session (logging to ${logfile})"
@@ -613,42 +668,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
     # Truncate to ~4000 chars to stay within GitHub's limits
     cc_summary="${cc_summary:0:4000}"
 
-    local pr_url
-    pr_url=$(gh pr create --repo "$REPO" \
-        --title "fix: #${issue_number} — ${issue_title}" \
-        --body "$(cat <<PRBODY
-## Summary
-
-Automated fix for #${issue_number}: ${issue_title}
-
-## What changed
-
-${cc_summary}
-
-## Linked Issue
-
-Closes #${issue_number}${superseded_issue:+
-Closes #${superseded_issue}}
-
----
-*Dispatched by cc-dispatch.sh at $(date '+%Y-%m-%d %H:%M:%S')*
-PRBODY
-)" \
-        --head "$branch" --base "$DEFAULT_BRANCH")
-
-    if [ -n "$pr_url" ]; then
-        log "PR created: ${pr_url}"
-        local pr_number
-        pr_number=$(echo "$pr_url" | grep -o '[0-9]*$')
-        if [[ -n "$done_label" ]]; then
-            gh pr edit "$pr_number" --repo "$REPO" --add-label "$done_label" 2>/dev/null
-        fi
-        gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress"
-        gh issue comment "$issue_number" --repo "$REPO" --body "PR opened: ${pr_url}"
-        chain_next_stage "$issue_number" "$dispatch_label"
-    else
-        err "Failed to create PR for issue #${issue_number}"
-    fi
+    _create_or_adopt_pr "$issue_number" "$issue_title" "$branch" "$cc_summary" "$superseded_issue" "$dispatch_label" "$done_label"
 }
 
 # ── Review-issue mode: CC reviews spec, posts findings on the issue (pre-impl spec review) ──
