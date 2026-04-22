@@ -1625,9 +1625,9 @@ dispatch_issue() {
         # Unified EXIT trap: kill children first, then clean state (Defect 2 — kill claude child before state cleanup)
         local workdir=""
         trap '
-            pkill -P $$ 2>/dev/null
+            pkill -P $BASHPID 2>/dev/null
             sleep 1
-            pkill -9 -P $$ 2>/dev/null
+            pkill -9 -P $BASHPID 2>/dev/null
             gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress" 2>/dev/null
             [[ -n "$workdir" ]] && git -C "$REPO_DIR" worktree remove --force "$workdir" 2>/dev/null
         ' EXIT
