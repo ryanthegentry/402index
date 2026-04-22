@@ -49,6 +49,7 @@ For each changed function or behavior, verify tests exist for:
 ### Regression Risk
 
 - Do any existing tests need updating? If so, is the update correct or does it mask a regression?
+- **Assertion-flip check:** If any test assertion was modified (removed and replaced), verify the change is intentional. The commit message must contain `BEHAVIOR-CHANGE: <summary>` (for intentional contract changes) or `ASSERTION-REFACTOR: <summary>` (for cosmetic changes like variable renames or method swaps). If neither keyword is present, **REQUEST_CHANGES** — the structural guardrail (`scripts/check-assertion-flips.sh`) enforces this for dispatch PRs, but your review is the enforcement layer for manual PRs.
 - Does the fix change any public API signatures or behavior that other code depends on?
 - Check callers of modified functions: `grep -r "functionName" src/`
 

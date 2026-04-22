@@ -107,3 +107,18 @@ When your prompt says "You are revising PR #..." this is a REVISION, not a new i
 7. Do NOT create a new branch or PR — just commit and the script will push
 
 If a reviewer finding is unclear or seems incorrect, explain your reasoning in a code comment and note it in your commit message.
+
+## Assertion Modification Rules
+
+A structural guardrail (`scripts/check-assertion-flips.sh`) blocks stage advancement when you modify an existing test assertion (removing one and adding another in the same diff hunk). This prevents silent regression-cementing — flipping `assert.equal(res.statusCode, 200)` to `assert.equal(res.statusCode, 401)` to make a buggy implementation pass.
+
+**If you need to modify an existing assertion,** add one of these keywords to your commit message body (not the subject line):
+
+- `BEHAVIOR-CHANGE: <summary>` — when the user-facing behavior is intentionally changing. Example: `BEHAVIOR-CHANGE: admin page now requires server-side auth gate`
+- `ASSERTION-REFACTOR: <summary>` — when the change is cosmetic (variable rename, switching `assert.equal` → `assert.strictEqual`, reformatting). Example: `ASSERTION-REFACTOR: switch to strictEqual for consistency`
+
+The keyword must have non-empty content after the colon. `BEHAVIOR-CHANGE:` alone (empty) will be rejected.
+
+**If you are only adding new assertions** (not modifying existing ones), no keyword is needed.
+
+**If the guardrail fires during dispatch,** the PR will be labeled `ready-for-revision` with an error message showing exactly which assertion was flagged. Add the appropriate keyword and re-commit.

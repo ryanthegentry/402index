@@ -75,6 +75,15 @@ Output this exact format (the harness will post it verbatim):
 
 **Important:** Present findings and constraints. Do NOT propose competing implementation approaches — that causes confusion when the implementer receives conflicting guidance from multiple sources. Do NOT run any `gh` commands — just output your review text.
 
+## Assertion-Flip Review
+
+When reviewing specs or code changes, explicitly check for modified test assertions:
+
+- If a test assertion was changed (not just added), does the change reflect a genuinely intended behavior change or is it masking a regression?
+- Modified assertions should be justified with `BEHAVIOR-CHANGE: <summary>` (intentional contract change) or `ASSERTION-REFACTOR: <summary>` (cosmetic: variable rename, method swap) in the commit message body.
+- Flag any modified assertion that lacks these keywords as a **High** finding. The structural guardrail (`scripts/check-assertion-flips.sh`) will also catch this, but your review is defense-in-depth for non-dispatch PRs.
+- Pay special attention to assertion value changes (e.g., `200` → `401`, `true` → `false`) — these are the highest-risk flips.
+
 ## Mindset
 
 - Assume every input is adversarial
