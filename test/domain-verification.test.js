@@ -143,8 +143,8 @@ describe('POST /api/v1/claim — Claim Initiation', () => {
     const domain = `verified-${randomUUID().slice(0, 8)}.example.com`
     try {
       db.prepare(
-        "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'verified', datetime('now'), datetime('now', '+3 days'))"
-      ).run(randomUUID(), domain, 'a'.repeat(64))
+        "INSERT INTO domain_claims (id, domain, verification_token, token_hashed, status, verified_at, expires_at) VALUES (?, ?, ?, 1, 'verified', datetime('now'), datetime('now', '+3 days'))"
+      ).run(randomUUID(), domain, hashToken('a'.repeat(64)))
     } catch (err) {
       return t.skip(`domain_claims table not ready: ${err.message}`)
     }
@@ -184,8 +184,8 @@ describe('POST /api/v1/claim/verify — API Error Cases', () => {
     const domain = `expired-${randomUUID().slice(0, 8)}.example.com`
     try {
       db.prepare(
-        "INSERT INTO domain_claims (id, domain, verification_token, status, expires_at) VALUES (?, ?, ?, 'pending', datetime('now', '-1 day'))"
-      ).run(randomUUID(), domain, 'a'.repeat(64))
+        "INSERT INTO domain_claims (id, domain, verification_token, token_hashed, status, expires_at) VALUES (?, ?, ?, 1, 'pending', datetime('now', '-1 day'))"
+      ).run(randomUUID(), domain, hashToken('a'.repeat(64)))
     } catch (err) {
       return t.skip(`domain_claims table not ready: ${err.message}`)
     }
@@ -200,8 +200,8 @@ describe('POST /api/v1/claim/verify — API Error Cases', () => {
     const domain = `revoked-verify-${randomUUID().slice(0, 8)}.example.com`
     try {
       db.prepare(
-        "INSERT INTO domain_claims (id, domain, verification_token, status, verified_at, expires_at) VALUES (?, ?, ?, 'revoked', datetime('now'), datetime('now', '+3 days'))"
-      ).run(randomUUID(), domain, 'a'.repeat(64))
+        "INSERT INTO domain_claims (id, domain, verification_token, token_hashed, status, verified_at, expires_at) VALUES (?, ?, ?, 1, 'revoked', datetime('now'), datetime('now', '+3 days'))"
+      ).run(randomUUID(), domain, hashToken('a'.repeat(64)))
     } catch (err) {
       return t.skip(`domain_claims table not ready: ${err.message}`)
     }
@@ -655,8 +655,8 @@ describe('POST /api/v1/claim/revoke — Token Revocation', () => {
 
     db.prepare("DELETE FROM domain_claims WHERE domain = ?").run('revoke-pending.example.com')
     db.prepare(
-      "INSERT INTO domain_claims (id, domain, verification_token, status, expires_at) VALUES (?, ?, ?, 'pending', datetime('now', '+3 days'))"
-    ).run(randomUUID(), 'revoke-pending.example.com', 'pendingtoken' + 'a'.repeat(52))
+      "INSERT INTO domain_claims (id, domain, verification_token, token_hashed, status, expires_at) VALUES (?, ?, ?, 1, 'pending', datetime('now', '+3 days'))"
+    ).run(randomUUID(), 'revoke-pending.example.com', hashToken('pendingtoken' + 'a'.repeat(52)))
 
     const r = await apiRevoke({ domain: 'revoke-pending.example.com', verification_token: 'pendingtoken' + 'a'.repeat(52) })
     assert.equal(r.status, 403)
