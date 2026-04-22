@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 const INDEX_URL = process.env.INDEX_URL || 'https://402index.io';
@@ -191,8 +192,17 @@ async function main() {
     await server.connect(transport);
     console.error(`[402index-mcp] Server running, connected to ${INDEX_URL}`);
 }
-// Only auto-start when invoked as CLI, not when imported for tests
-const isCLI = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+// Detect CLI invocation, resolving symlinks on both sides so that
+// npm bin entries (npx, global installs, node_modules/.bin) work correctly.
+let isCLI = false;
+try {
+    isCLI = !!process.argv[1] &&
+        realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+}
+catch {
+    // realpathSync throws if a path doesn't exist — treat as non-CLI invocation
+    isCLI = false;
+}
 if (isCLI) {
     main().catch((err) => {
         console.error('[402index-mcp] Fatal error:', err);
