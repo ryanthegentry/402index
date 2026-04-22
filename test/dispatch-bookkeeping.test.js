@@ -919,3 +919,593 @@ echo "COUNT=\${count}"
     })
   })
 })
+
+// ══════════════════════════════════════════════════════════════════
+// #188 PR 2 — Per-stage pools (Defect 1) + Fresh worktree (Defect 4)
+// ══════════════════════════════════════════════════════════════════
+
+describe('dispatch per-stage pools + fresh worktree (#188 PR 2)', () => {
+  const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+
+  // ── Defect 1: Per-stage concurrency pools ──────────────────────
+
+  describe('per-stage concurrency pools (Defect 1)', () => {
+    it('redteam pool at 4/4, impl pool at 0/2 — impl dispatch succeeds (starvation fix)', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+dispatched_this_cycle=" "
+MAX_CONCURRENT_REDTEAM=4
+MAX_CONCURRENT_IMPL=2
+
+# Spawn 4 background sleeps to fill jobs -rp
+sleep 300 &
+p1=\$!
+sleep 300 &
+p2=\$!
+sleep 300 &
+p3=\$!
+sleep 300 &
+p4=\$!
+
+# Track them all as redteam
+PIDS_REDTEAM="\${p1}:100:redteam:\$(date +%s) \${p2}:101:redteam:\$(date +%s) \${p3}:102:redteam:\$(date +%s) \${p4}:103:redteam:\$(date +%s)"
+PIDS_IMPL=""
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+gh() {
+  case "\$1" in
+    issue)
+      case "\$2" in
+        view) echo "bug" ;;
+        edit) ;;
+      esac
+      ;;
+  esac
+}
+export -f gh
+
+set +e
+dispatch_issue 200 "Test impl issue" "ready-for-impl" 2>/dev/null
+exit_code=\$?
+set -e
+
+kill \$p1 \$p2 \$p3 \$p4 2>/dev/null
+wait 2>/dev/null
+
+echo "EXIT_CODE=\${exit_code}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('EXIT_CODE=0'),
+        `Impl dispatch should succeed when impl pool has room (even if redteam full). Output:\n${output}`)
+    })
+
+    it('impl pool at 2/2, redteam pool at 0/4 — redteam dispatch succeeds', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+dispatched_this_cycle=" "
+MAX_CONCURRENT_REDTEAM=4
+MAX_CONCURRENT_IMPL=2
+
+# Spawn 2 bg sleeps for impl pool
+sleep 300 &
+p1=\$!
+sleep 300 &
+p2=\$!
+# Spawn 2 more to exceed global MAX_CONCURRENT=3
+sleep 300 &
+p3=\$!
+
+PIDS_IMPL="\${p1}:300:impl:\$(date +%s) \${p2}:301:impl:\$(date +%s)"
+PIDS_REDTEAM=""
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+gh() {
+  case "\$1" in
+    issue)
+      case "\$2" in
+        view) echo "bug" ;;
+        edit) ;;
+      esac
+      ;;
+  esac
+}
+export -f gh
+
+set +e
+dispatch_issue 400 "Test redteam issue" "ready-for-red-team" 2>/dev/null
+exit_code=\$?
+set -e
+
+kill \$p1 \$p2 \$p3 2>/dev/null
+wait 2>/dev/null
+
+echo "EXIT_CODE=\${exit_code}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('EXIT_CODE=0'),
+        `Redteam dispatch should succeed when redteam pool has room (even if impl full). Output:\n${output}`)
+    })
+
+    it('all pools at capacity — all dispatches skipped with per-pool messaging', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+dispatched_this_cycle=" "
+MAX_CONCURRENT_IMPL=1
+
+# One bg job tracked as impl
+sleep 300 &
+p1=\$!
+PIDS_IMPL="\${p1}:500:impl:\$(date +%s)"
+PIDS_REDTEAM=""
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+gh() {
+  case "\$1" in
+    issue)
+      case "\$2" in
+        view) echo "bug" ;;
+      esac
+      ;;
+  esac
+}
+export -f gh
+
+set +e
+dispatch_issue 600 "Test issue" "ready-for-impl" 2>/dev/null
+exit_code=\$?
+set -e
+
+kill \$p1 2>/dev/null
+wait 2>/dev/null
+
+echo "EXIT_CODE=\${exit_code}"
+echo "OUTPUT_START"
+dispatch_issue 600 "Test issue" "ready-for-impl" 2>/dev/null || true
+echo "OUTPUT_END"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('EXIT_CODE=2'),
+        `Dispatch should be skipped when pool is at capacity. Output:\n${output}`)
+      // Per-pool messaging should mention the pool name
+      assert.ok(output.includes('impl') && (output.includes('pool') || output.includes('1/1')),
+        `Skip message should reference the pool. Output:\n${output}`)
+    })
+
+    it('MAX_CONCURRENT=5 with no per-stage vars emits deprecation warning', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=()
+MAX_CONCURRENT=5
+
+# Unset any per-stage vars
+unset MAX_CONCURRENT_REDTEAM MAX_CONCURRENT_IMPL MAX_CONCURRENT_SECURITY MAX_CONCURRENT_QA MAX_CONCURRENT_CHORE MAX_CONCURRENT_REVISION
+
+apply_concurrency_config 2>&1
+
+echo "REDTEAM_MAX=\${MAX_CONCURRENT_REDTEAM:-unset}"
+echo "IMPL_MAX=\${MAX_CONCURRENT_IMPL:-unset}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('deprecat') || output.includes('DEPRECAT') || output.includes('legacy'),
+        `Must emit deprecation warning for MAX_CONCURRENT. Output:\n${output}`)
+      assert.ok(!output.includes('REDTEAM_MAX=unset'),
+        `Must set MAX_CONCURRENT_REDTEAM from proportional distribution. Output:\n${output}`)
+    })
+
+    it('MAX_CONCURRENT=5 AND MAX_CONCURRENT_REDTEAM=3 — per-stage wins with warning', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+MAX_CONCURRENT=5
+MAX_CONCURRENT_REDTEAM=3
+
+apply_concurrency_config 2>&1
+
+echo "REDTEAM_MAX=\${MAX_CONCURRENT_REDTEAM}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('REDTEAM_MAX=3'),
+        `Per-stage var must win over MAX_CONCURRENT. Output:\n${output}`)
+      assert.ok(output.includes('per-stage') || output.includes('ignored') || output.includes('overrid'),
+        `Must warn that MAX_CONCURRENT is being ignored. Output:\n${output}`)
+    })
+
+    it('PID reaping: track 3 PIDs, kill one, reap, pool count decrements', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -uo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+
+sleep 300 &
+p1=\$!
+sleep 300 &
+p2=\$!
+sleep 300 &
+p3=\$!
+
+PIDS_IMPL="\${p1}:1:impl:\$(date +%s) \${p2}:2:impl:\$(date +%s) \${p3}:3:impl:\$(date +%s)"
+
+echo "BEFORE=\$(pool_count IMPL)"
+
+kill \$p2 2>/dev/null
+wait \$p2 2>/dev/null || true
+
+reap_pool IMPL
+
+echo "AFTER=\$(pool_count IMPL)"
+
+kill \$p1 \$p3 2>/dev/null
+wait \$p1 \$p3 2>/dev/null || true
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('BEFORE=3'),
+        `Should have 3 PIDs before reap. Output:\n${output}`)
+      assert.ok(output.includes('AFTER=2'),
+        `Should have 2 PIDs after reaping dead one. Output:\n${output}`)
+    })
+
+    it('loop restart with fresh PID arrays + in-progress label — dispatch skipped (regression)', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+dispatched_this_cycle=" "
+
+# Fresh PID arrays (simulating loop restart)
+PIDS_REDTEAM=""
+PIDS_IMPL=""
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+gh() {
+  case "\$1" in
+    issue)
+      case "\$2" in
+        view) echo "in-progress,bug" ;;
+      esac
+      ;;
+  esac
+}
+export -f gh
+
+set +e
+dispatch_issue 700 "Orphaned issue" "ready-for-impl"
+exit_code=\$?
+set -e
+
+echo "EXIT_CODE=\${exit_code}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('EXIT_CODE=2'),
+        `In-progress issue should be skipped even with fresh PID arrays. Output:\n${output}`)
+    })
+
+    it('all tracked PIDs dead between cycles — all pools show 0 in flight', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=()
+
+# Use dead PIDs (99998, 99997 unlikely to exist)
+PIDS_REDTEAM="99998:800:redteam:1700000000"
+PIDS_IMPL="99997:801:impl:1700000000"
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+run_once 2>&1
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('in_flight=0'),
+        `All dead PIDs should be reaped, showing in_flight=0. Output:\n${output}`)
+    })
+  })
+
+  // ── Defect 4: Fresh worktree enforcement ──────────────────────
+
+  describe('fresh worktree enforcement (Defect 4)', () => {
+    it('get_branch_name_for_issue maps ready-for-impl #99 to fix/issue-99', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+
+result=\$(get_branch_name_for_issue 99 "ready-for-impl")
+echo "BRANCH=\${result}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('BRANCH=fix/issue-99'),
+        `ready-for-impl #99 should map to fix/issue-99. Output:\n${output}`)
+    })
+
+    it('get_branch_name_for_issue maps ready-for-chore #99 to chore/issue-99', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+
+result=\$(get_branch_name_for_issue 99 "ready-for-chore")
+echo "BRANCH=\${result}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('BRANCH=chore/issue-99'),
+        `ready-for-chore #99 should map to chore/issue-99. Output:\n${output}`)
+    })
+
+    it('creates new branch from origin/master when branch does not exist', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+ORIGIN=\$(mktemp -d)
+LOCAL=\$(mktemp -d)
+trap 'rm -rf "\$ORIGIN" "\$LOCAL"' EXIT
+
+git init --bare "\$ORIGIN" --quiet
+git clone --quiet "\$ORIGIN" "\$LOCAL" 2>/dev/null
+cd "\$LOCAL"
+git checkout -b master --quiet 2>/dev/null
+echo "initial" > file.txt
+git add file.txt
+git commit -m "initial" --quiet
+git push --quiet origin master 2>/dev/null
+
+git checkout -b fix/issue-162 --quiet 2>/dev/null
+
+source "${SCRIPT_PATH}"
+REPO="test/repo"
+REPO_DIR="\$LOCAL"
+DEFAULT_BRANCH=master
+LOG_DIR="/tmp"
+
+gh() { :; }
+export -f gh
+
+prepare_branch_for_dispatch 182 "ready-for-impl"
+
+echo "HEAD_BRANCH=\$(git rev-parse --abbrev-ref HEAD)"
+echo "MASTER_SHA=\$(git rev-parse origin/master)"
+echo "HEAD_SHA=\$(git rev-parse HEAD)"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('HEAD_BRANCH=fix/issue-182'),
+        `HEAD should be on fix/issue-182. Output:\n${output}`)
+      // HEAD should equal origin/master since it's a fresh branch
+      const masterSha = output.match(/MASTER_SHA=(\w+)/)?.[1]
+      const headSha = output.match(/HEAD_SHA=(\w+)/)?.[1]
+      assert.ok(masterSha && headSha && masterSha === headSha,
+        `HEAD should equal origin/master. Output:\n${output}`)
+    })
+
+    it('existing branch behind origin/master — rebases onto origin/master', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+ORIGIN=\$(mktemp -d)
+LOCAL=\$(mktemp -d)
+trap 'rm -rf "\$ORIGIN" "\$LOCAL"' EXIT
+
+git init --bare "\$ORIGIN" --quiet
+git clone --quiet "\$ORIGIN" "\$LOCAL" 2>/dev/null
+cd "\$LOCAL"
+git checkout -b master --quiet 2>/dev/null
+echo "initial" > file.txt
+git add file.txt
+git commit -m "initial" --quiet
+git push --quiet origin master 2>/dev/null
+
+# Create feature branch and push it
+git checkout -b fix/issue-182 --quiet 2>/dev/null
+echo "feature work" > feature.txt
+git add feature.txt
+git commit -m "feature" --quiet
+git push --quiet origin fix/issue-182 2>/dev/null
+
+# Advance master past the branch point
+git checkout master --quiet
+echo "advance" > advance.txt
+git add advance.txt
+git commit -m "advance master" --quiet
+git push --quiet origin master 2>/dev/null
+
+source "${SCRIPT_PATH}"
+REPO="test/repo"
+REPO_DIR="\$LOCAL"
+DEFAULT_BRANCH=master
+LOG_DIR="/tmp"
+
+gh() { :; }
+export -f gh
+
+prepare_branch_for_dispatch 182 "ready-for-impl"
+
+echo "HEAD_BRANCH=\$(git rev-parse --abbrev-ref HEAD)"
+echo "MASTER_SHA=\$(git rev-parse origin/master)"
+echo "MERGE_BASE=\$(git merge-base HEAD origin/master)"
+echo "FEATURE_EXISTS=\$(git log --oneline | grep -c feature)"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('HEAD_BRANCH=fix/issue-182'),
+        `HEAD should be on fix/issue-182. Output:\n${output}`)
+      // merge-base should equal origin/master (rebased)
+      const masterSha = output.match(/MASTER_SHA=(\w+)/)?.[1]
+      const mergeBase = output.match(/MERGE_BASE=(\w+)/)?.[1]
+      assert.ok(masterSha && mergeBase && masterSha === mergeBase,
+        `Branch should be rebased on origin/master. Output:\n${output}`)
+      assert.ok(output.includes('FEATURE_EXISTS=1'),
+        `Feature commit should be preserved after rebase. Output:\n${output}`)
+    })
+
+    it('rebase conflict — aborts dispatch and labels issue dispatch-conflict', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+ORIGIN=\$(mktemp -d)
+LOCAL=\$(mktemp -d)
+trap 'rm -rf "\$ORIGIN" "\$LOCAL"' EXIT
+
+git init --bare "\$ORIGIN" --quiet
+git clone --quiet "\$ORIGIN" "\$LOCAL" 2>/dev/null
+cd "\$LOCAL"
+git checkout -b master --quiet 2>/dev/null
+echo "line1" > conflict.txt
+git add conflict.txt
+git commit -m "initial" --quiet
+git push --quiet origin master 2>/dev/null
+
+# Create feature branch with conflicting change
+git checkout -b fix/issue-182 --quiet 2>/dev/null
+echo "feature version" > conflict.txt
+git add conflict.txt
+git commit -m "feature change" --quiet
+git push --quiet origin fix/issue-182 2>/dev/null
+
+# Advance master with conflicting change
+git checkout master --quiet
+echo "master version" > conflict.txt
+git add conflict.txt
+git commit -m "master change" --quiet
+git push --quiet origin master 2>/dev/null
+
+source "${SCRIPT_PATH}"
+REPO="test/repo"
+REPO_DIR="\$LOCAL"
+DEFAULT_BRANCH=master
+LOG_DIR="/tmp"
+
+LABEL_LOG=\$(mktemp)
+export LABEL_LOG
+
+gh() {
+  echo "gh \$*" >> "\$LABEL_LOG"
+}
+export -f gh
+
+set +e
+prepare_branch_for_dispatch 182 "ready-for-impl"
+exit_code=\$?
+set -e
+
+echo "EXIT_CODE=\${exit_code}"
+echo "LABELS:"
+cat "\$LABEL_LOG" 2>/dev/null
+rm -f "\$LABEL_LOG"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('EXIT_CODE=1'),
+        `Should return 1 on rebase conflict. Output:\n${output}`)
+      assert.ok(output.includes('dispatch-conflict'),
+        `Should label issue dispatch-conflict. Output:\n${output}`)
+    })
+
+    it('read-only stage (red-team) — no branch-checkout logic runs', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+
+result=\$(is_commit_producing_stage "ready-for-red-team" && echo "YES" || echo "NO")
+echo "COMMIT_PRODUCING=\${result}"
+
+result2=\$(is_commit_producing_stage "ready-for-security" && echo "YES" || echo "NO")
+echo "SECURITY_COMMIT_PRODUCING=\${result2}"
+
+result3=\$(is_commit_producing_stage "ready-for-impl" && echo "YES" || echo "NO")
+echo "IMPL_COMMIT_PRODUCING=\${result3}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('COMMIT_PRODUCING=NO'),
+        `Red-team should NOT be a commit-producing stage. Output:\n${output}`)
+      assert.ok(output.includes('SECURITY_COMMIT_PRODUCING=NO'),
+        `Security review should NOT be a commit-producing stage. Output:\n${output}`)
+      assert.ok(output.includes('IMPL_COMMIT_PRODUCING=YES'),
+        `Impl should BE a commit-producing stage. Output:\n${output}`)
+    })
+  })
+})
