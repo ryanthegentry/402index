@@ -291,6 +291,126 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# ── PID pool tracking (bash 3.x compatible — no associative arrays) ──
+# Each PIDS_<POOL> variable stores space-separated PID:ISSUE:POOL:STARTTIME tuples.
+PIDS_REDTEAM=""
+PIDS_IMPL=""
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+get_pool_name() {
+    case "$1" in
+        ready-for-red-team)  echo "REDTEAM" ;;
+        ready-for-impl)      echo "IMPL" ;;
+        ready-for-security)  echo "SECURITY" ;;
+        ready-for-qa)        echo "QA" ;;
+        ready-for-chore)     echo "CHORE" ;;
+        ready-for-revision)  echo "REVISION" ;;
+    esac
+}
+
+reap_pool() {
+    local pool_var="PIDS_$1"
+    local live=""
+    for tuple in ${!pool_var}; do
+        local pid="${tuple%%:*}"
+        if kill -0 "$pid" 2>/dev/null; then
+            live="$live $tuple"
+        fi
+    done
+    eval "$pool_var=\"\${live# }\""
+}
+
+pool_count() {
+    local pool_var="PIDS_$1"
+    local val="${!pool_var}"
+    if [[ -z "$val" ]]; then
+        echo 0
+    else
+        echo "$val" | wc -w | tr -d ' '
+    fi
+}
+
+reap_all_pools() {
+    local pool
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        reap_pool "$pool"
+    done
+}
+
+total_tracked_count() {
+    local total=0
+    local pool
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        local c
+        c=$(pool_count "$pool")
+        total=$((total + c))
+    done
+    echo "$total"
+}
+
+emit_status_line() {
+    reap_all_pools
+
+    local tracked
+    tracked=$(total_tracked_count)
+
+    # Build pools= field
+    local pools_str=""
+    local pool max_var
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        local c
+        c=$(pool_count "$pool")
+        max_var="MAX_CONCURRENT_${pool}"
+        local max="${!max_var:-${MAX_CONCURRENT}}"
+        local lpool
+        lpool=$(echo "$pool" | tr '[:upper:]' '[:lower:]')
+        if [[ -n "$pools_str" ]]; then
+            pools_str="${pools_str},"
+        fi
+        pools_str="${pools_str}${lpool}:${c}/${max}"
+    done
+
+    # Build jobs= field
+    local jobs_str=""
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        local pool_var="PIDS_$pool"
+        for tuple in ${!pool_var}; do
+            local pid issue pname start_time
+            pid="${tuple%%:*}"
+            local rest="${tuple#*:}"
+            issue="${rest%%:*}"
+            rest="${rest#*:}"
+            pname="${rest%%:*}"
+            start_time="${rest#*:}"
+            local now elapsed_min
+            now=$(date +%s)
+            elapsed_min=$(( (now - start_time) / 60 ))
+            if [[ -n "$jobs_str" ]]; then
+                jobs_str="${jobs_str},"
+            fi
+            jobs_str="${jobs_str}#${issue}:${pname}:${elapsed_min}m:PID${pid}"
+        done
+    done
+
+    local status_line="STATUS: in_flight=${tracked} pools=${pools_str}"
+    if [[ "$tracked" -gt 0 && -n "$jobs_str" ]]; then
+        status_line="${status_line} jobs=${jobs_str}"
+    fi
+
+    # Check for orphaned background jobs
+    local bg_count
+    bg_count=$(jobs -rp 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "$bg_count" -gt "$tracked" ]]; then
+        local orphan_count=$(( bg_count - tracked ))
+        status_line="${status_line}; orphans=${orphan_count}"
+    fi
+
+    log "$status_line"
+}
+
 # ── Helpers ────────────────────────────────────────────────────────
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 err() { log "ERROR: $*" >&2; }
@@ -1192,7 +1312,7 @@ dispatch_issue() {
     # Intra-cycle dedup: skip if already dispatched this scan cycle
     if [[ "$dispatched_this_cycle" == *" ${issue_number} "* ]]; then
         log "Skipping #${issue_number} — already dispatched this cycle"
-        return 0
+        return 2
     fi
     dispatched_this_cycle="${dispatched_this_cycle}${issue_number} "
 
@@ -1208,7 +1328,7 @@ dispatch_issue() {
     issue_labels=$(gh issue view "$issue_number" --repo "$REPO" --json labels -q '[.labels[].name] | join(",")' 2>/dev/null)
     if echo "$issue_labels" | grep -q "in-progress"; then
         log "Skipping #${issue_number} — already in-progress"
-        return 0
+        return 2
     fi
 
     # Check concurrency — jobs -rp only returns running processes (completed are reaped)
@@ -1216,7 +1336,7 @@ dispatch_issue() {
     running=$(jobs -rp | wc -l | tr -d ' ')
     if [[ "$running" -ge "$MAX_CONCURRENT" ]]; then
         log "Concurrency limit reached (${running}/${MAX_CONCURRENT}) — skipping #${issue_number}"
-        return 0
+        return 2
     fi
 
     # Swap label: dispatch → in-progress (before spawning background job to prevent double-dispatch)
@@ -1270,13 +1390,35 @@ dispatch_issue() {
         echo "status=${status} issue=${issue_number} mode=${mode} ended=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             > "${LOG_DIR}/issue-${issue_number}.status"
     ) &
-    log "Background job spawned for #${issue_number} (PID $!)"
+    local spawned_pid=$!
+    log "Background job spawned for #${issue_number} (PID ${spawned_pid})"
+
+    # Track PID in the appropriate pool
+    local pool_name
+    pool_name=$(get_pool_name "$dispatch_label")
+    if [[ -n "$pool_name" ]]; then
+        local pool_var="PIDS_${pool_name}"
+        local start_time
+        start_time=$(date +%s)
+        local lpool
+        lpool=$(echo "$pool_name" | tr '[:upper:]' '[:lower:]')
+        local existing="${!pool_var}"
+        if [[ -n "$existing" ]]; then
+            eval "$pool_var=\"${existing} ${spawned_pid}:${issue_number}:${lpool}:${start_time}\""
+        else
+            eval "$pool_var=\"${spawned_pid}:${issue_number}:${lpool}:${start_time}\""
+        fi
+    fi
 }
 
 # ── Main loop ──────────────────────────────────────────────────────
 run_once() {
-    local total=0
+    local spawned=0
+    local skipped=0
     dispatched_this_cycle=" "
+
+    # Emit STATUS line at the start of each cycle
+    emit_status_line
 
     for label in "${DISPATCH_LABELS[@]}"; do
         log "Scanning ${REPO} for '${label}'..."
@@ -1290,15 +1432,23 @@ run_once() {
         fi
 
         while IFS=$'\t' read -r number title; do
-            dispatch_issue "$number" "$title" "$label"
-            total=$((total + 1))
+            local rc=0
+            dispatch_issue "$number" "$title" "$label" || rc=$?
+            if [[ "$rc" -eq 0 ]]; then
+                spawned=$((spawned + 1))
+            elif [[ "$rc" -eq 2 ]]; then
+                skipped=$((skipped + 1))
+            fi
         done <<< "$issues"
     done
 
+    local total=$((spawned + skipped))
     if [ "$total" -eq 0 ]; then
         log "No dispatch labels found. Nothing to do."
+    elif [ "$skipped" -eq 0 ]; then
+        log "Dispatched ${spawned} issue(s)."
     else
-        log "Dispatched ${total} issue(s)."
+        log "Dispatched ${spawned} issue(s); skipped ${skipped} (concurrency/in-progress)."
     fi
 }
 
