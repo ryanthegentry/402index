@@ -1158,6 +1158,68 @@ echo "REDTEAM_MAX=\${MAX_CONCURRENT_REDTEAM}"
         `Must warn that MAX_CONCURRENT is being ignored. Output:\n${output}`)
     })
 
+    it('no config at all — defaults applied, no deprecation warning (issue #1 regression)', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Ensure MAX_CONCURRENT is NOT set (simulates cold start with no operator config)
+unset MAX_CONCURRENT
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=()
+
+# Unset all per-stage vars too
+unset MAX_CONCURRENT_REDTEAM MAX_CONCURRENT_IMPL MAX_CONCURRENT_SECURITY MAX_CONCURRENT_QA MAX_CONCURRENT_CHORE MAX_CONCURRENT_REVISION
+# Also unset MAX_CONCURRENT again in case source re-set it
+unset MAX_CONCURRENT
+
+apply_concurrency_config 2>&1
+
+echo "REDTEAM_MAX=\${MAX_CONCURRENT_REDTEAM:-unset}"
+echo "IMPL_MAX=\${MAX_CONCURRENT_IMPL:-unset}"
+`, { timeout: 15000 })
+
+      // Must NOT emit deprecation warning when no operator config is set
+      assert.ok(!output.includes('DEPRECAT') && !output.includes('deprecat') && !output.includes('legacy'),
+        `Must NOT emit deprecation warning with no config. Output:\n${output}`)
+      assert.ok(!output.includes('WARNING'),
+        `Must NOT emit any warning with no config. Output:\n${output}`)
+      // Must still set defaults
+      assert.ok(output.includes('REDTEAM_MAX=4'),
+        `Must set default REDTEAM=4. Output:\n${output}`)
+      assert.ok(output.includes('IMPL_MAX=2'),
+        `Must set default IMPL=2. Output:\n${output}`)
+    })
+
+    it('watch mode log shows per-stage pool sizes, not legacy MAX_CONCURRENT', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      // The watch mode log line must reference per-stage pool vars, not MAX_CONCURRENT
+      const watchLogMatch = content.match(/Watch mode:.*Ctrl-C/)
+      assert.ok(watchLogMatch, 'Watch mode log line must exist')
+      const watchLine = watchLogMatch[0]
+      assert.ok(!watchLine.includes('${MAX_CONCURRENT}') && !watchLine.includes('$MAX_CONCURRENT'),
+        `Watch mode log must not reference legacy MAX_CONCURRENT. Found: ${watchLine}`)
+      assert.ok(watchLine.includes('MAX_CONCURRENT_REDTEAM') || watchLine.includes('redteam'),
+        `Watch mode log should reference per-stage pools. Found: ${watchLine}`)
+    })
+
+    it('emit_status_line does not fall back to legacy MAX_CONCURRENT', () => {
+      const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+      // Find emit_status_line function body
+      const funcStart = content.indexOf('emit_status_line()')
+      const funcEnd = content.indexOf('\n}', funcStart + 1)
+      const funcBody = content.slice(funcStart, funcEnd)
+      // Must NOT reference MAX_CONCURRENT (without _POOL suffix) as fallback
+      assert.ok(!funcBody.includes('${MAX_CONCURRENT}') && !funcBody.includes('$MAX_CONCURRENT'),
+        `emit_status_line must not fall back to legacy MAX_CONCURRENT. Body:\n${funcBody}`)
+    })
+
     it('PID reaping: track 3 PIDs, kill one, reap, pool count decrements', () => {
       const output = runBash(`
 #!/usr/bin/env bash
