@@ -624,9 +624,12 @@ describe('Page Routes — HTTP Status', () => {
     assert.equal(r.status, 200)
   })
 
-  it('GET /admin → 401 without auth', async () => {
+  it('GET /admin → 200 (HTML form, client-side auth)', async () => {
     const r = await raw('/admin')
-    assert.equal(r.status, 401)
+    assert.equal(r.status, 200)
+    const html = await r.text()
+    assert.ok(html.includes('id="auth-gate"'), 'should contain auth-gate markup')
+    assert.ok(html.includes('id="secret-input"'), 'should contain secret-input field')
   })
 
   it('GET /service/:id → 200 for valid ID', async () => {
