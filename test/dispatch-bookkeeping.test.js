@@ -1577,3 +1577,196 @@ echo "IMPL_COMMIT_PRODUCING=\${result3}"
     })
   })
 })
+
+// ══════════════════════════════════════════════════════════════════
+// #211 — agent-state landing artifact check (Path 1)
+// ══════════════════════════════════════════════════════════════════
+
+describe('agent-state landing check (#211)', () => {
+  const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+
+  // T1 — artifact present within 5 min, no warning emitted
+  it('T1: artifact present within 5 min — no warning emitted and no PR comment', () => {
+    const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+TMP=\$(mktemp -d)
+trap 'rm -rf "\$TMP"' EXIT
+
+# Create a fresh journal file mentioning issue #999
+echo "impl work for #999" > "\$TMP/2026-04-22-issue-999-impl.md"
+
+source "${SCRIPT_PATH}"
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+AGENT_STATE_JOURNALS_DIR="\$TMP"
+
+GH_LOG=\$(mktemp)
+export GH_LOG
+gh() {
+  echo "gh \$*" >> "\$GH_LOG"
+}
+export -f gh
+
+STDERR_FILE=\$(mktemp)
+check_landing_artifact 999 "https://example.com/pr/1" 2>"\$STDERR_FILE"
+STDERR_OUT=\$(cat "\$STDERR_FILE")
+rm -f "\$STDERR_FILE"
+
+echo "STDERR_EMPTY=\$([ -z "\$STDERR_OUT" ] && echo yes || echo no)"
+echo "GH_PR_COMMENT=\$(grep -c "pr comment" "\$GH_LOG" 2>/dev/null || echo 0)"
+rm -f "\$GH_LOG"
+`, { timeout: 15000 })
+
+    assert.ok(output.includes('STDERR_EMPTY=yes'),
+      `No WARNING should be emitted when artifact is present. Output:\n${output}`)
+    assert.ok(output.includes('GH_PR_COMMENT=0'),
+      `No gh pr comment should be called when artifact is present. Output:\n${output}`)
+  })
+
+  // T2 — artifact missing, warning emitted + PR comment posted
+  it('T2: artifact missing — WARNING emitted to stderr and PR comment posted', () => {
+    const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+TMP=\$(mktemp -d)
+trap 'rm -rf "\$TMP"' EXIT
+
+source "${SCRIPT_PATH}"
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+AGENT_STATE_JOURNALS_DIR="\$TMP"
+
+GH_LOG=\$(mktemp)
+export GH_LOG
+gh() {
+  echo "gh \$*" >> "\$GH_LOG"
+}
+export -f gh
+
+STDERR_FILE=\$(mktemp)
+check_landing_artifact 888 "https://example.com/pr/2" 2>"\$STDERR_FILE"
+STDERR_OUT=\$(cat "\$STDERR_FILE")
+rm -f "\$STDERR_FILE"
+
+echo "STDERR_CONTENT=\$STDERR_OUT"
+echo "GH_CALLS=\$(cat "\$GH_LOG" 2>/dev/null || echo "")"
+rm -f "\$GH_LOG"
+`, { timeout: 15000 })
+
+    assert.ok(output.includes('WARNING: agent-state landing artifact not found for issue #888'),
+      `Must emit WARNING for missing artifact. Output:\n${output}`)
+    assert.ok(output.includes('session-landing'),
+      `WARNING must reference session-landing skill. Output:\n${output}`)
+    assert.ok(output.includes('pr comment'),
+      `Must call gh pr comment. Output:\n${output}`)
+  })
+
+  // T3 — stale artifact (>5 min), treated as missing
+  it('T3: stale artifact (>5 min old) — treated as missing, WARNING emitted', () => {
+    const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+TMP=\$(mktemp -d)
+trap 'rm -rf "\$TMP"' EXIT
+
+# Create a journal file and backdate it 10 minutes
+echo "impl work for #777" > "\$TMP/stale.md"
+touch -t \$(date -v-10M +%Y%m%d%H%M) "\$TMP/stale.md"
+
+source "${SCRIPT_PATH}"
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+AGENT_STATE_JOURNALS_DIR="\$TMP"
+
+GH_LOG=\$(mktemp)
+export GH_LOG
+gh() {
+  echo "gh \$*" >> "\$GH_LOG"
+}
+export -f gh
+
+STDERR_FILE=\$(mktemp)
+check_landing_artifact 777 "https://example.com/pr/3" 2>"\$STDERR_FILE"
+STDERR_OUT=\$(cat "\$STDERR_FILE")
+rm -f "\$STDERR_FILE"
+
+echo "STDERR_CONTENT=\$STDERR_OUT"
+rm -f "\$GH_LOG"
+`, { timeout: 15000 })
+
+    assert.ok(output.includes('WARNING:'),
+      `Stale artifact should be treated as missing. Output:\n${output}`)
+  })
+
+  // T4 — structural: check_landing_artifact is wired into post_pr_open_bookkeeping
+  it('T4: check_landing_artifact defined and invoked inside post_pr_open_bookkeeping', () => {
+    // Function definition exists
+    assert.ok(content.includes('check_landing_artifact()'),
+      'check_landing_artifact() function must be defined in cc-dispatch.sh')
+
+    // Extract post_pr_open_bookkeeping body
+    const fnStart = content.indexOf('post_pr_open_bookkeeping()')
+    assert.ok(fnStart !== -1, 'post_pr_open_bookkeeping() must exist')
+
+    // Find the function body — scan from fnStart to the next top-level closing brace
+    const afterFn = content.slice(fnStart)
+    let braceDepth = 0
+    let fnEnd = -1
+    const lines = afterFn.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      for (const ch of lines[i]) {
+        if (ch === '{') braceDepth++
+        if (ch === '}') braceDepth--
+      }
+      if (braceDepth === 0 && i > 0) {
+        fnEnd = i
+        break
+      }
+    }
+    assert.ok(fnEnd > 0, 'post_pr_open_bookkeeping closing brace must be found')
+    const fnBody = lines.slice(0, fnEnd + 1).join('\n')
+
+    assert.ok(fnBody.includes('check_landing_artifact'),
+      `post_pr_open_bookkeeping must invoke check_landing_artifact. Body:\n${fnBody}`)
+  })
+
+  // T5 — non-gating: returns 0 even when artifact missing and gh fails
+  it('T5: check_landing_artifact returns 0 even when artifact missing and gh fails', () => {
+    const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+TMP=\$(mktemp -d)
+trap 'rm -rf "\$TMP"' EXIT
+
+source "${SCRIPT_PATH}"
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+AGENT_STATE_JOURNALS_DIR="\$TMP"
+
+# Make gh fail to simulate transient error
+gh() {
+  return 1
+}
+export -f gh
+
+set +e
+check_landing_artifact 777 "https://example.com/pr/4" 2>/dev/null
+exit_code=\$?
+set -e
+
+echo "EXIT_CODE=\${exit_code}"
+`, { timeout: 15000 })
+
+    assert.ok(output.includes('EXIT_CODE=0'),
+      `check_landing_artifact must return 0 even on gh failure. Output:\n${output}`)
+  })
+})
