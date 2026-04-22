@@ -1897,7 +1897,7 @@ echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
       )
     })
 
-    it('dispatch_implement contains pre-PR commit sanity check', () => {
+    it('dispatch_implement has pre-PR commit sanity check before _create_or_adopt_pr', () => {
       const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
       const fnStart = content.indexOf('dispatch_implement()')
       const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
@@ -1905,10 +1905,10 @@ echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
 
       // Must use git log to check for foreign commits before PR creation
       const gitLogIdx = fnBody.indexOf('git log')
-      const prCreateIdx = fnBody.indexOf('gh pr create')
+      const createOrAdoptIdx = fnBody.indexOf('_create_or_adopt_pr')
       assert.ok(gitLogIdx !== -1, 'dispatch_implement must use git log for commit sanity check')
-      assert.ok(prCreateIdx !== -1, 'dispatch_implement must have gh pr create')
-      assert.ok(gitLogIdx < prCreateIdx, 'commit sanity check must run before PR creation')
+      assert.ok(createOrAdoptIdx !== -1, 'dispatch_implement must call _create_or_adopt_pr')
+      assert.ok(gitLogIdx < createOrAdoptIdx, 'commit sanity check must run before PR creation')
       assert.ok(
         fnBody.includes('foreign_commits') || fnBody.includes('issue_number'),
         'commit sanity check must grep for the issue number in commit messages'
@@ -1921,15 +1921,15 @@ echo "OK=\$VALIDATION_OK TRANSIENT=\$VALIDATION_TRANSIENT"
       const fnEnd = content.indexOf('\n# ── ', fnStart + 1)
       const fnBody = content.slice(fnStart, fnEnd)
 
-      // The sanity check must log a WARNING but still proceed to gh pr create
+      // The sanity check must log a WARNING but still proceed to _create_or_adopt_pr
       assert.ok(
         fnBody.includes('WARNING'),
         'commit sanity check must log a WARNING for foreign commits'
       )
-      // Ensure gh pr create still runs after the check (not inside an else/exit block)
+      // Ensure _create_or_adopt_pr still runs after the check (not inside an else/exit block)
       const warningIdx = fnBody.indexOf('WARNING')
-      const prCreateIdx = fnBody.indexOf('gh pr create')
-      assert.ok(warningIdx < prCreateIdx, 'gh pr create must still run after warning')
+      const createOrAdoptIdx = fnBody.indexOf('_create_or_adopt_pr')
+      assert.ok(warningIdx < createOrAdoptIdx, '_create_or_adopt_pr must still run after warning')
     })
 
     it('review handlers still contain cd "$REPO_DIR" (unchanged)', () => {
