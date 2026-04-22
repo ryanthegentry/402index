@@ -459,3 +459,463 @@ rm -f "\$STUB_LOG"
     })
   })
 })
+
+// ══════════════════════════════════════════════════════════════════
+// #188 PR 1 — Counter accuracy (Defect 2) + STATUS line (Defect 3)
+// ══════════════════════════════════════════════════════════════════
+
+describe('dispatch counter + STATUS (#188 PR 1)', () => {
+  const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
+
+  // ── Defect 2: dispatch_issue return codes ───────────────────────
+
+  describe('dispatch_issue return codes', () => {
+    it('returns 2 when issue is already in-progress', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+dispatched_this_cycle=" "
+
+gh() {
+  case "\$1" in
+    issue)
+      case "\$2" in
+        view) echo "in-progress,bug" ;;
+      esac
+      ;;
+  esac
+}
+export -f gh
+
+set +e
+dispatch_issue 101 "Test issue" "ready-for-impl"
+exit_code=\$?
+set -e
+
+echo "EXIT_CODE=\${exit_code}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('EXIT_CODE=2'),
+        `dispatch_issue should return 2 when in-progress. Output:\n${output}`)
+    })
+
+    it('returns 2 when concurrency limit reached', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+MAX_CONCURRENT=0
+dispatched_this_cycle=" "
+
+gh() {
+  case "\$1" in
+    issue)
+      case "\$2" in
+        view) echo "bug,enhancement" ;;
+      esac
+      ;;
+  esac
+}
+export -f gh
+
+set +e
+dispatch_issue 101 "Test issue" "ready-for-impl"
+exit_code=\$?
+set -e
+
+echo "EXIT_CODE=\${exit_code}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('EXIT_CODE=2'),
+        `dispatch_issue should return 2 when concurrency limit reached. Output:\n${output}`)
+    })
+
+    it('returns 2 when issue already dispatched this cycle (dedup)', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+dispatched_this_cycle=" 101 "
+
+set +e
+dispatch_issue 101 "Test issue" "ready-for-impl"
+exit_code=\$?
+set -e
+
+echo "EXIT_CODE=\${exit_code}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('EXIT_CODE=2'),
+        `dispatch_issue should return 2 for dedup skip. Output:\n${output}`)
+    })
+  })
+
+  // ── Defect 2: run_once counter accuracy ─────────────────────────
+
+  describe('run_once counter accuracy', () => {
+    it('reports "Dispatched 1 issue(s); skipped 2 (concurrency/in-progress)." for 1 spawned 2 skipped', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=(ready-for-impl)
+
+CALL_COUNT=0
+
+dispatch_issue() {
+  CALL_COUNT=\$((CALL_COUNT + 1))
+  case \$CALL_COUNT in
+    1) return 0 ;;
+    *) return 2 ;;
+  esac
+}
+
+gh() {
+  case "\$1" in
+    issue)
+      case "\$2" in
+        list) printf "101\\tIssue 1\\n102\\tIssue 2\\n103\\tIssue 3\\n" ;;
+      esac
+      ;;
+  esac
+}
+export -f gh
+
+run_once 2>&1
+`, { timeout: 15000 })
+
+      assert.ok(
+        output.includes('Dispatched 1 issue(s); skipped 2 (concurrency/in-progress)'),
+        `Expected 'Dispatched 1 issue(s); skipped 2 (concurrency/in-progress)'. Output:\n${output}`)
+    })
+
+    it('reports "Dispatched 0 issue(s); skipped 3 (concurrency/in-progress)." when all skipped', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=(ready-for-impl)
+
+dispatch_issue() { return 2; }
+
+gh() {
+  case "\$1" in
+    issue)
+      case "\$2" in
+        list) printf "101\\tIssue 1\\n102\\tIssue 2\\n103\\tIssue 3\\n" ;;
+      esac
+      ;;
+  esac
+}
+export -f gh
+
+run_once 2>&1
+`, { timeout: 15000 })
+
+      assert.ok(
+        output.includes('Dispatched 0 issue(s); skipped 3 (concurrency/in-progress)'),
+        `Expected 'Dispatched 0 issue(s); skipped 3 (concurrency/in-progress)'. Output:\n${output}`)
+    })
+
+    it('reports "Dispatched 3 issue(s)." with no skip clause when all spawned', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=(ready-for-impl)
+
+dispatch_issue() { return 0; }
+
+gh() {
+  case "\$1" in
+    issue)
+      case "\$2" in
+        list) printf "101\\tIssue 1\\n102\\tIssue 2\\n103\\tIssue 3\\n" ;;
+      esac
+      ;;
+  esac
+}
+export -f gh
+
+run_once 2>&1
+`, { timeout: 15000 })
+
+      assert.ok(
+        output.includes('Dispatched 3 issue(s).'),
+        `Expected 'Dispatched 3 issue(s).'. Output:\n${output}`)
+      assert.ok(
+        !output.includes('skipped'),
+        `Should NOT include skip clause when all spawned. Output:\n${output}`)
+    })
+  })
+
+  // ── Defect 3: STATUS line ──────────────────────────────────────
+
+  describe('STATUS line (Defect 3)', () => {
+    it('emits STATUS line with in_flight=0 and no jobs= when nothing tracked', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=()
+
+# Initialize empty pool tracking
+PIDS_REDTEAM=""
+PIDS_IMPL=""
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+run_once 2>&1
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('STATUS:'),
+        `Must emit STATUS line. Output:\n${output}`)
+      assert.ok(output.includes('in_flight=0'),
+        `Must show in_flight=0. Output:\n${output}`)
+      assert.ok(!output.includes('jobs='),
+        `Must NOT include jobs= when in_flight=0. Output:\n${output}`)
+    })
+
+    it('emits STATUS line with pool utilization and job entries for tracked PIDs', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=()
+
+# Use current PID as a "live" process
+LIVE_PID=\$\$
+START_TIME=\$(( \$(date +%s) - 120 ))  # 2 minutes ago
+
+PIDS_REDTEAM="\${LIVE_PID}:184:redteam:\${START_TIME}"
+PIDS_IMPL="\${LIVE_PID}:173:impl:\${START_TIME}"
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+# Need reap_pool to exist for STATUS emission
+run_once 2>&1
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('STATUS:'),
+        `Must emit STATUS line. Output:\n${output}`)
+      assert.ok(output.includes('in_flight=2'),
+        `Must show in_flight=2. Output:\n${output}`)
+      assert.ok(output.includes('redteam:1/'),
+        `Must show redteam pool utilization. Output:\n${output}`)
+      assert.ok(output.includes('impl:1/'),
+        `Must show impl pool utilization. Output:\n${output}`)
+      assert.ok(output.includes('jobs='),
+        `Must include jobs= with entries. Output:\n${output}`)
+      assert.ok(output.includes('#184:redteam:'),
+        `Must include issue #184 in jobs list. Output:\n${output}`)
+      assert.ok(output.includes('#173:impl:'),
+        `Must include issue #173 in jobs list. Output:\n${output}`)
+    })
+
+    it('reap_pool removes dead PIDs before STATUS emission', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=()
+
+LIVE_PID=\$\$
+START_TIME=\$(date +%s)
+
+# 99999 is a dead PID (almost certainly not running)
+PIDS_REDTEAM="99999:184:redteam:\${START_TIME} \${LIVE_PID}:185:redteam:\${START_TIME}"
+PIDS_IMPL=""
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+run_once 2>&1
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('STATUS:'),
+        `Must emit STATUS line. Output:\n${output}`)
+      assert.ok(output.includes('in_flight=1'),
+        `Must show in_flight=1 after reaping dead PID 99999. Output:\n${output}`)
+      assert.ok(!output.includes('#184:'),
+        `Dead PID issue #184 must NOT appear in jobs list. Output:\n${output}`)
+      assert.ok(output.includes('#185:redteam:'),
+        `Live PID issue #185 must appear in jobs list. Output:\n${output}`)
+    })
+
+    it('STATUS line appends orphans=N when jobs -rp exceeds tracked pool count', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+DRY_RUN=false
+DISPATCH_LABELS=()
+
+# Initialize empty pools — no tracked PIDs
+PIDS_REDTEAM=""
+PIDS_IMPL=""
+PIDS_SECURITY=""
+PIDS_QA=""
+PIDS_CHORE=""
+PIDS_REVISION=""
+
+# Spawn 2 orphan background jobs (not tracked in any pool)
+sleep 300 &
+sleep 300 &
+
+# Ensure jobs are visible
+sleep 0.1
+
+run_once 2>&1
+
+# Clean up background jobs
+kill %1 %2 2>/dev/null
+wait 2>/dev/null
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('STATUS:'),
+        `Must emit STATUS line. Output:\n${output}`)
+      assert.ok(output.includes('orphans='),
+        `Must append orphans= when untracked background jobs exist. Output:\n${output}`)
+    })
+  })
+
+  // ── Defect 3: reap_pool + pool_count helpers ───────────────────
+
+  describe('reap_pool and pool_count helpers', () => {
+    it('reap_pool removes dead PIDs and preserves live ones', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+
+LIVE_PID=\$\$
+START_TIME=\$(date +%s)
+
+PIDS_REDTEAM="99999:100:redteam:\${START_TIME} \${LIVE_PID}:200:redteam:\${START_TIME}"
+
+reap_pool REDTEAM
+
+echo "POOL_AFTER=\${PIDS_REDTEAM}"
+echo "CONTAINS_DEAD=\$(echo "\${PIDS_REDTEAM}" | grep -c 99999 || true)"
+echo "CONTAINS_LIVE=\$(echo "\${PIDS_REDTEAM}" | grep -c "\${LIVE_PID}" || true)"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('CONTAINS_DEAD=0'),
+        `Dead PID 99999 must be removed. Output:\n${output}`)
+      assert.ok(output.includes('CONTAINS_LIVE=1'),
+        `Live PID must be preserved. Output:\n${output}`)
+    })
+
+    it('pool_count returns correct count of tracked PIDs', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+
+PIDS_IMPL="123:100:impl:1700000000 456:200:impl:1700000000 789:300:impl:1700000000"
+
+count=\$(pool_count IMPL)
+echo "COUNT=\${count}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('COUNT=3'),
+        `pool_count should return 3 for 3 tracked PIDs. Output:\n${output}`)
+    })
+
+    it('pool_count returns 0 for empty pool', () => {
+      const output = runBash(`
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${SCRIPT_PATH}"
+
+REPO="test/repo"
+REPO_DIR="/tmp"
+LOG_DIR="/tmp"
+
+PIDS_IMPL=""
+
+count=\$(pool_count IMPL)
+echo "COUNT=\${count}"
+`, { timeout: 15000 })
+
+      assert.ok(output.includes('COUNT=0'),
+        `pool_count should return 0 for empty pool. Output:\n${output}`)
+    })
+  })
+})
