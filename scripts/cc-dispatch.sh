@@ -36,6 +36,20 @@ DRY_RUN=false
 WATCH=false
 POLL_INTERVAL=300
 MAX_REVISIONS=3
+
+# Per-stage session timeout (minutes). Wrapper subshells exceeding these are killed.
+MAX_SESSION_MINUTES_REDTEAM=${MAX_SESSION_MINUTES_REDTEAM:-15}
+MAX_SESSION_MINUTES_IMPL=${MAX_SESSION_MINUTES_IMPL:-90}
+MAX_SESSION_MINUTES_SECURITY=${MAX_SESSION_MINUTES_SECURITY:-30}
+MAX_SESSION_MINUTES_QA=${MAX_SESSION_MINUTES_QA:-30}
+MAX_SESSION_MINUTES_CHORE=${MAX_SESSION_MINUTES_CHORE:-45}
+MAX_SESSION_MINUTES_REVISION=${MAX_SESSION_MINUTES_REVISION:-90}
+MIN_KILL_AGE_SECONDS=${MIN_KILL_AGE_SECONDS:-300}
+KILL_GRACE_SECONDS=${KILL_GRACE_SECONDS:-15}
+# Warning ratio — warn at (NUM/DEN) * threshold. Integer ratio for bash 3.x compat.
+TIMEOUT_WARNING_RATIO_NUM=${TIMEOUT_WARNING_RATIO_NUM:-7}
+TIMEOUT_WARNING_RATIO_DEN=${TIMEOUT_WARNING_RATIO_DEN:-10}
+
 # MAX_CONCURRENT is a legacy env var — if set by the operator, apply_concurrency_config
 # distributes it proportionally with a deprecation warning. Do NOT assign a default here;
 # the detection logic in apply_concurrency_config must distinguish "user-set" from "unset".
@@ -342,6 +356,146 @@ reap_all_pools() {
     done
 }
 
+# Warned tracker — parallel arrays per pool (bash 3.x compat, no associative arrays)
+WARNED_REDTEAM=""
+WARNED_IMPL=""
+WARNED_SECURITY=""
+WARNED_QA=""
+WARNED_CHORE=""
+WARNED_REVISION=""
+
+# kill_wrapper — terminate a stuck wrapper subshell with SIGTERM → SIGKILL escalation
+# Args: pid issue pool elapsed_sec threshold_min logfile
+kill_wrapper() {
+    local pid="$1" issue="$2" pool="$3" elapsed_sec="$4" threshold_min="$5" logfile="$6"
+    local elapsed_min=$((elapsed_sec / 60))
+    local signal_used="SIGTERM"
+
+    log "TIMEOUT: killing wrapper PID $pid for issue #$issue ($pool) after ${elapsed_min}m (limit: ${threshold_min}m)"
+    kill "$pid" 2>/dev/null
+
+    # Wait up to KILL_GRACE_SECONDS for natural exit (allows EXIT trap to fire)
+    local i
+    for i in $(seq 1 "$KILL_GRACE_SECONDS"); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+    done
+
+    if kill -0 "$pid" 2>/dev/null; then
+        # SIGKILL bypasses the EXIT trap (Defect 2 fix); duplicate trap cleanup here.
+        signal_used="SIGKILL"
+        log "ESCALATED: SIGKILL sent to wrapper PID $pid (did not exit within ${KILL_GRACE_SECONDS}s)"
+        kill -9 "$pid" 2>/dev/null
+        pkill -9 -P "$pid" 2>/dev/null
+        # Explicit cleanup — trap did NOT fire on SIGKILL
+        gh issue edit "$issue" --repo "$REPO" --remove-label "in-progress" 2>/dev/null
+        git -C "$REPO_DIR" worktree list --porcelain 2>/dev/null | grep -o "${REPO_DIR}/.worktrees/issue-${issue}-[^ ]*" | while read -r wt; do
+            git -C "$REPO_DIR" worktree remove --force "$wt" 2>/dev/null
+        done
+    fi
+
+    # Post GitHub comment (hard requirement — suppress errors but always attempt)
+    gh issue comment "$issue" --repo "$REPO" --body "$(cat <<EOFCOMMENT
+Session timed out — dispatch auto-killed wrapper after **${elapsed_min}m** (stage: \`${pool}\`, limit: \`${threshold_min}m\`).
+
+PID ${pid} terminated via ${signal_used}. Issue re-queued for next dispatch cycle.
+
+<details><summary>Last 20 lines of session log</summary>
+
+\`\`\`
+$(tail -20 "${logfile}" 2>/dev/null || echo "(log file not available)")
+\`\`\`
+
+</details>
+EOFCOMMENT
+)" 2>/dev/null
+
+    # Timeout counts against revision counter — add ready-for-revision label
+    # so that revision_count increments and prevents infinite timeout loops (MAX_REVISIONS=3).
+    # Label is intentionally kept (not removed) so the issue re-enters the dispatch pipeline.
+    gh issue edit "$issue" --repo "$REPO" --add-label "ready-for-revision" 2>/dev/null
+
+    # Remove entry from pool (pool is already uppercase from check_timeouts caller)
+    local pool_var="PIDS_${pool}"
+    local new_val=""
+    for tuple in ${!pool_var}; do
+        local tpid="${tuple%%:*}"
+        if [[ "$tpid" != "$pid" ]]; then
+            new_val="$new_val $tuple"
+        fi
+    done
+    eval "$pool_var=\"\${new_val# }\""
+
+    # Clear warned state (pool is already uppercase from check_timeouts caller)
+    local warned_var="WARNED_${pool}"
+    local new_warned=""
+    for wpid in ${!warned_var}; do
+        if [[ "$wpid" != "$pid" ]]; then
+            new_warned="$new_warned $wpid"
+        fi
+    done
+    eval "$warned_var=\"\${new_warned# }\""
+}
+
+# check_timeouts — iterate all pools, warn or kill overdue wrappers
+check_timeouts() {
+    local pool
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        local threshold_var="MAX_SESSION_MINUTES_${pool}"
+        local threshold_min="${!threshold_var}"
+        local threshold_sec=$((threshold_min * 60))
+        local warn_sec=$((threshold_sec * TIMEOUT_WARNING_RATIO_NUM / TIMEOUT_WARNING_RATIO_DEN))
+        local pool_var="PIDS_${pool}"
+        local warned_var="WARNED_${pool}"
+        local now
+        now=$(date +%s)
+
+        for tuple in ${!pool_var}; do
+            local pid="${tuple%%:*}"
+            local rest="${tuple#*:}"
+            local issue="${rest%%:*}"
+            rest="${rest#*:}"
+            local tpool="${rest%%:*}"
+            local start_time="${rest#*:}"
+            local elapsed=$((now - start_time))
+
+            if [[ "$elapsed" -lt "$MIN_KILL_AGE_SECONDS" ]]; then
+                continue
+            fi
+
+            # Derive logfile path for the comment (best-effort match)
+            local logfile=""
+            local lf
+            for lf in "${LOG_DIR}"/issue-${issue}-*.log; do
+                [[ -f "$lf" ]] && logfile="$lf"
+            done
+
+            if [[ "$elapsed" -ge "$threshold_sec" ]]; then
+                kill_wrapper "$pid" "$issue" "$pool" "$elapsed" "$threshold_min" "$logfile"
+            elif [[ "$elapsed" -ge "$warn_sec" ]]; then
+                # Check if already warned
+                local already_warned=false
+                for wpid in ${!warned_var}; do
+                    if [[ "$wpid" == "$pid" ]]; then
+                        already_warned=true
+                        break
+                    fi
+                done
+                if ! $already_warned; then
+                    local elapsed_min=$((elapsed / 60))
+                    log "WARNING: wrapper PID $pid for issue #$issue ($pool) running ${elapsed_min}m — approaching timeout at ${threshold_min}m"
+                    local existing_warned="${!warned_var}"
+                    if [[ -n "$existing_warned" ]]; then
+                        eval "$warned_var=\"${existing_warned} ${pid}\""
+                    else
+                        eval "$warned_var=\"${pid}\""
+                    fi
+                fi
+            fi
+        done
+    done
+}
+
 total_tracked_count() {
     local total=0
     local pool
@@ -355,6 +509,7 @@ total_tracked_count() {
 
 emit_status_line() {
     reap_all_pools
+    check_timeouts
 
     local tracked
     tracked=$(total_tracked_count)
@@ -1467,9 +1622,12 @@ dispatch_issue() {
 
     # Spawn handler in background subshell
     (
-        # Unified EXIT trap: always clean up in-progress label + worktree on any exit
+        # Unified EXIT trap: kill children first, then clean state (Defect 2 — kill claude child before state cleanup)
         local workdir=""
         trap '
+            pkill -P $$ 2>/dev/null
+            sleep 1
+            pkill -9 -P $$ 2>/dev/null
             gh issue edit "$issue_number" --repo "$REPO" --remove-label "in-progress" 2>/dev/null
             [[ -n "$workdir" ]] && git -C "$REPO_DIR" worktree remove --force "$workdir" 2>/dev/null
         ' EXIT
