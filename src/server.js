@@ -67,11 +67,7 @@ const claimLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many claim requests. Limit: 10 per hour per IP.' },
 })
-app.use('/api/v1/claim', express.json({ limit: '10kb' }), (req, res, next) => {
-  // Rate-limit POST /claim and POST /claim/revoke, not /claim/verify
-  if (req.path === '/' || req.path === '' || req.path === '/revoke') return claimLimiter(req, res, next)
-  next()
-})
+app.use('/api/v1/claim', express.json({ limit: '10kb' }), claimLimiter)
 
 // Rate-limited API routes: services, services/:id, categories, export
 // express.json() included for PATCH /api/v1/services/:id (domain-verified edits)
