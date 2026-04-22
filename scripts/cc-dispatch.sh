@@ -411,6 +411,112 @@ emit_status_line() {
     log "$status_line"
 }
 
+# ── Per-stage concurrency config ──────────────────────────────────
+
+# Apply per-stage concurrency limits. Call once at startup.
+# If per-stage vars are set, use them. If only MAX_CONCURRENT is set,
+# distribute proportionally with a deprecation warning.
+apply_concurrency_config() {
+    local any_per_stage=false
+    local pool
+    for pool in REDTEAM IMPL SECURITY QA CHORE REVISION; do
+        local var="MAX_CONCURRENT_${pool}"
+        if [[ -n "${!var+x}" ]]; then
+            any_per_stage=true
+            break
+        fi
+    done
+
+    if $any_per_stage; then
+        # Per-stage vars take precedence — apply defaults for unset pools
+        MAX_CONCURRENT_REDTEAM="${MAX_CONCURRENT_REDTEAM:-4}"
+        MAX_CONCURRENT_IMPL="${MAX_CONCURRENT_IMPL:-2}"
+        MAX_CONCURRENT_SECURITY="${MAX_CONCURRENT_SECURITY:-2}"
+        MAX_CONCURRENT_QA="${MAX_CONCURRENT_QA:-2}"
+        MAX_CONCURRENT_CHORE="${MAX_CONCURRENT_CHORE:-1}"
+        MAX_CONCURRENT_REVISION="${MAX_CONCURRENT_REVISION:-1}"
+        if [[ -n "${MAX_CONCURRENT+x}" ]]; then
+            log "WARNING: MAX_CONCURRENT is set alongside per-stage vars — per-stage vars take precedence, MAX_CONCURRENT ignored"
+        fi
+    elif [[ -n "${MAX_CONCURRENT+x}" ]]; then
+        # Legacy: distribute MAX_CONCURRENT proportionally
+        log "DEPRECATION: MAX_CONCURRENT is deprecated — use per-stage vars (MAX_CONCURRENT_REDTEAM, etc.) instead"
+        local mc="$MAX_CONCURRENT"
+        # ceil(mc * 0.4) for redteam, ceil(mc * 0.3) for impl, rest split
+        MAX_CONCURRENT_REDTEAM=$(( (mc * 4 + 9) / 10 ))
+        MAX_CONCURRENT_IMPL=$(( (mc * 3 + 9) / 10 ))
+        local remainder=$(( mc - MAX_CONCURRENT_REDTEAM - MAX_CONCURRENT_IMPL ))
+        if [[ "$remainder" -lt 2 ]]; then remainder=2; fi
+        MAX_CONCURRENT_SECURITY=$(( (remainder + 1) / 2 ))
+        MAX_CONCURRENT_QA=$(( (remainder + 1) / 2 ))
+        MAX_CONCURRENT_CHORE=1
+        MAX_CONCURRENT_REVISION=1
+    else
+        # No config at all — use defaults
+        MAX_CONCURRENT_REDTEAM=4
+        MAX_CONCURRENT_IMPL=2
+        MAX_CONCURRENT_SECURITY=2
+        MAX_CONCURRENT_QA=2
+        MAX_CONCURRENT_CHORE=1
+        MAX_CONCURRENT_REVISION=1
+    fi
+}
+
+# ── Fresh worktree enforcement (Defect 4) ─────────────────────────
+
+get_branch_name_for_issue() {
+    local issue_number="$1"
+    local dispatch_label="$2"
+    case "$dispatch_label" in
+        ready-for-chore) echo "chore/issue-${issue_number}" ;;
+        *)               echo "fix/issue-${issue_number}" ;;
+    esac
+}
+
+is_commit_producing_stage() {
+    case "$1" in
+        ready-for-impl|ready-for-revision|ready-for-chore) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Prepare the working tree for a commit-producing dispatch.
+# Ensures HEAD is on the correct branch, rebased on origin/master.
+# Returns 1 on conflict (labels issue dispatch-conflict).
+prepare_branch_for_dispatch() {
+    local issue_number="$1"
+    local dispatch_label="$2"
+
+    local branch_name
+    branch_name=$(get_branch_name_for_issue "$issue_number" "$dispatch_label")
+
+    # Fetch latest origin state
+    git fetch origin "$DEFAULT_BRANCH" --quiet 2>/dev/null || true
+
+    if git rev-parse --verify "origin/${branch_name}" &>/dev/null; then
+        # Branch exists on remote — check it out and rebase
+        git checkout "$branch_name" --quiet 2>/dev/null || git checkout -b "$branch_name" "origin/${branch_name}" --quiet
+        git reset --hard "origin/${branch_name}" --quiet 2>/dev/null
+        if ! git rebase "origin/${DEFAULT_BRANCH}" --quiet 2>/dev/null; then
+            git rebase --abort 2>/dev/null || true
+            log "ERROR: Rebase conflict for #${issue_number} on ${branch_name} — aborting dispatch"
+            gh issue edit "$issue_number" --repo "$REPO" --add-label "dispatch-conflict" 2>/dev/null || true
+            return 1
+        fi
+    else
+        # Branch does not exist — create from origin/master
+        git checkout -B "$branch_name" "origin/${DEFAULT_BRANCH}" --quiet
+    fi
+
+    # Verify HEAD is on the expected branch
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+    if [[ "$current_branch" != "$branch_name" ]]; then
+        log "ERROR: Expected HEAD on ${branch_name} but found ${current_branch}"
+        return 1
+    fi
+}
+
 # ── Helpers ────────────────────────────────────────────────────────
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 err() { log "ERROR: $*" >&2; }
@@ -454,6 +560,7 @@ ensure_labels() {
         "red-team-complete:0075CA:Red-team review complete"
         "needs-manual-review:B60205:Revision limit reached — needs human review"
         "review-failed:B60205:Bot review crashed — needs investigation"
+        "dispatch-conflict:B60205:Rebase conflict — needs manual resolution"
     )
     for entry in "${labels[@]}"; do
         IFS=: read -r name color desc <<< "$entry"
@@ -1331,12 +1438,21 @@ dispatch_issue() {
         return 2
     fi
 
-    # Check concurrency — jobs -rp only returns running processes (completed are reaped)
-    local running
-    running=$(jobs -rp | wc -l | tr -d ' ')
-    if [[ "$running" -ge "$MAX_CONCURRENT" ]]; then
-        log "Concurrency limit reached (${running}/${MAX_CONCURRENT}) — skipping #${issue_number}"
-        return 2
+    # Check per-pool concurrency (reap stale PIDs first)
+    local pool_name
+    pool_name=$(get_pool_name "$dispatch_label")
+    if [[ -n "$pool_name" ]]; then
+        reap_pool "$pool_name"
+        local pool_running pool_max_var pool_max
+        pool_running=$(pool_count "$pool_name")
+        pool_max_var="MAX_CONCURRENT_${pool_name}"
+        pool_max="${!pool_max_var:-${MAX_CONCURRENT}}"
+        if [[ "$pool_running" -ge "$pool_max" ]]; then
+            local lpool
+            lpool=$(echo "$pool_name" | tr '[:upper:]' '[:lower:]')
+            log "Pool ${lpool} at capacity (${pool_running}/${pool_max}) — skipping #${issue_number}"
+            return 2
+        fi
     fi
 
     # Swap label: dispatch → in-progress (before spawning background job to prevent double-dispatch)
@@ -1362,6 +1478,14 @@ dispatch_issue() {
             workdir=$(mktemp -d "${REPO_DIR}/.worktrees/issue-${issue_number}-XXXXXX")
             git -C "$REPO_DIR" worktree add --detach "$workdir" "$DEFAULT_BRANCH" --quiet
             cd "$workdir"
+
+            # For commit-producing stages: enforce correct branch (Defect 4 fix)
+            if is_commit_producing_stage "$dispatch_label"; then
+                if ! prepare_branch_for_dispatch "$issue_number" "$dispatch_label"; then
+                    log "Branch preparation failed for #${issue_number} — aborting dispatch"
+                    exit 1
+                fi
+            fi
         fi
 
         # Route to the appropriate handler
@@ -1456,6 +1580,7 @@ run_once() {
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     ensure_deps
     ensure_labels
+    apply_concurrency_config
 
     # Kill all background agents on shutdown
     trap 'log "Shutting down — killing background agents"; kill $(jobs -rp) 2>/dev/null; wait; exit 130' INT TERM
