@@ -1766,6 +1766,11 @@ run_once() {
 
 # ── Entry point ────────────────────────────────────────────────────
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    if [[ ${BASH_VERSINFO[0]:-0} -lt 4 ]]; then
+        echo "ERROR: cc-dispatch.sh requires bash 4.0+ (found ${BASH_VERSION:-unknown})" >&2
+        echo "On macOS: brew install bash && /opt/homebrew/bin/bash scripts/cc-dispatch.sh ..." >&2
+        exit 1
+    fi
     ensure_deps
     ensure_labels
     apply_concurrency_config
