@@ -692,13 +692,25 @@ describe('pollMPP reconciliation harness', () => {
   })
 
   it('logs WARN when DB count drifts > 5% from services.length', async () => {
-    // Seed 11 extra mpp rows that won't be in the fixture — creates >5% drift
-    // Fixture has 4 services (3 paid + free-only=0 endpoints), so 4 endpoints after poll.
-    // We need DB count to drift >5% from services.length (4 services in fixture).
-    // After poll: 4 rows from fixture + 11 extra = 15 DB rows, but services.length = 4
-    // delta = |15 - 4| / 4 = 2.75 = 275% > 5% ✓
-    for (let i = 0; i < 11; i++) {
-      seedRow({ url: `https://extra-${i}.example.com/v1/api`, source: 'mpp' })
+    // Create a fixture where services.length (20) >> DB endpoint rows (5).
+    // 15 services are all-free (no paid endpoints → no DB rows), 5 have paid endpoints.
+    // After poll: DB = 5 rows, services.length = 20, delta = |5-20|/20 = 75% > 5% ✓
+    const driftFixture = { version: 1, services: [] }
+    for (let i = 0; i < 5; i++) {
+      driftFixture.services.push({
+        id: `paid-${i}`, name: `Paid ${i}`,
+        url: `https://paid${i}.mpp.tempo.xyz`, serviceUrl: `https://paid${i}.mpp.tempo.xyz`,
+        categories: ['ai'], provider: { name: `Provider ${i}` },
+        endpoints: [{ method: 'GET', path: '/v1/data', payment: { amount: '1000', decimals: 6, method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50' } }],
+      })
+    }
+    for (let i = 0; i < 15; i++) {
+      driftFixture.services.push({
+        id: `free-${i}`, name: `Free ${i}`,
+        url: `https://free${i}.mpp.tempo.xyz`,
+        categories: ['data'], provider: { name: `FreeCo ${i}` },
+        endpoints: [{ method: 'GET', path: '/health', payment: null }],
+      })
     }
 
     const warnCalls = []
@@ -710,7 +722,7 @@ describe('pollMPP reconciliation harness', () => {
 
     globalThis.fetch = async () => ({
       ok: true,
-      json: async () => MPP_FIXTURE,
+      json: async () => driftFixture,
     })
 
     try {

@@ -62,12 +62,12 @@ export async function pollMPP() {
     const res = await fetch(MPP_API, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) {
       console.error(`[mpp] HTTP ${res.status} fetching API`)
-      return { new: 0, updated: 0, errors: 0, swept: 0 }
+      return { new: 0, updated: 0, errors: 0, swept: 0, apiEndpointCount: 0 }
     }
     data = await res.json()
   } catch (err) {
     console.error(`[mpp] Fetch error: ${err.message}`)
-    return { new: 0, updated: 0, errors: 0, swept: 0 }
+    return { new: 0, updated: 0, errors: 0, swept: 0, apiEndpointCount: 0 }
   }
 
   const services = data?.services || []
@@ -76,7 +76,7 @@ export async function pollMPP() {
   // Empty-response guard: skip sweep to prevent mass-delete footgun
   if (services.length === 0) {
     console.warn('[mpp] Empty services array — skipping sweep')
-    return { new: 0, updated: 0, errors: 0, swept: 0 }
+    return { new: 0, updated: 0, errors: 0, swept: 0, apiEndpointCount: 0 }
   }
 
   let newCount = 0
@@ -117,7 +117,7 @@ export async function pollMPP() {
     console.warn(`[mpp] Normalization anomaly: only ${seenUrls.size} URLs from ${services.length} services — skipping sweep`)
     const totalSynced = newCount + updatedCount
     console.log(`[mpp] Synced ${totalSynced} endpoints (${newCount} new, ${updatedCount} updated${errorCount > 0 ? `, ${errorCount} errors` : ''})`)
-    return { new: newCount, updated: updatedCount, errors: errorCount, swept: 0 }
+    return { new: newCount, updated: updatedCount, errors: errorCount, swept: 0, apiEndpointCount: services.length }
   }
 
   // (b) Sweep stale rows via temp table
@@ -144,7 +144,14 @@ export async function pollMPP() {
     try { dropSeenTable().run() } catch { /* ignore cleanup error */ }
   }
 
+  // Reconciliation: compare DB row count with API response count
+  const dbCount = db.prepare("SELECT COUNT(*) as c FROM services WHERE source = 'mpp' AND (provider_deleted = 0 OR provider_deleted IS NULL)").get().c
+  const delta = Math.abs(dbCount - services.length) / services.length
+  if (delta > 0.05) {
+    console.warn('[mpp] WARN: row/api drift detected: DB=' + dbCount + ', API=' + services.length + ', delta=' + (delta * 100).toFixed(1) + '%')
+  }
+
   const totalSynced = newCount + updatedCount
   console.log(`[mpp] Synced ${totalSynced} endpoints (${newCount} new, ${updatedCount} updated${errorCount > 0 ? `, ${errorCount} errors` : ''}${swept > 0 ? `, ${swept} swept` : ''})`)
-  return { new: newCount, updated: updatedCount, errors: errorCount, swept }
+  return { new: newCount, updated: updatedCount, errors: errorCount, swept, apiEndpointCount: services.length }
 }

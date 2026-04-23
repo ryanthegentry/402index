@@ -67,6 +67,7 @@ export function demoPage({ stats, probeSample, featuredServices = [], meta = {} 
           <div class="demo-protocol-title"><span class="badge badge-mpp">MPP</span> Stripe / Tempo</div>
           <div class="demo-protocol-stats">
             <div class="demo-protocol-row"><span>Verified</span><strong>${s.mpp.verified} / ${formatNumber(s.mpp.endpoints)} (${pct(s.mpp.verified, s.mpp.endpoints)})</strong></div>
+            <div class="demo-protocol-row"><span>Verified (gateway-backed)</span><strong>${s.mpp.gatewayVerified} / ${formatNumber(s.mpp.gatewayEndpoints)} (${pct(s.mpp.gatewayVerified, s.mpp.gatewayEndpoints)})</strong></div>
             <div class="demo-protocol-row"><span>Providers</span><strong>${s.mpp.providers} / ${s.mpp.allProviders} (${pct(s.mpp.providers, s.mpp.allProviders)})</strong></div>
             <div class="demo-protocol-row"><span>Healthy</span><strong>${s.mpp.healthy}</strong></div>
           </div>
