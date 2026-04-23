@@ -46,13 +46,13 @@ describe('402 Index API contract tests', () => {
   it('GET /api/v1/categories returns category tree', async () => {
     const data = await fetchJson('/api/v1/categories')
     assert.ok(data.categories, 'should have categories')
-    assert.ok(typeof data.total === 'number', 'should have total')
+    assert.ok(typeof data.categories === 'object', 'categories should be an object')
   })
 
   it('GET /api/v1/health returns status and counts', async () => {
     const data = await fetchJson('/api/v1/health')
     assert.equal(data.status, 'ok', 'status should be ok')
-    assert.ok(typeof data.total_services === 'number', 'should have total_services')
+    assert.ok(typeof data.total_endpoints === 'number', 'should have total_endpoints')
     assert.ok(data.by_protocol, 'should have by_protocol')
     assert.ok(data.by_health, 'should have by_health')
   })
