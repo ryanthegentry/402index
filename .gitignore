@@ -14,3 +14,32 @@ scorecard.png
 .worktrees/
 test-results/
 playwright-report/
+.DS_Store
+**/.DS_Store
+.claude/
+
+# ngrok stray files from dev curl redirects
+*.ngrok-free.dev
+*.ngrok.io
+
+# agent-state artifacts (belongs in ~/agent-state/)
+cc-prompt-*.md
+docs/cc-prompt-*.md
+
+# personal Claude Code overrides (per-developer; CLAUDE.md is the committed one)
+CLAUDE.local.md
+
+# private dispatch harness — local-only, not part of the public distribution
+scripts/cc-dispatch.sh
+scripts/setup-bot-credentials.sh
+test/cc-dispatch.test.js
+test/dispatch-dedup.test.js
+test/dispatch-bookkeeping.test.js
+test/dispatch-timeout.test.js
+test/test-harness-bash-version.test.js
+test/assertion-flip-guardrail.test.js
+test/helpers/run-bash.js
+
+# internal scan artifacts
+reports/l402-discovery-*.json
+reports/l402-discovery-*.txt

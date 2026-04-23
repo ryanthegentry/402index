@@ -48,7 +48,7 @@ Search 402index for healthy image generation services
 
 ## Available Tools
 
-- `search_services` — Search 15,000+ paid APIs by keyword, protocol, category, health, price
+- `search_services` — Search thousands of paid APIs by keyword, protocol, category, health, price
 - `get_service_detail` — Full details for a specific service
 - `list_categories` — Browse API categories
 - `get_directory_stats` — Directory-wide stats and health summary

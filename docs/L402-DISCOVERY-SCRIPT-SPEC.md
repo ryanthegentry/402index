@@ -284,18 +284,6 @@ node scripts/l402-discovery.js --url "https://satring.com/api/v1/analytics"
 node scripts/l402-discovery.js --verbose
 ```
 
-## CC Prompt Integration
-
-This script is designed to be written and executed by Claude Code in a single session:
-
-1. CC writes `scripts/l402-discovery.js` (~300-400 lines)
-2. CC runs it against the live 402index API
-3. CC analyzes the output
-4. CC applies high-confidence updates directly to the DB via `railway run`
-5. CC files the report and updates agent-state
-
-The script outputs are human-readable for review before applying low-confidence changes.
-
 ## Success Criteria
 
 - Discovers the correct L402-gated path for 10+ currently-degraded endpoints
