@@ -51,12 +51,13 @@ jobs:
         run: cd mcp-server && npm pack
 
       - name: Verify tarball contents against allowlist
+        working-directory: mcp-server
         run: |
-          npm pack --dry-run --json --prefix mcp-server \
+          npm pack --dry-run --json \
             | jq -r '.[0].files[].path' \
             | sed 's|^package/||' \
             | sort > /tmp/actual.txt
-          sort mcp-server/.tarball-allowlist.txt > /tmp/expected.txt
+          sort .tarball-allowlist.txt > /tmp/expected.txt
           if ! diff -u /tmp/expected.txt /tmp/actual.txt; then
             echo "::error::Tarball contents differ from .tarball-allowlist.txt. Update the allowlist or remove unexpected files."
             exit 1
