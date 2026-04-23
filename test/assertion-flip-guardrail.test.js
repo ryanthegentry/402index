@@ -4,24 +4,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { execSync } from 'node:child_process'
+import { runBash } from './helpers/run-bash.js'
 
 const SCRIPT_PATH = path.resolve('scripts/check-assertion-flips.sh')
 const DISPATCH_PATH = path.resolve('scripts/cc-dispatch.sh')
-
-// Helper: run a bash snippet, returning stdout+stderr. Non-zero exits don't throw.
-function runBash(script, { timeout = 10000 } = {}) {
-  const tmpfile = path.join(os.tmpdir(), `af-test-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`)
-  fs.writeFileSync(tmpfile, script)
-  try {
-    return execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout }).trim()
-  } catch (e) {
-    const out = [e.stdout, e.stderr].filter(Boolean).join('\n').trim()
-    if (out) return out
-    throw e
-  } finally {
-    fs.unlinkSync(tmpfile)
-  }
-}
 
 // Helper: run check-assertion-flips.sh with stubbed git diff and git log output
 function runCheck({ diffOutput = '', logOutput = '', extraArgs = '' } = {}) {
@@ -64,7 +50,7 @@ describe('assertion-flip guardrail (#187)', () => {
     })
 
     it('--help returns exit 0', () => {
-      const output = runBash(`bash "${SCRIPT_PATH}" --help 2>&1; echo "EXIT_CODE=$?"`)
+      const output = runBash(`bash "${SCRIPT_PATH}" --help 2>&1; echo "EXIT_CODE=$?"`, { timeout: 10000 })
       assert.ok(output.includes('EXIT_CODE=0'),
         `--help must exit 0. Output:\n${output}`)
     })
