@@ -3,24 +3,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { execSync } from 'node:child_process'
+import { runBash } from './helpers/run-bash.js'
 
 const SCRIPT_PATH = path.resolve('scripts/cc-dispatch.sh')
-
-// Helper: write a bash script to a temp file and execute it
-function runBash(script, { timeout = 10000, env } = {}) {
-  const tmpfile = path.join(os.tmpdir(), `dispatch-bk-test-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`)
-  fs.writeFileSync(tmpfile, script)
-  try {
-    return execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout, env: { ...process.env, ...env } }).trim()
-  } catch (e) {
-    const out = [e.stdout, e.stderr].filter(Boolean).join('\n').trim()
-    if (out) return out
-    throw e
-  } finally {
-    fs.unlinkSync(tmpfile)
-  }
-}
 
 describe('dispatch bookkeeping (#182)', () => {
   const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')

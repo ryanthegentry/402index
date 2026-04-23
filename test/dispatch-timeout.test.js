@@ -3,25 +3,11 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { execSync, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
+import { runBash } from './helpers/run-bash.js'
 
 const SCRIPT_PATH = path.resolve('scripts/cc-dispatch.sh')
 const CONTRIBUTING_PATH = path.resolve('CONTRIBUTING.md')
-
-// Helper: write a bash script to a temp file and execute it
-function runBash(script, { timeout = 15000, env } = {}) {
-  const tmpfile = path.join(os.tmpdir(), `dispatch-to-test-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`)
-  fs.writeFileSync(tmpfile, script)
-  try {
-    return execSync(`bash "${tmpfile}"`, { encoding: 'utf-8', timeout, env: { ...process.env, ...env } }).trim()
-  } catch (e) {
-    const out = [e.stdout, e.stderr].filter(Boolean).join('\n').trim()
-    if (out) return out
-    throw e
-  } finally {
-    fs.unlinkSync(tmpfile)
-  }
-}
 
 describe('dispatch timeout and orphan cleanup (#192)', () => {
   const content = fs.readFileSync(SCRIPT_PATH, 'utf-8')
