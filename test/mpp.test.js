@@ -607,6 +607,251 @@ describe('pollMPP source-merge fix', () => {
   })
 })
 
+describe('pollMPP reconciliation harness', () => {
+  beforeEach(() => {
+    cleanupMppServices()
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+    cleanupMppServices()
+  })
+
+  it('returns apiEndpointCount matching services.length from the fixture', async () => {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    assert.equal(result.apiEndpointCount, MPP_FIXTURE.services.length,
+      'apiEndpointCount must match fixture services.length')
+  })
+
+  it('returns apiEndpointCount=0 on HTTP error early-exit', async () => {
+    globalThis.fetch = async () => ({ ok: false, status: 503 })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    assert.equal(result.apiEndpointCount, 0,
+      'apiEndpointCount must be 0 on HTTP error')
+  })
+
+  it('returns apiEndpointCount=0 on fetch error early-exit', async () => {
+    globalThis.fetch = async () => { throw new Error('ECONNREFUSED') }
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    assert.equal(result.apiEndpointCount, 0,
+      'apiEndpointCount must be 0 on fetch error')
+  })
+
+  it('returns apiEndpointCount=0 on empty services early-exit', async () => {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ services: [] }),
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    assert.equal(result.apiEndpointCount, 0,
+      'apiEndpointCount must be 0 when API returns empty services')
+  })
+
+  it('returns apiEndpointCount on normalization-anomaly early-exit', async () => {
+    // 100 services with broken URLs — triggers the <10% normalization guard
+    const brokenFixture = { version: 1, services: [] }
+    for (let i = 0; i < 100; i++) {
+      brokenFixture.services.push({
+        id: `broken-${i}`,
+        name: `Broken ${i}`,
+        categories: ['ai'],
+        provider: { name: `Provider ${i}` },
+        endpoints: [{
+          method: 'GET', path: '/v1/data',
+          payment: { amount: '1000', decimals: 6, method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50' },
+        }],
+      })
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => brokenFixture,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    assert.equal(result.apiEndpointCount, 100,
+      'apiEndpointCount must reflect API response even on normalization anomaly')
+  })
+
+  it('logs WARN when DB count drifts > 5% from services.length', async () => {
+    // Create a fixture where services.length (20) >> DB endpoint rows (5).
+    // 15 services are all-free (no paid endpoints → no DB rows), 5 have paid endpoints.
+    // After poll: DB = 5 rows, services.length = 20, delta = |5-20|/20 = 75% > 5% ✓
+    const driftFixture = { version: 1, services: [] }
+    for (let i = 0; i < 5; i++) {
+      driftFixture.services.push({
+        id: `paid-${i}`, name: `Paid ${i}`,
+        url: `https://paid${i}.mpp.tempo.xyz`, serviceUrl: `https://paid${i}.mpp.tempo.xyz`,
+        categories: ['ai'], provider: { name: `Provider ${i}` },
+        endpoints: [{ method: 'GET', path: '/v1/data', payment: { amount: '1000', decimals: 6, method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50' } }],
+      })
+    }
+    for (let i = 0; i < 15; i++) {
+      driftFixture.services.push({
+        id: `free-${i}`, name: `Free ${i}`,
+        url: `https://free${i}.mpp.tempo.xyz`,
+        categories: ['data'], provider: { name: `FreeCo ${i}` },
+        endpoints: [{ method: 'GET', path: '/health', payment: null }],
+      })
+    }
+
+    const warnCalls = []
+    const originalWarn = console.warn
+    console.warn = (...args) => {
+      warnCalls.push(args.join(' '))
+      originalWarn.apply(console, args)
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => driftFixture,
+    })
+
+    try {
+      const { pollMPP } = await import('../src/aggregators/mpp.js')
+      await pollMPP()
+
+      const driftWarns = warnCalls.filter(m => m.includes('[mpp] WARN: row/api drift detected:'))
+      assert.ok(driftWarns.length > 0,
+        'should log WARN when DB count drifts > 5% from services.length')
+    } finally {
+      console.warn = originalWarn
+    }
+  })
+
+  it('does NOT warn when DB count is within 5% of services.length', async () => {
+    // Don't seed any extra rows — after poll, DB count (4) matches services.length (4) exactly
+    const warnCalls = []
+    const originalWarn = console.warn
+    console.warn = (...args) => {
+      warnCalls.push(args.join(' '))
+      originalWarn.apply(console, args)
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    try {
+      const { pollMPP } = await import('../src/aggregators/mpp.js')
+      await pollMPP()
+
+      const driftWarns = warnCalls.filter(m => m.includes('[mpp] WARN: row/api drift detected:'))
+      assert.equal(driftWarns.length, 0,
+        'should NOT warn when DB count matches services.length')
+    } finally {
+      console.warn = originalWarn
+    }
+  })
+
+  it('does not warn on empty API response', async () => {
+    seedRow({ url: 'https://existing.example.com/v1/api', source: 'mpp' })
+
+    const warnCalls = []
+    const originalWarn = console.warn
+    console.warn = (...args) => {
+      warnCalls.push(args.join(' '))
+      originalWarn.apply(console, args)
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ services: [] }),
+    })
+
+    try {
+      const { pollMPP } = await import('../src/aggregators/mpp.js')
+      await pollMPP()
+
+      const driftWarns = warnCalls.filter(m => m.includes('[mpp] WARN: row/api drift detected:'))
+      assert.equal(driftWarns.length, 0,
+        'should NOT warn on empty API response (that is an upstream outage, not drift)')
+    } finally {
+      console.warn = originalWarn
+    }
+  })
+
+  it('reconciliation excludes multi-source rows from count', async () => {
+    // Seed only a multi-source row — should NOT be counted in reconciliation.
+    // After poll: 4 fixture rows upserted (source='mpp'), plus this 1 multi-source row.
+    // Correct (exact match): DB count = 4, API = 4 → 0% drift → no warn.
+    // If reconciliation incorrectly used LIKE '%mpp%': DB count = 5, API = 4 → 25% drift → WARN fires.
+    seedRow({ url: 'https://multi.example.com/v1/api', source: 'mppscan,mpp' })
+
+    const warnCalls = []
+    const originalWarn = console.warn
+    console.warn = (...args) => {
+      warnCalls.push(args.join(' '))
+      originalWarn.apply(console, args)
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    try {
+      const { pollMPP } = await import('../src/aggregators/mpp.js')
+      await pollMPP()
+
+      const driftWarns = warnCalls.filter(m => m.includes('[mpp] WARN: row/api drift detected:'))
+      assert.equal(driftWarns.length, 0,
+        'multi-source row must be excluded from reconciliation count — no drift when excluded')
+    } finally {
+      console.warn = originalWarn
+    }
+  })
+
+  it('reconciliation excludes provider_deleted=1 rows from count', async () => {
+    // Seed a soft-deleted row — should NOT be counted in reconciliation
+    seedRow({ url: 'https://deleted.example.com/v1/api', source: 'mpp', provider_deleted: 1, deleted_at: '2026-04-01 00:00:00' })
+
+    const warnCalls = []
+    const originalWarn = console.warn
+    console.warn = (...args) => {
+      warnCalls.push(args.join(' '))
+      originalWarn.apply(console, args)
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    try {
+      const { pollMPP } = await import('../src/aggregators/mpp.js')
+      await pollMPP()
+
+      const driftWarns = warnCalls.filter(m => m.includes('[mpp] WARN: row/api drift detected:'))
+      // After poll: 4 from fixture. Soft-deleted row should be excluded.
+      // DB count should be 4 (not 5), matching services.length=4 → no drift → no warn
+      assert.equal(driftWarns.length, 0,
+        'soft-deleted rows must be excluded from reconciliation — no drift when excluded')
+    } finally {
+      console.warn = originalWarn
+    }
+  })
+})
+
 describe('detectProtocol used by health checker', () => {
   it('detects valid MPP challenge via detectProtocol', async () => {
     const { detectProtocol } = await import('../src/services/detect-protocol.js')

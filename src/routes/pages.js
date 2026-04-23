@@ -209,6 +209,8 @@ router.get('/', (req, res) => {
   const mppTotal = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'MPP'`).get().c
   const mppHealthy = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'MPP' AND health_status = 'healthy'`).get().c
   const mppVerified = mppHealthy
+  const mppGatewayTotal = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'MPP' AND (hostname LIKE '%.mpp.tempo.xyz' OR hostname LIKE '%.mpp.paywithlocus.com')`).get().c
+  const mppGatewayHealthy = db.prepare(`SELECT COUNT(*) as c FROM services ${ACTIVE_FILTER} AND protocol = 'MPP' AND health_status = 'healthy' AND (hostname LIKE '%.mpp.tempo.xyz' OR hostname LIKE '%.mpp.paywithlocus.com')`).get().c
 
   const lastHealthCheck = db.prepare('SELECT MAX(checked_at) as t FROM health_checks').get()?.t || null
 
@@ -221,7 +223,7 @@ router.get('/', (req, res) => {
     lastHealthCheck,
     l402: { endpoints: l402Total, verified: l402Healthy, healthy: l402Healthy, providers: providerSets.L402.size, allProviders: allProviderSets.L402.size },
     x402: { endpoints: x402Total, verified: x402Verified, healthy: x402Healthy, providers: providerSets.x402.size, allProviders: allProviderSets.x402.size },
-    mpp: { endpoints: mppTotal, verified: mppVerified, healthy: mppHealthy, providers: providerSets.MPP.size, allProviders: allProviderSets.MPP.size },
+    mpp: { endpoints: mppTotal, verified: mppVerified, healthy: mppHealthy, providers: providerSets.MPP.size, allProviders: allProviderSets.MPP.size, gatewayEndpoints: mppGatewayTotal, gatewayVerified: mppGatewayHealthy },
   }
 
   // Featured endpoints for Agent Discovery default view
