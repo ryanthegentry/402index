@@ -14,7 +14,7 @@ export function homePage({ services, total, limit, offset, filters, stats, categ
       <td>${protocolBadge(s.protocol)}</td>
       <td class="price">${formatPrice(s, btcUsdRate)}</td>
       <td>${s.category ? `<span class="category-tag">${escapeHtml(s.category)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
-      <td>${healthDot(s.health_status)}</td>
+      <td>${healthDot(s.health_status, s.probe_status)}</td>
       <td class="latency">${s.latency_p50_ms != null ? s.latency_p50_ms + 'ms' : '—'}</td>
       <td><span class="source-tag">${sourceLink(s.source)}</span></td>
     </tr>

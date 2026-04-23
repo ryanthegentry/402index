@@ -325,6 +325,7 @@ export const styles = `
     .health-degraded { background: var(--yellow); }
     .health-down { background: var(--red); }
     .health-unknown { background: var(--gray); }
+    .health-unprobeable { background: #9ca3af; }
 
     .price {
       font-family: var(--mono);

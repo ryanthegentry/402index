@@ -8,12 +8,13 @@ const asciiLower = (s) => s.replace(/[A-Z]/g, c => c.toLowerCase())
 
 const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_ms', uptime: 'uptime_30d', reliability: 'reliability_score', registered_at: 'registered_at' }
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
+const VALID_PROBE_STATUS = new Set(['probeable', 'unprobeable'])
 const VALID_SOURCE = new Set(['bazaar', 'satring', 'exclusive', 'l402apps', 'self-registered', 'sponge', 'well-known', 'discovery'])
 
 const RELATED_PROTOCOLS_SQL = `(SELECT CASE WHEN COUNT(*) = 0 THEN '[]' ELSE json_group_array(s2.protocol) END FROM services s2 WHERE s2.url = services.url AND s2.id != services.id AND (s2.status = 'active' OR s2.status IS NULL) AND (s2.provider_deleted = 0 OR s2.provider_deleted IS NULL)) as related_protocols`
 
-export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, domain_verified, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason, l402_format, lnget_compatible, ' + RELATED_PROTOCOLS_SQL
-export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, latency_p50_ms, reliability_score, x402_payment_valid, domain_verified'
+export const API_COLUMNS = 'id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, probe_status, uptime_30d, latency_p50_ms, last_checked, registered_at, http_method, reliability_score, x402_payment_valid, domain_verified, x402_facilitator_reachable, x402_asset_known, l402_compliant, l402_degrade_reason, l402_format, lnget_compatible, ' + RELATED_PROTOCOLS_SQL
+export const PAGE_COLUMNS = 'id, name, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, featured, health_status, probe_status, latency_p50_ms, reliability_score, x402_payment_valid, domain_verified'
 
 const DEFAULT_ORDER = `ORDER BY
     featured DESC,
@@ -48,6 +49,7 @@ export function buildServiceQuery(opts = {}) {
     category,
     health,
     source,
+    probe_status,
     q,
     featured,
     max_price_usd,
@@ -89,6 +91,10 @@ export function buildServiceQuery(opts = {}) {
   if (source && VALID_SOURCE.has(source)) {
     conditions.push('source = @source')
     params.source = source
+  }
+  if (probe_status && VALID_PROBE_STATUS.has(probe_status)) {
+    conditions.push('probe_status = @probe_status')
+    params.probe_status = probe_status
   }
   if (max_price_usd) {
     const parsed = parseFloat(max_price_usd)

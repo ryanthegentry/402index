@@ -245,6 +245,50 @@ describe('buildServiceQuery', () => {
     assert.equal(rows[0].name, 'foo\\bar API')
   })
 
+  // ─── probe_status filter integration (issue #236) ──────────────────────
+  // In-memory SQLite test: insert rows with mixed probe_status, execute the
+  // generated SQL, and assert only the matching rows are returned.
+
+  it('probe_status filter executes against in-memory SQLite', () => {
+    const db = Database(':memory:')
+    db.exec(`CREATE TABLE services (
+      id INTEGER PRIMARY KEY, name TEXT, description TEXT, url TEXT,
+      protocol TEXT, status TEXT, provider_deleted INTEGER DEFAULT 0,
+      price_sats REAL, price_usd REAL, payment_asset TEXT, payment_network TEXT,
+      category TEXT, provider TEXT, source TEXT, featured INTEGER DEFAULT 0,
+      health_status TEXT, uptime_30d REAL, latency_p50_ms INTEGER,
+      last_checked TEXT, registered_at TEXT, http_method TEXT,
+      reliability_score REAL, x402_payment_valid INTEGER,
+      x402_facilitator_reachable INTEGER, x402_asset_known INTEGER,
+      l402_compliant INTEGER, l402_degrade_reason TEXT, l402_format TEXT,
+      lnget_compatible INTEGER, domain_verified INTEGER DEFAULT 0,
+      probe_status TEXT DEFAULT 'probeable'
+    )`)
+    db.exec(`INSERT INTO services (name, url, protocol, status, health_status, probe_status)
+      VALUES ('Probeable Svc', 'https://a.com', 'x402', 'active', 'healthy', 'probeable')`)
+    db.exec(`INSERT INTO services (name, url, protocol, status, health_status, probe_status)
+      VALUES ('Unprobeable Svc', 'https://b.mpp.paywithlocus.com', 'MPP', 'active', 'unknown', 'unprobeable')`)
+    db.exec(`INSERT INTO services (name, url, protocol, status, health_status, probe_status)
+      VALUES ('Default Svc', 'https://c.com', 'L402', 'active', 'healthy', 'probeable')`)
+
+    // Filter for unprobeable only
+    const unp = buildServiceQuery({ probe_status: 'unprobeable' })
+    const unpRows = db.prepare(
+      `SELECT name FROM services ${unp.where} ${unp.orderBy} LIMIT @limit OFFSET @offset`
+    ).all({ ...unp.params, limit: unp.limit, offset: unp.offset })
+    assert.equal(unpRows.length, 1)
+    assert.equal(unpRows[0].name, 'Unprobeable Svc')
+
+    // Filter for probeable only
+    const pro = buildServiceQuery({ probe_status: 'probeable' })
+    const proRows = db.prepare(
+      `SELECT name FROM services ${pro.where} ${pro.orderBy} LIMIT @limit OFFSET @offset`
+    ).all({ ...pro.params, limit: pro.limit, offset: pro.offset })
+    assert.equal(proRows.length, 2)
+    const proNames = proRows.map(r => r.name).sort()
+    assert.deepEqual(proNames, ['Default Svc', 'Probeable Svc'])
+  })
+
   // ─── Sort parameter validation (issue #234) ──────────────────────────
   // These tests document the security-critical invariant that invalid sort
   // values are blocked by the SORT_COLUMNS allowlist and fall back to
