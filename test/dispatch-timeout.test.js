@@ -552,6 +552,7 @@ wait
       const allPids = []
 
       try {
+        // spawn bash directly — child scripts use $$ (not $BASHPID), so PATH-resolved bash is safe here. See L513-514.
         const proc = spawn('bash', [parentScript], { stdio: ['pipe', 'pipe', 'pipe'] })
         allPids.push(proc.pid)
 
