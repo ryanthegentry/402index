@@ -34,7 +34,8 @@ const CREATE_TABLE = `CREATE TABLE services (
   l402_degrade_reason TEXT,
   l402_format TEXT,
   lnget_compatible INTEGER,
-  domain_verified INTEGER DEFAULT 0
+  domain_verified INTEGER DEFAULT 0,
+  probe_status TEXT DEFAULT 'probeable'
 )`
 
 function makeDb() {

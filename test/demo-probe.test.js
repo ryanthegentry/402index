@@ -258,7 +258,8 @@ describe('health checker service filter (regression guard)', () => {
         registered_at TEXT NOT NULL DEFAULT (datetime('now')),
         x402_payment_valid INTEGER,
         status TEXT DEFAULT 'active',
-        provider_deleted INTEGER DEFAULT 0
+        provider_deleted INTEGER DEFAULT 0,
+        probe_status TEXT DEFAULT 'probeable'
       )
     `)
     return db

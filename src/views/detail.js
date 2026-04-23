@@ -81,7 +81,7 @@ export function detailPage(service) {
           <h2>Health</h2>
           <div class="detail-row">
             <span class="detail-label">Status</span>
-            <span class="detail-value">${healthDot(service.health_status)}</span>
+            <span class="detail-value">${healthDot(service.health_status, service.probe_status)}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">Latency (p50)</span>
@@ -186,7 +186,7 @@ export function detailPage(service) {
         ${service.related_services.map(rs => `
           <div style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px">
             <div>${protocolBadge(rs.protocol)}</div>
-            <div>${healthDot(rs.health_status)}</div>
+            <div>${healthDot(rs.health_status, rs.probe_status)}</div>
             <div>${formatPrice(rs)}</div>
             <div style="color:var(--text-muted); font-size:0.85em">${escapeHtml(rs.payment_asset || '')} on ${escapeHtml(rs.payment_network || '')}</div>
             <a href="/service/${encodeURIComponent(rs.id)}" style="margin-left:auto">View details &rarr;</a>
