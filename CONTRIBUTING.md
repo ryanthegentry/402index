@@ -141,3 +141,5 @@ Be kind, be specific, be patient. Disagree technically, not personally. Maintain
 - [Open a discussion](https://github.com/ryanthegentry/402index/discussions)
 - [Open an issue](https://github.com/ryanthegentry/402index/issues/new)
 - Email: hello@402index.io
+
+<!-- Dispatch system lives at ~/workspace/agent-state/dispatch/402index/ -->
