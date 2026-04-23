@@ -501,6 +501,45 @@ describe('pollMPP sweep + reactivation', () => {
     assert.ok(row.deleted_at, 'deleted_at must be set so purgeSoftDeleted() can fire')
   })
 
+  it('skips sweep when most normalizations fail (amplification guard)', async () => {
+    // Seed 20 rows that would be swept if guard fails
+    for (let i = 0; i < 20; i++) {
+      seedRow({ url: `https://real-service-${i}.example.com/v1/api`, source: 'mpp' })
+    }
+
+    // 100 services but all with broken URLs that normalize to null
+    const brokenFixture = { version: 1, services: [] }
+    for (let i = 0; i < 100; i++) {
+      brokenFixture.services.push({
+        id: `broken-${i}`,
+        name: `Broken ${i}`,
+        // missing url and serviceUrl — normalizeMppEndpoint returns null
+        categories: ['ai'],
+        provider: { name: `Provider ${i}` },
+        endpoints: [{
+          method: 'GET',
+          path: '/v1/data',
+          description: 'Data endpoint',
+          payment: { amount: '1000', decimals: 6, method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50' },
+        }],
+      })
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => brokenFixture,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    assert.equal(result.swept, 0, 'sweep must be skipped when most normalizations fail')
+
+    // Verify existing rows were NOT swept
+    const alive = db.prepare("SELECT COUNT(*) as c FROM services WHERE source = 'mpp' AND provider_deleted = 0").get()
+    assert.ok(alive.c >= 20, 'existing rows must survive normalization-failure scenario')
+  })
+
   it('handles 1500+ URLs without SQLITE_LIMIT_VARIABLE_NUMBER error', async () => {
     // Generate a fixture with 1500+ endpoints
     const bigFixture = { version: 1, services: [] }

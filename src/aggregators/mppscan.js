@@ -153,8 +153,18 @@ export async function pollMppscan() {
     }
   }
 
-  // Sweep stale rows via temp table
+  // Normalization-failure amplification guard: if most servers failed to normalize,
+  // seenUrls will be much smaller than the API response, causing an overly broad sweep.
+  // Skip sweep if <10% of servers produced valid URLs.
   let swept = 0
+  if (seenUrls.size < servers.length * 0.1) {
+    console.warn(`[mppscan] Normalization anomaly: only ${seenUrls.size} URLs from ${servers.length} servers — skipping sweep`)
+    const totalSynced = newCount + updatedCount
+    console.log(`[mppscan] Synced ${totalSynced} endpoints (${newCount} new, ${updatedCount} updated${errorCount > 0 ? `, ${errorCount} errors` : ''})`)
+    return { new: newCount, updated: updatedCount, errors: errorCount, swept: 0 }
+  }
+
+  // Sweep stale rows via temp table
   try {
     createSeenTable().run()
     clearSeenTable().run()
