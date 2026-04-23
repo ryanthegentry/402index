@@ -1,0 +1,129 @@
+name: Publish MCP Server
+
+on:
+  push:
+    tags:
+      - 'mcp-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: mcp-publish
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Build MCP server
+        run: cd mcp-server && npm ci && npm run build
+
+      - name: Run MCP server tests
+        run: npm --prefix mcp-server test
+
+      - name: Assert tag version matches package.json version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/mcp-v}"
+          PKG_VERSION=$(jq -r '.version' mcp-server/package.json)
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($VERSION) does not match mcp-server/package.json version ($PKG_VERSION). Bump the version, commit, then re-tag."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Pack tarball
+        run: cd mcp-server && npm pack
+
+      - name: Verify tarball contents against allowlist
+        run: |
+          npm pack --dry-run --json --prefix mcp-server \
+            | jq -r '.[0].files[].path' \
+            | sed 's|^package/||' \
+            | sort > /tmp/actual.txt
+          sort mcp-server/.tarball-allowlist.txt > /tmp/expected.txt
+          if ! diff -u /tmp/expected.txt /tmp/actual.txt; then
+            echo "::error::Tarball contents differ from .tarball-allowlist.txt. Update the allowlist or remove unexpected files."
+            exit 1
+          fi
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-server-${{ env.VERSION }}
+          path: mcp-server/402index-mcp-server-${{ env.VERSION }}.tgz
+          retention-days: 90
+
+      - name: Publish to npm (OIDC trusted publisher)
+        run: npm publish --access public
+        working-directory: mcp-server
+
+      - name: Wait for npm registry propagation
+        run: |
+          MAX_ATTEMPTS=10
+          ATTEMPT=0
+          DELAY=5
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if npm view "@402index/mcp-server@${VERSION}" version 2>/dev/null | grep -qF "${VERSION}"; then
+              echo "Package @402index/mcp-server@${VERSION} is available on npm"
+              exit 0
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              if [ $((DELAY * 2)) -gt 60 ]; then
+                DELAY=60
+              else
+                DELAY=$((DELAY * 2))
+              fi
+              echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: not yet visible, retrying in ${DELAY}s..."
+              sleep "$DELAY"
+            fi
+          done
+          echo "::error::@402index/mcp-server@${VERSION} not found on npm after $MAX_ATTEMPTS attempts (5 min timeout)"
+          exit 1
+
+      - name: Install mcp-publisher CLI
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Login to MCP Registry via OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Prepare server.json version fields (belt-and-suspenders)
+        run: |
+          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' mcp-server/server.json \
+            > mcp-server/server.tmp && mv mcp-server/server.tmp mcp-server/server.json
+
+      - name: Publish to MCP Registry
+        id: registry-publish
+        continue-on-error: true
+        run: ./mcp-publisher publish mcp-server/server.json
+
+      - name: Warn on registry publish failure
+        if: steps.registry-publish.outcome == 'failure'
+        run: |
+          {
+            echo "## Warning: MCP Registry Update Failed"
+            echo ""
+            echo "npm publish succeeded but the MCP Registry update failed."
+            echo "The registry is in preview — transient failures are expected."
+            echo ""
+            echo "**Manual recovery:**"
+            echo "1. Run \`./mcp-publisher login github\` (interactive)"
+            echo "2. Run \`./mcp-publisher publish mcp-server/server.json\`"
+          } >> "$GITHUB_STEP_SUMMARY"
