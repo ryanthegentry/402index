@@ -231,8 +231,6 @@ try {
     // Normalize old 'BTC/Lightning' → 'BTC' and 'lightning' → 'Lightning'
     ["UPDATE services SET payment_asset = 'BTC' WHERE payment_asset = 'BTC/Lightning'"],
     ["UPDATE services SET payment_network = 'Lightning' WHERE payment_network = 'lightning'"],
-    // Self-registered Qwen listing
-    ["UPDATE services SET payment_asset = 'BTC', payment_network = 'Lightning', provider = '402Index' WHERE url = 'https://atlas.internal.example/v1/chat/completions' AND source = 'self-registered'"],
     // Bazaar → normalize CAIP-2 network IDs to friendly names for display
     ["UPDATE services SET payment_network = 'Base' WHERE payment_network = 'eip155:8453'"],
     ["UPDATE services SET payment_network = 'Ethereum' WHERE payment_network = 'eip155:1'"],

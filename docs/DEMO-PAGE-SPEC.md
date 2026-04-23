@@ -1,6 +1,6 @@
 # Demo Page Specification
 
-**Purpose:** Interactive demo page for Lightning Labs AI + BTC community call (Mar 18, 2026). Shows the 402index ecosystem health, enables live service discovery, and visualizes the L402/x402 payment flow — all from within 402index.io.
+**Purpose:** Interactive demo page for AI + BTC community demos. Shows the 402index ecosystem health, enables live service discovery, and visualizes the L402/x402 payment flow — all from within 402index.io.
 
 **Route:** `GET /demo`
 **Nav:** "Demo" link added to site header between "About" and "API"
