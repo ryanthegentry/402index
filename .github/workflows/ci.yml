@@ -40,6 +40,26 @@ jobs:
       - name: Run tests
         run: npm test
 
+  mcp-server-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: mcp-server/package-lock.json
+      - name: Install mcp-server deps
+        run: npm ci
+        working-directory: mcp-server
+      - name: Run mcp-server tests
+        run: npm test
+        working-directory: mcp-server
+
   e2e:
     runs-on: ubuntu-latest
     needs: test
