@@ -1,3 +1,16 @@
+/**
+ * Shared bash 4+ test helper for dispatch-adjacent test files.
+ *
+ * Resolution order: /opt/homebrew/bin/bash (Apple Silicon Homebrew) →
+ * /usr/local/bin/bash (Intel Homebrew / Linux) → PATH fallback.
+ * The resolved path is cached at module scope to avoid repeated execSync
+ * version probes across test files (one-time cost per test run).
+ *
+ * Split invariant: main-invocation cc-dispatch.sh requires bash 4+ via
+ * the version gate (scripts/cc-dispatch.sh:1768+). Sourced function bodies
+ * in cc-dispatch.sh remain bash 3.x-clean — see test/dispatch-timeout.test.js:773
+ * describe('bash 3.x compatibility'). This helper is for the main-invocation path.
+ */
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
