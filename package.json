@@ -2,6 +2,16 @@
   "name": "402index",
   "version": "0.1.0",
   "description": "Protocol-agnostic directory of paid APIs (L402 + x402 + MPP) for AI agents",
+  "license": "MIT",
+  "author": "Ryan Gentry",
+  "homepage": "https://402index.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryanthegentry/402index.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ryanthegentry/402index/issues"
+  },
   "type": "module",
   "main": "src/server.js",
   "scripts": {
