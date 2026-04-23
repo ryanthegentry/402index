@@ -551,6 +551,14 @@ try {
   console.warn(`[db] Protocol migration note: ${err.message}`)
 }
 
+// Migration: add probe_status column for unprobeable gateway services (#236)
+try {
+  db.exec("ALTER TABLE services ADD COLUMN probe_status TEXT DEFAULT 'probeable' CHECK(probe_status IN ('probeable', 'unprobeable'))")
+  console.log('[db] Added column: probe_status')
+} catch {
+  // Column already exists
+}
+
 // Reclaim space after bulk deletions
 try {
   db.pragma('incremental_vacuum')

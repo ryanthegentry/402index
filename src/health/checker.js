@@ -94,7 +94,7 @@ function stmt(key, sql) {
   return stmts[key]
 }
 
-const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, consecutive_latency_spikes, registered_at, x402_payment_valid FROM services WHERE (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
+const getServices = () => stmt('getServices', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, consecutive_latency_spikes, registered_at, x402_payment_valid FROM services WHERE (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL) AND (probe_status = 'probeable' OR probe_status IS NULL)")
 
 const insertHealthCheck = () => stmt('insertHealthCheck', `
   INSERT INTO health_checks (service_id, status, response_time_ms, http_status, error_message)
@@ -647,11 +647,14 @@ export function detectProtocolChanges(url, serviceId, protocol, allDetections, h
   }
 }
 
-const getSiblings = () => stmt('getSiblings', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, consecutive_latency_spikes, registered_at, x402_payment_valid FROM services WHERE url = ? AND id != ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
+const getSiblings = () => stmt('getSiblings', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, consecutive_latency_spikes, registered_at, x402_payment_valid, probe_status FROM services WHERE url = ? AND id != ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
 
 /** Check a single service: HTTP probe, classify result, persist. */
 export async function checkService(service) {
   const { id, url, protocol, http_method, probe_body, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, consecutive_latency_spikes: prevLatencySpikes, x402_payment_valid: currentPaymentValid } = service
+
+  // Skip unprobeable services — their health_status is managed via admin endpoint
+  if (service.probe_status === 'unprobeable') return { id, healthStatus: 'skipped', httpStatus: null }
 
   // Dedup guard: skip if already checked by a sibling in this cycle
   if (checkedThisCycle.has(id)) return { id, healthStatus: 'skipped', httpStatus: null }
@@ -724,6 +727,9 @@ export async function checkService(service) {
   const siblings = getSiblings().all(url, id)
 
   for (const sibling of siblings) {
+    // Skip unprobeable siblings — do not overwrite their health_status
+    if (sibling.probe_status === 'unprobeable') continue
+
     // Mark sibling as checked synchronously (before any await) to prevent race conditions
     checkedThisCycle.add(sibling.id)
 
