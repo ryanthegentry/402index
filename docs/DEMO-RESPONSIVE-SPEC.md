@@ -1,7 +1,7 @@
 # Demo Page Responsive Optimization Spec
 
 ## Problem
-The demo page has minimal responsive CSS (4 rules). It needs polish for both mobile review and desktop presentation (community call will likely be shared on a large screen).
+The demo page has minimal responsive CSS (4 rules). It needs polish for both mobile review and desktop presentation (demos are often shown on a large screen).
 
 ## Mobile Fixes (max-width: 768px)
 

@@ -4,7 +4,7 @@
 
 Please do **not** open a public GitHub issue for suspected vulnerabilities.
 
-Email: **security@402index.io** (or `hello@402index.io` if the security alias bounces).
+Email: **hello@402index.io**.
 
 Please include:
 
