@@ -104,6 +104,9 @@ jobs:
       - name: Login to MCP Registry via OIDC
         run: ./mcp-publisher login github-oidc
 
+      - name: Validate server.json schema
+        run: ./mcp-publisher validate mcp-server/server.json
+
       - name: Prepare server.json version fields (belt-and-suspenders)
         run: |
           jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' mcp-server/server.json \
