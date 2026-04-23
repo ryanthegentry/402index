@@ -97,7 +97,7 @@ describe('mcp-publish pipeline', () => {
       // Verify the normalization pipeline: strip package/ prefix then sort
       const fixture = '[{"files":[{"path":"package/dist/index.js"},{"path":"package/README.md"},{"path":"package/LICENSE"}]}]'
       const result = execSync(
-        `echo '${fixture}' | jq -r '.[0].files[].path' | sed 's|^package/||' | sort`
+        `echo '${fixture}' | jq -r '.[0].files[].path' | sed 's|^package/||' | LC_ALL=C sort`
       ).toString().trim()
       assert.equal(
         result,
