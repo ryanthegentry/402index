@@ -223,6 +223,40 @@ describe('pollMppscan', () => {
     assert.equal(second.swept, 0)
   })
 
+  it('skips sweep when most normalizations fail (amplification guard)', async () => {
+    // Seed rows that would be swept if guard fails
+    for (let i = 0; i < 20; i++) {
+      seedRow({ url: `https://real-mppscan-${i}.example.com/v1/api`, source: 'mppscan' })
+    }
+
+    // 100 servers but all with broken URLs that normalize to null
+    const brokenServers = []
+    for (let i = 0; i < 100; i++) {
+      brokenServers.push({
+        id: `broken-${i}`,
+        name: `Broken ${i}`,
+        // missing url — normalizeMppscanEndpoint returns null
+        description: 'Broken service',
+        category: 'ai',
+        endpoints: [{ method: 'GET', path: '/v1/data', description: 'Data', price: 0.01 }],
+      })
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ result: { data: { json: brokenServers } } }),
+    })
+
+    const { pollMppscan } = await import('../src/aggregators/mppscan.js')
+    const result = await pollMppscan()
+
+    assert.equal(result.swept, 0, 'sweep must be skipped when most normalizations fail')
+
+    // Verify existing rows were NOT swept
+    const alive = db.prepare("SELECT COUNT(*) as c FROM services WHERE source = 'mppscan' AND provider_deleted = 0").get()
+    assert.ok(alive.c >= 20, 'existing rows must survive normalization-failure scenario')
+  })
+
   it('handles fetch error without throwing', async () => {
     globalThis.fetch = async () => {
       throw new Error('ECONNREFUSED')
