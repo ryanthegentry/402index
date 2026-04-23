@@ -30,6 +30,7 @@
 REPO="${GITHUB_DEFAULT_REPO:-ryanthegentry/402index}"
 REPO_DIR="${REPO_DIR:-$HOME/projects/402index}"
 LOG_DIR="${LOG_DIR:-$HOME/agent-state/dispatch-logs}"
+AGENT_STATE_JOURNALS_DIR="${AGENT_STATE_JOURNALS_DIR:-$HOME/agent-state/projects/402index/journals}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-$(cd "$REPO_DIR" 2>/dev/null && git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo master)}"
 BOT_TOKEN_FILE="${BOT_TOKEN_FILE:-$HOME/.bot-token}"
 DRY_RUN=false
@@ -816,6 +817,30 @@ validate_cc_output() {
 
 mkdir -p "$LOG_DIR"
 
+# ── Agent-state landing artifact check ──────────────────────────
+# Detects whether a journal entry was created for this issue within 5 minutes.
+# Emits a warning to stderr + PR comment if missing. Never blocks the pipeline.
+# Usage: check_landing_artifact <issue_number> <pr_url>
+check_landing_artifact() {
+    local issue_number="$1" pr_url="$2"
+    local match
+
+    match=$(find "$AGENT_STATE_JOURNALS_DIR" -maxdepth 2 -type f -name "*.md" \
+        -newermt "5 minutes ago" -print 2>/dev/null \
+        | xargs grep -El "#${issue_number}\b|issue-${issue_number}\b" 2>/dev/null \
+        | head -1) || true
+
+    if [[ -n "$match" ]]; then
+        log "Landing artifact found for issue #${issue_number}: ${match}"
+    else
+        echo "WARNING: agent-state landing artifact not found for issue #${issue_number} within 5 minutes of PR ${pr_url}. Run /anthropic-skills:session-landing manually to catch up." >&2
+        gh pr comment "$pr_url" --repo "$REPO" \
+            --body "WARNING: agent-state landing artifact not found for issue #${issue_number} within 5 minutes of PR ${pr_url}. Run /anthropic-skills:session-landing manually to catch up." 2>/dev/null || true
+    fi
+
+    return 0
+}
+
 # ── Post-PR bookkeeping helper ──────────────────────────────────
 # Runs all bookkeeping after a PR is created or adopted. Each gh call is
 # individually guarded — a single failure emits a WARNING but does not abort
@@ -847,6 +872,9 @@ post_pr_open_bookkeeping() {
     if ! _bk_err=$(chain_next_stage "$issue_number" "$dispatch_label" 2>&1); then
         log "WARNING: chain_next_stage failed for issue #${issue_number} / ${pr_url} — output: ${_bk_err}"
     fi
+
+    # (e) Check for agent-state landing artifact
+    check_landing_artifact "$issue_number" "$pr_url"
 }
 
 # ── Create-or-adopt PR helper ─────────────────────────────────────
