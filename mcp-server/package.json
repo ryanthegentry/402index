@@ -2,7 +2,7 @@
   "name": "@402index/mcp-server",
   "mcpName": "io.github.ryanthegentry/402index",
   "version": "0.3.0",
-  "description": "MCP server for 402 Index — search 15,000+ paid API endpoints across L402, x402, and MPP protocols with real-time health monitoring",
+  "description": "MCP server for 402 Index — search thousands of paid API endpoints across L402, x402, and MPP protocols with real-time health monitoring",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

@@ -5,7 +5,7 @@ description: Discover paid APIs and execute payments using 402 Index. Use when a
 
 # 402 Index — Discover and Pay for APIs
 
-402 Index is a protocol-agnostic directory of 15,000+ paid API endpoints across three payment protocols: L402 (Lightning Network), x402 (Coinbase/EVM stablecoins), and MPP (Stripe/Tempo machine payments). This skill teaches you to discover APIs you need, select a payment method, and execute the payment — no API keys, no signups, just pay-per-request.
+402 Index is a protocol-agnostic directory of thousands of paid API endpoints across three payment protocols: L402 (Lightning Network), x402 (Coinbase/EVM stablecoins), and MPP (Stripe/Tempo machine payments). This skill teaches you to discover APIs you need, select a payment method, and execute the payment — no API keys, no signups, just pay-per-request.
 
 **Live directory:** https://402index.io
 **API docs:** https://402index.io/api-docs

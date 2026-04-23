@@ -39,3 +39,7 @@ test/dispatch-timeout.test.js
 test/test-harness-bash-version.test.js
 test/assertion-flip-guardrail.test.js
 test/helpers/run-bash.js
+
+# internal scan artifacts
+reports/l402-discovery-*.json
+reports/l402-discovery-*.txt
