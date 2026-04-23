@@ -1648,11 +1648,14 @@ gh() {
 }
 export -f gh
 
+STDOUT_FILE=\$(mktemp)
 STDERR_FILE=\$(mktemp)
-check_landing_artifact 888 "https://example.com/pr/2" 2>"\$STDERR_FILE"
+check_landing_artifact 888 "https://example.com/pr/2" >"\$STDOUT_FILE" 2>"\$STDERR_FILE"
+CHECK_STDOUT=\$(cat "\$STDOUT_FILE")
 STDERR_OUT=\$(cat "\$STDERR_FILE")
-rm -f "\$STDERR_FILE"
+rm -f "\$STDOUT_FILE" "\$STDERR_FILE"
 
+echo "CHECK_STDOUT=\$CHECK_STDOUT"
 echo "STDERR_CONTENT=\$STDERR_OUT"
 echo "GH_CALLS=\$(cat "\$GH_LOG" 2>/dev/null || echo "")"
 rm -f "\$GH_LOG"
@@ -1664,26 +1667,35 @@ rm -f "\$GH_LOG"
       `WARNING must reference session-landing skill. Output:\n${output}`)
     assert.ok(output.includes('pr comment'),
       `Must call gh pr comment. Output:\n${output}`)
+    // WARNING must go to stderr only, not stdout
+    const checkStdout = output.match(/^CHECK_STDOUT=(.*)$/m)
+    assert.ok(checkStdout && !checkStdout[1].includes('WARNING'),
+      `WARNING must appear on stderr only, not stdout. Output:\n${output}`)
+    // PR URL must appear in the gh pr comment --body argument
+    const ghCalls = output.match(/^GH_CALLS=(.*)$/m)
+    assert.ok(ghCalls && /--body.*https:\/\/example\.com\/pr\/2/.test(ghCalls[1]),
+      `PR URL must appear in the gh pr comment body. Output:\n${output}`)
   })
 
   // T3 — stale artifact (>5 min), treated as missing
+  // Setup uses fs.utimesSync (portable) instead of BSD-only date -v / touch -t
   it('T3: stale artifact (>5 min old) — treated as missing, WARNING emitted', () => {
-    const output = runBash(`
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-t3-'))
+    const stalePath = path.join(tmpDir, 'stale.md')
+    fs.writeFileSync(stalePath, 'impl work for #777')
+    const past = new Date(Date.now() - 10 * 60 * 1000)
+    fs.utimesSync(stalePath, past, past)
+
+    try {
+      const output = runBash(`
 #!/usr/bin/env bash
 set -euo pipefail
-
-TMP=\$(mktemp -d)
-trap 'rm -rf "\$TMP"' EXIT
-
-# Create a journal file and backdate it 10 minutes
-echo "impl work for #777" > "\$TMP/stale.md"
-touch -t \$(date -v-10M +%Y%m%d%H%M) "\$TMP/stale.md"
 
 source "${SCRIPT_PATH}"
 REPO="test/repo"
 REPO_DIR="/tmp"
 LOG_DIR="/tmp"
-AGENT_STATE_JOURNALS_DIR="\$TMP"
+AGENT_STATE_JOURNALS_DIR="${tmpDir}"
 
 GH_LOG=\$(mktemp)
 export GH_LOG
@@ -1701,8 +1713,14 @@ echo "STDERR_CONTENT=\$STDERR_OUT"
 rm -f "\$GH_LOG"
 `, { timeout: 15000 })
 
-    assert.ok(output.includes('WARNING:'),
-      `Stale artifact should be treated as missing. Output:\n${output}`)
+      assert.ok(output.includes('WARNING:'),
+        `Stale artifact should be treated as missing. Output:\n${output}`)
+      // Sanity: stale file still exists — confirms find filtered on mtime, not absence
+      assert.ok(fs.existsSync(stalePath),
+        'Stale file must still exist on disk — confirms find filtered on mtime, not absence')
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 
   // T4 — structural: check_landing_artifact is wired into post_pr_open_bookkeeping
@@ -1768,5 +1786,42 @@ echo "EXIT_CODE=\${exit_code}"
 
     assert.ok(output.includes('EXIT_CODE=0'),
       `check_landing_artifact must return 0 even on gh failure. Output:\n${output}`)
+  })
+
+  // T6 — order: check_landing_artifact runs AFTER chain_next_stage (#211 spec)
+  it('T6: check_landing_artifact invoked AFTER chain_next_stage in post_pr_open_bookkeeping', () => {
+    const fnStart = content.indexOf('post_pr_open_bookkeeping()')
+    assert.ok(fnStart !== -1, 'post_pr_open_bookkeeping() must exist')
+
+    const afterFn = content.slice(fnStart)
+    let braceDepth = 0
+    let fnEnd = -1
+    const lines = afterFn.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      for (const ch of lines[i]) {
+        if (ch === '{') braceDepth++
+        if (ch === '}') braceDepth--
+      }
+      if (braceDepth === 0 && i > 0) {
+        fnEnd = i
+        break
+      }
+    }
+    assert.ok(fnEnd > 0, 'post_pr_open_bookkeeping closing brace must be found')
+    const bodyLines = lines.slice(0, fnEnd + 1)
+
+    let chainIdx = -1
+    let landingIdx = -1
+    for (let i = 0; i < bodyLines.length; i++) {
+      if (chainIdx === -1 && bodyLines[i].includes('chain_next_stage')) chainIdx = i
+      if (landingIdx === -1 && bodyLines[i].includes('check_landing_artifact')) landingIdx = i
+    }
+
+    assert.ok(chainIdx !== -1,
+      'chain_next_stage must be present in post_pr_open_bookkeeping')
+    assert.ok(landingIdx !== -1,
+      'check_landing_artifact must be present in post_pr_open_bookkeeping')
+    assert.ok(landingIdx > chainIdx,
+      `check_landing_artifact (line ${landingIdx}) must come AFTER chain_next_stage (line ${chainIdx})`)
   })
 })
