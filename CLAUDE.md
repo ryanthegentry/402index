@@ -114,4 +114,4 @@ Never skip step 1. If you can't write a failing test, the bug isn't well-enough 
 ## Operational Notes
 
 - Pushes to `master` auto-deploy to Railway. Do not remind the developer to deploy after a push lands.
-- Speed > perfection. Ship incremental improvements.
+- Prefer small, reviewable changes over large rewrites.

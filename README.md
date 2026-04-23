@@ -62,11 +62,9 @@ npm run healthcheck     # Run health checks manually
 
 ## What's in the registry
 
-- **24K+ endpoints** across L402, x402, and MPP
-- **275+ verified providers** (domain + payment validated)
-- **Aggregated from** the [x402 Bazaar](https://x402.org/bazaar), [Satring](https://satring.com), [l402apps.com](https://www.l402apps.com), MPP's OpenAPI directory, and direct self-submissions — no gatekeeping by protocol
+Tens of thousands of endpoints across hundreds of verified providers, aggregated from the [x402 Bazaar](https://x402.org/bazaar), [Satring](https://satring.com), [l402apps.com](https://www.l402apps.com), MPP's OpenAPI directory, and direct self-submissions — no gatekeeping by protocol.
 
-(Live numbers at [402index.io/api/v1/health](https://402index.io/api/v1/health).)
+Live numbers at [402index.io/api/v1/health](https://402index.io/api/v1/health).
 
 ---
 

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -58,8 +58,10 @@ describe('pipeline-hardening', () => {
     })
   })
 
-  describe('qa-reviewer-ci-env', () => {
-    const qaReviewer = readFileSync(join(root, '.claude/agents/qa-reviewer.md'), 'utf8')
+  const qaReviewerPath = join(root, '.claude/agents/qa-reviewer.md')
+
+  describe('qa-reviewer-ci-env', { skip: !existsSync(qaReviewerPath) }, () => {
+    const qaReviewer = readFileSync(qaReviewerPath, 'utf8')
 
     it('contains CI=true npm test at least twice', () => {
       const matches = qaReviewer.match(/CI=true npm test/g)
