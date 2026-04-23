@@ -13,6 +13,9 @@ import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { startServer, stopServer } from './helpers/server.js'
+import { adminAuth } from '../src/middleware/admin-auth.js'
+import { adminPage } from '../src/views/admin.js'
 
 // ─── repo-meta: file naming + header accuracy (issue #210) ──────────────────
 
@@ -63,9 +66,6 @@ describe('repo-meta: file naming + header accuracy', () => {
     )
   })
 })
-import { startServer, stopServer } from './helpers/server.js'
-import { adminAuth } from '../src/middleware/admin-auth.js'
-import { adminPage } from '../src/views/admin.js'
 
 let BASE = process.env.API_BASE
 
