@@ -42,21 +42,55 @@ describe('test harness bash version (#214)', () => {
       'main-invocation block must exit 1 on version failure')
   })
 
-  // Test C — both test files import runBash from shared helper, no local definition
+  // Test C — all four dispatch-adjacent test files import runBash from shared helper, no local definition
   it('dispatch test files import runBash from shared helper (no local copy)', () => {
     const bookkeeping = fs.readFileSync(path.resolve('test/dispatch-bookkeeping.test.js'), 'utf-8')
     const timeout = fs.readFileSync(path.resolve('test/dispatch-timeout.test.js'), 'utf-8')
+    const dedup = fs.readFileSync(path.resolve('test/dispatch-dedup.test.js'), 'utf-8')
+    const assertionFlip = fs.readFileSync(path.resolve('test/assertion-flip-guardrail.test.js'), 'utf-8')
 
     // Must import from helpers
     assert.match(bookkeeping, /from\s+['"]\.\/helpers\/run-bash\.js['"]/,
       'dispatch-bookkeeping.test.js must import from ./helpers/run-bash.js')
     assert.match(timeout, /from\s+['"]\.\/helpers\/run-bash\.js['"]/,
       'dispatch-timeout.test.js must import from ./helpers/run-bash.js')
+    assert.match(dedup, /from\s+['"]\.\/helpers\/run-bash\.js['"]/,
+      'dispatch-dedup.test.js must import from ./helpers/run-bash.js')
+    assert.match(assertionFlip, /from\s+['"]\.\/helpers\/run-bash\.js['"]/,
+      'assertion-flip-guardrail.test.js must import from ./helpers/run-bash.js')
 
     // Must NOT have local function runBash definition
     assert.doesNotMatch(bookkeeping, /^function runBash/m,
       'dispatch-bookkeeping.test.js must not define local runBash')
     assert.doesNotMatch(timeout, /^function runBash/m,
       'dispatch-timeout.test.js must not define local runBash')
+    assert.doesNotMatch(dedup, /^function runBash/m,
+      'dispatch-dedup.test.js must not define local runBash')
+    assert.doesNotMatch(assertionFlip, /^function runBash/m,
+      'assertion-flip-guardrail.test.js must not define local runBash')
+  })
+
+  // Test D — dispatch-timeout spawn-bash pointer comment
+  it('dispatch-timeout.test.js spawn-bash has pointer comment explaining $$ usage', () => {
+    const content = fs.readFileSync(path.resolve('test/dispatch-timeout.test.js'), 'utf-8')
+    const lines = content.split('\n')
+
+    // Find the spawn('bash', [parentScript] line
+    const spawnIdx = lines.findIndex(l => l.includes("spawn('bash', [parentScript]"))
+    assert.ok(spawnIdx >= 0, 'spawn(\'bash\', [parentScript] line not found')
+
+    // Check a 10-line window around the spawn line for a pointer comment
+    const windowStart = Math.max(0, spawnIdx - 5)
+    const windowEnd = Math.min(lines.length, spawnIdx + 5)
+    const window = lines.slice(windowStart, windowEnd).join('\n')
+
+    assert.ok(
+      window.includes('$$') || window.includes('BASHPID'),
+      `10-line window around spawn-bash must reference $$ or BASHPID. Window:\n${window}`
+    )
+    assert.ok(
+      window.includes('L513') || window.includes('513') || window.includes('child script uses'),
+      `10-line window around spawn-bash must reference L513 or explain why child uses $$. Window:\n${window}`
+    )
   })
 })
