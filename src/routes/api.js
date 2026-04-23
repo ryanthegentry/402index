@@ -1304,9 +1304,9 @@ router.post('/admin/domains/:domain/reset', (req, res) => {
     .toISOString().replace('T', ' ').slice(0, 19)
 
   db.prepare(
-    `UPDATE domain_claims SET verification_token = ?, status = 'pending',
+    `UPDATE domain_claims SET verification_token = ?, token_hashed = 1, status = 'pending',
      expires_at = ?, verified_at = NULL WHERE domain = ?`
-  ).run(token, expiresAt, domain)
+  ).run(hash, expiresAt, domain)
 
   console.log(`[admin/domain-reset] RESET: domain=${domain} old_status=${claim.status}`)
 

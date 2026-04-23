@@ -3,6 +3,7 @@ import { mkdirSync, unlinkSync, existsSync, statSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
+import { createHash } from 'crypto'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 export const DB_PATH = process.env.DB_PATH || join(__dirname, '..', 'data', '402index.db')
@@ -682,6 +683,40 @@ try {
 } catch (err) {
   console.warn(`[db] domain_claims migration note: ${err.message}`)
 }
+
+// Migration: add token_hashed column to domain_claims (new rows default to 1)
+try {
+  db.exec('ALTER TABLE domain_claims ADD COLUMN token_hashed INTEGER NOT NULL DEFAULT 1')
+  // Existing rows get DEFAULT 1, but pre-migration rows actually have raw tokens.
+  // Set all existing rows to 0 so the hash migration picks them up.
+  db.exec('UPDATE domain_claims SET token_hashed = 0')
+  console.log('[db] Added column: domain_claims.token_hashed')
+} catch {
+  // Column already exists — expected on subsequent boots
+}
+
+/**
+ * Migrate unhashed verification tokens to SHA-256 hashes.
+ * Idempotent: only processes rows where token_hashed = 0.
+ * Each row is updated atomically (hash + flag in one statement).
+ */
+export function migrateTokenHashes() {
+  const rows = db.prepare('SELECT id, verification_token FROM domain_claims WHERE token_hashed = 0').all()
+  if (rows.length === 0) return
+
+  const update = db.prepare('UPDATE domain_claims SET verification_token = ?, token_hashed = 1 WHERE id = ?')
+  const migrate = db.transaction(() => {
+    for (const row of rows) {
+      const hashed = createHash('sha256').update(row.verification_token).digest('hex')
+      update.run(hashed, row.id)
+    }
+  })
+  migrate()
+  console.log(`[db] Migrated ${rows.length} domain_claims token(s) to SHA-256 hashes`)
+}
+
+// Run migration on boot
+migrateTokenHashes()
 
 // ─── Protocol Changes (detected during health checks) ───────────────────────
 
