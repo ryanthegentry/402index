@@ -43,7 +43,7 @@ done
 ASSERT_RE='assert\.(equal|ok|deepEqual|strictEqual|deepStrictEqual|notEqual|notDeepEqual|throws|doesNotThrow|match|fail)'
 
 # Step 1: Get the diff for test files only, parse for hunk-level assertion flips
-diff_output=$(git diff "${BASE}..${HEAD}" -- 'test/**/*.test.js' 2>/dev/null || true)
+diff_output=$(git diff "${BASE}..${HEAD}" -- ':(glob)test/**/*.test.js' 2>/dev/null || true)
 
 if [[ -z "$diff_output" ]]; then
     exit 0

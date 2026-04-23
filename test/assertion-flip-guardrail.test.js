@@ -215,6 +215,101 @@ index abc1234..def5678 100644
     })
   })
 
+  // ── Real-repo pathspec coverage (#206) ─────────────────────────
+  describe('real-repo pathspec coverage', () => {
+    it('Test A — real-repo flat-layout: detects assertion flip via actual git diff pathspec', () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'af-real-'))
+      try {
+        // Initialize a real git repo with dummy user config
+        execSync('git init', { cwd: tmpRepo })
+        execSync('git config user.email "test@test.com"', { cwd: tmpRepo })
+        execSync('git config user.name "Test"', { cwd: tmpRepo })
+
+        // Create test/foo.test.js with an assertion, commit it
+        fs.mkdirSync(path.join(tmpRepo, 'test'))
+        fs.writeFileSync(
+          path.join(tmpRepo, 'test', 'foo.test.js'),
+          "import assert from 'node:assert/strict'\nassert.equal(x, 1)\n"
+        )
+        execSync('git add -A && git commit -m "initial"', { cwd: tmpRepo })
+        const base = execSync('git rev-parse HEAD', { cwd: tmpRepo, encoding: 'utf-8' }).trim()
+
+        // Flip the assertion, commit without justification keyword
+        fs.writeFileSync(
+          path.join(tmpRepo, 'test', 'foo.test.js'),
+          "import assert from 'node:assert/strict'\nassert.equal(x, 2)\n"
+        )
+        execSync('git add -A && git commit -m "flip assertion"', { cwd: tmpRepo })
+        const head = execSync('git rev-parse HEAD', { cwd: tmpRepo, encoding: 'utf-8' }).trim()
+
+        // Run the real script against the real repo — no git stubbing
+        let exitCode = 0
+        let stderr = ''
+        try {
+          execSync(
+            `bash ${SCRIPT_PATH} --base ${base} --head ${head}`,
+            { cwd: tmpRepo, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+          )
+        } catch (e) {
+          exitCode = e.status
+          stderr = e.stderr || ''
+        }
+
+        assert.equal(exitCode, 1, `Script must exit 1 for unjustified flip. stderr:\n${stderr}`)
+        assert.ok(stderr.includes('ASSERTION-FLIP DETECTED'),
+          `stderr must contain ASSERTION-FLIP DETECTED. Got:\n${stderr}`)
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true })
+      }
+    })
+
+    it('Test B — real-repo nested-layout: detects assertion flip in test/nested/bar.test.js', () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'af-real-'))
+      try {
+        // Initialize a real git repo with dummy user config
+        execSync('git init', { cwd: tmpRepo })
+        execSync('git config user.email "test@test.com"', { cwd: tmpRepo })
+        execSync('git config user.name "Test"', { cwd: tmpRepo })
+
+        // Create test/nested/bar.test.js with an assertion, commit it
+        fs.mkdirSync(path.join(tmpRepo, 'test', 'nested'), { recursive: true })
+        fs.writeFileSync(
+          path.join(tmpRepo, 'test', 'nested', 'bar.test.js'),
+          "import assert from 'node:assert/strict'\nassert.equal(y, 1)\n"
+        )
+        execSync('git add -A && git commit -m "initial nested"', { cwd: tmpRepo })
+        const base = execSync('git rev-parse HEAD', { cwd: tmpRepo, encoding: 'utf-8' }).trim()
+
+        // Flip the assertion, commit without justification keyword
+        fs.writeFileSync(
+          path.join(tmpRepo, 'test', 'nested', 'bar.test.js'),
+          "import assert from 'node:assert/strict'\nassert.equal(y, 2)\n"
+        )
+        execSync('git add -A && git commit -m "flip nested assertion"', { cwd: tmpRepo })
+        const head = execSync('git rev-parse HEAD', { cwd: tmpRepo, encoding: 'utf-8' }).trim()
+
+        // Run the real script against the real repo — no git stubbing
+        let exitCode = 0
+        let stderr = ''
+        try {
+          execSync(
+            `bash ${SCRIPT_PATH} --base ${base} --head ${head}`,
+            { cwd: tmpRepo, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+          )
+        } catch (e) {
+          exitCode = e.status
+          stderr = e.stderr || ''
+        }
+
+        assert.equal(exitCode, 1, `Script must exit 1 for unjustified flip in nested path. stderr:\n${stderr}`)
+        assert.ok(stderr.includes('ASSERTION-FLIP DETECTED'),
+          `stderr must contain ASSERTION-FLIP DETECTED. Got:\n${stderr}`)
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true })
+      }
+    })
+  })
+
   // ── Structural: cc-dispatch.sh integration ───────────────────────
   describe('cc-dispatch.sh integration', () => {
     const dispatchContent = fs.readFileSync(DISPATCH_PATH, 'utf-8')
