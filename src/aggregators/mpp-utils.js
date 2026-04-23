@@ -58,7 +58,7 @@ export function normalizeMppEndpoint(service, endpoint) {
     ? null
     : parseFloat(payment.amount) / Math.pow(10, decimals)
 
-  const fullUrl = normalizeUrl(`${service.url}${endpoint.path}`)
+  const fullUrl = normalizeUrl(`${service.serviceUrl || service.url}${endpoint.path}`)
   const category = mapMppCategory(service.categories)
   const finalCategory = category === 'uncategorized'
     ? categorize({ description: service.description || endpoint.description || '' })
