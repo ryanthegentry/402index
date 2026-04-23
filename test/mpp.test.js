@@ -791,13 +791,11 @@ describe('pollMPP reconciliation harness', () => {
   })
 
   it('reconciliation excludes multi-source rows from count', async () => {
-    // Seed a multi-source row — should NOT be counted in reconciliation
+    // Seed only a multi-source row — should NOT be counted in reconciliation.
+    // After poll: 4 fixture rows upserted (source='mpp'), plus this 1 multi-source row.
+    // Correct (exact match): DB count = 4, API = 4 → 0% drift → no warn.
+    // If reconciliation incorrectly used LIKE '%mpp%': DB count = 5, API = 4 → 25% drift → WARN fires.
     seedRow({ url: 'https://multi.example.com/v1/api', source: 'mppscan,mpp' })
-
-    // Seed enough pure mpp rows to create drift if multi-source were counted
-    for (let i = 0; i < 10; i++) {
-      seedRow({ url: `https://extra-multi-${i}.example.com/v1/api`, source: 'mpp' })
-    }
 
     const warnCalls = []
     const originalWarn = console.warn
@@ -816,15 +814,8 @@ describe('pollMPP reconciliation harness', () => {
       await pollMPP()
 
       const driftWarns = warnCalls.filter(m => m.includes('[mpp] WARN: row/api drift detected:'))
-      // If multi-source row were counted, DB=15 vs API=4 → drift. Correct count: DB=14 (10 seeded + 4 from poll).
-      // Either way there's drift here, but the point is the multi-source row is excluded.
-      // Check the warn message to verify the DB count does NOT include the multi-source row.
-      if (driftWarns.length > 0) {
-        // The DB count in the message should not include the multi-source row
-        // After poll: 4 new from fixture + 10 seeded = 14 pure mpp rows (not 15)
-        assert.ok(!driftWarns[0].includes('DB=15'),
-          'multi-source row must be excluded from reconciliation count')
-      }
+      assert.equal(driftWarns.length, 0,
+        'multi-source row must be excluded from reconciliation count — no drift when excluded')
     } finally {
       console.warn = originalWarn
     }
