@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.2.5] - 2024-03-24
+## [0.2.5] - 2026-03-24
 
 ### Fixed
 - `fileURLToPath` entrypoint guard removed — previously prevented `main()` from running under `npx` (silent exit with no error)
