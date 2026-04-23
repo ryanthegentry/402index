@@ -1,0 +1,71 @@
+# mcp-drift-check.yml
+# Runs on PRs touching mcp-server/** to catch three classes of drift before merge:
+#   1. Build staleness — committed dist/ diverges from tsc output
+#   2. Version-string drift — package.json version, USER_AGENT, McpServer constructor diverge
+#   3. Tarball/allowlist drift — npm pack contents diverge from .tarball-allowlist.txt
+#
+# Target wall-clock: <60s. Hard cap: timeout-minutes: 3.
+# Independent of #216's publish workflow — inline duplication is acceptable for two callers.
+
+name: mcp-drift-check
+
+on:
+  pull_request:
+    paths:
+      - 'mcp-server/**'
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mcp-server
+        run: npm ci
+
+      - name: Build
+        working-directory: mcp-server
+        run: npm run build
+
+      - name: Gate 1 — build staleness
+        run: |
+          git diff --exit-code mcp-server/dist/ || {
+            echo ""
+            echo "ERROR: committed mcp-server/dist/ diverges from tsc output."
+            echo "Fix: cd mcp-server && npm run build && git add dist/ && git commit --amend"
+            exit 1
+          }
+
+      - name: Gate 2 — runtime version drift
+        working-directory: mcp-server
+        run: node --test test/version-drift.test.js
+
+      - name: Gate 3 — tarball allowlist
+        working-directory: mcp-server
+        run: |
+          PACKED=$(npm pack --dry-run --json 2>/dev/null | jq -r '.[0].files[].path' | sed 's|^package/||' | sort)
+          ALLOWLIST=$(sort .tarball-allowlist.txt)
+          DIFF=$(diff -u <(echo "$ALLOWLIST") <(echo "$PACKED") || true)
+          if [ -n "$DIFF" ]; then
+            echo ""
+            echo "ERROR: npm pack contents diverge from .tarball-allowlist.txt"
+            echo ""
+            echo "$DIFF"
+            echo ""
+            echo "Fix: update mcp-server/.tarball-allowlist.txt to match npm pack output,"
+            echo "     or update mcp-server/package.json#files to match the allowlist."
+            exit 1
+          fi
