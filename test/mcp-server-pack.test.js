@@ -10,13 +10,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
 const mcpDir = join(root, 'mcp-server')
 
+// Skip when mcp-server deps aren't installed (root CI job doesn't install them;
+// the separate mcp-server-test CI job handles mcp-server testing).
+const mcpDepsInstalled = existsSync(join(mcpDir, 'node_modules'))
+
 /**
  * Smoke test: npm pack of @402index/mcp-server produces a usable package.
  *
  * Catches package-shape regressions before they reach npm consumers.
  * Does not hit the network — purely validates local tarball contents.
  */
-describe('mcp-server-pack', () => {
+describe('mcp-server-pack', { skip: !mcpDepsInstalled }, () => {
   const tmpDir = mkdtempSync(join(tmpdir(), 'mcp-pack-'))
   let tarballName
 
