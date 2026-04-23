@@ -245,6 +245,92 @@ describe('buildServiceQuery', () => {
     assert.equal(rows[0].name, 'foo\\bar API')
   })
 
+  // ─── Sort parameter validation (issue #234) ──────────────────────────
+  // These tests document the security-critical invariant that invalid sort
+  // values are blocked by the SORT_COLUMNS allowlist and fall back to
+  // DEFAULT_ORDER. This is a coverage-only change — the implementation is
+  // already correct.
+
+  const DEFAULT_ORDER = `ORDER BY
+    featured DESC,
+    domain_verified DESC,
+    CASE WHEN featured = 1 THEN 0 ELSE CASE WHEN category != 'uncategorized' THEN 0 ELSE 1 END END,
+    CASE health_status WHEN 'healthy' THEN 0 WHEN 'degraded' THEN 1 WHEN 'down' THEN 2 WHEN 'unknown' THEN 3 END,
+    name`
+
+  it('valid sort=name produces ORDER BY with name column', () => {
+    const result = buildServiceQuery({ sort: 'name' })
+    assert.ok(result.orderBy.includes('name'), 'orderBy should contain the name column')
+    assert.ok(result.orderBy.includes('featured DESC'), 'orderBy should still lead with featured DESC')
+    assert.notEqual(result.orderBy, DEFAULT_ORDER, 'should not be default order')
+  })
+
+  it('valid sort values map to correct SQL columns', () => {
+    const cases = {
+      name: 'name',
+      price: 'price_usd',
+      latency: 'latency_p50_ms',
+      uptime: 'uptime_30d',
+      reliability: 'reliability_score',
+      registered_at: 'registered_at',
+    }
+    for (const [key, col] of Object.entries(cases)) {
+      const result = buildServiceQuery({ sort: key })
+      assert.ok(result.orderBy.includes(col),
+        `sort=${key} should produce ORDER BY containing ${col}`)
+    }
+  })
+
+  it('SQL injection in sort falls back to DEFAULT_ORDER', () => {
+    const injections = [
+      'CASE WHEN 1=1 THEN name ELSE url END',
+      'DROP TABLE services',
+      "name; DROP TABLE services; --",
+      "1 OR 1=1",
+      "name' OR '1'='1",
+    ]
+    for (const payload of injections) {
+      const result = buildServiceQuery({ sort: payload })
+      assert.equal(result.orderBy, DEFAULT_ORDER,
+        `sort="${payload}" must fall back to DEFAULT_ORDER`)
+    }
+  })
+
+  it('arbitrary invalid sort strings fall back to DEFAULT_ORDER', () => {
+    const invalids = ['bogus', '', 'Name', 'PRICE', 'unknown_col', 'id', 'status']
+    for (const val of invalids) {
+      const result = buildServiceQuery({ sort: val })
+      assert.equal(result.orderBy, DEFAULT_ORDER,
+        `sort="${val}" must fall back to DEFAULT_ORDER`)
+    }
+  })
+
+  it('sort=name with order=desc produces DESC', () => {
+    const result = buildServiceQuery({ sort: 'name', order: 'desc' })
+    assert.ok(result.orderBy.includes('name DESC'))
+  })
+
+  it('sort=name with order=asc produces ASC', () => {
+    const result = buildServiceQuery({ sort: 'name', order: 'asc' })
+    assert.ok(result.orderBy.includes('name ASC'))
+  })
+
+  it('invalid order value defaults to ASC', () => {
+    const invalids = ['invalid', 'DROP', '', 'ascending', "asc'; DROP TABLE --"]
+    for (const val of invalids) {
+      const result = buildServiceQuery({ sort: 'name', order: val })
+      assert.ok(result.orderBy.includes('ASC'),
+        `order="${val}" must default to ASC`)
+      assert.ok(!result.orderBy.includes('DESC') || result.orderBy.indexOf('DESC') < result.orderBy.indexOf('ASC'),
+        `order="${val}" must not produce DESC for the sort column`)
+    }
+  })
+
+  it('undefined sort with no options uses DEFAULT_ORDER', () => {
+    const result = buildServiceQuery({})
+    assert.equal(result.orderBy, DEFAULT_ORDER)
+  })
+
   it('builds payment_asset filter', () => {
     const result = buildServiceQuery({ payment_asset: 'BTC' })
     assert.ok(result.where.includes('payment_asset = @payment_asset'))
