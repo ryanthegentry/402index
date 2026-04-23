@@ -11,6 +11,8 @@ function stmt(key, sql) {
   return stmts[key]
 }
 
+// (a) Reactivation fix: removed WHERE guard, added provider_deleted=0 + conditional approval_reason.
+// Source-merge fix: use instr() exact token match instead of LIKE '%mpp%' (which falsely matches 'mppscan').
 const upsertEndpoint = () => stmt('mppUpsert', `
   INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, provider, source, source_id, http_method, probe_body, hostname)
   VALUES (@id, @name, @description, @url, 'MPP', @price_usd, @payment_asset, @payment_network, @category, @provider, 'mpp', @source_id, @http_method, @probe_body, @hostname)
@@ -26,15 +28,31 @@ const upsertEndpoint = () => stmt('mppUpsert', `
     probe_body = COALESCE(excluded.probe_body, services.probe_body),
     hostname = COALESCE(excluded.hostname, services.hostname),
     source = CASE
-      WHEN services.source LIKE '%mpp%' THEN services.source
+      WHEN services.source = 'mpp' THEN services.source
+      WHEN instr(',' || services.source || ',', ',mpp,') > 0 THEN services.source
       ELSE services.source || ',mpp'
     END,
+    provider_deleted = 0,
+    approval_reason = CASE WHEN services.provider_deleted = 1 THEN 'mpp-relisted' ELSE services.approval_reason END,
     updated_at = datetime('now')
-    WHERE services.provider_deleted = 0 OR services.provider_deleted IS NULL
   RETURNING *
 `)
 
-const findExisting = () => stmt('mppFindExisting', "SELECT id FROM services WHERE url = ? AND protocol = 'MPP'")
+// (a) findExisting excludes soft-deleted rows so reappearing rows count as "new"
+const findExisting = () => stmt('mppFindExisting', "SELECT id FROM services WHERE url = ? AND protocol = 'MPP' AND (provider_deleted = 0 OR provider_deleted IS NULL)")
+
+// (b) Sweep helpers — temp-table approach to avoid SQLITE_LIMIT_VARIABLE_NUMBER
+const createSeenTable = () => stmt('mppCreateSeen', 'CREATE TEMP TABLE IF NOT EXISTS mpp_seen_urls (url TEXT PRIMARY KEY)')
+const clearSeenTable = () => stmt('mppClearSeen', 'DELETE FROM mpp_seen_urls')
+const insertSeen = () => stmt('mppInsertSeen', 'INSERT OR IGNORE INTO mpp_seen_urls (url) VALUES (?)')
+const sweepStale = () => stmt('mppSweep', `
+  UPDATE services
+     SET provider_deleted = 1, deleted_at = datetime('now')
+   WHERE source = 'mpp'
+     AND (provider_deleted = 0 OR provider_deleted IS NULL)
+     AND url NOT IN (SELECT url FROM mpp_seen_urls)
+`)
+const dropSeenTable = () => stmt('mppDropSeen', 'DROP TABLE IF EXISTS mpp_seen_urls')
 
 export async function pollMPP() {
   console.log('[mpp] Starting poll...')
@@ -44,20 +62,27 @@ export async function pollMPP() {
     const res = await fetch(MPP_API, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) {
       console.error(`[mpp] HTTP ${res.status} fetching API`)
-      return { new: 0, updated: 0, errors: 0 }
+      return { new: 0, updated: 0, errors: 0, swept: 0 }
     }
     data = await res.json()
   } catch (err) {
     console.error(`[mpp] Fetch error: ${err.message}`)
-    return { new: 0, updated: 0, errors: 0 }
+    return { new: 0, updated: 0, errors: 0, swept: 0 }
   }
 
   const services = data?.services || []
   console.log(`[mpp] Found ${services.length} services`)
 
+  // Empty-response guard: skip sweep to prevent mass-delete footgun
+  if (services.length === 0) {
+    console.warn('[mpp] Empty services array — skipping sweep')
+    return { new: 0, updated: 0, errors: 0, swept: 0 }
+  }
+
   let newCount = 0
   let updatedCount = 0
   let errorCount = 0
+  const seenUrls = new Set()
 
   for (const svc of services) {
     const endpoints = svc.endpoints || []
@@ -67,6 +92,7 @@ export async function pollMPP() {
         if (!record) continue // free endpoint
 
         record.hostname = extractHostname(record.url)
+        seenUrls.add(record.url)
         const existing = findExisting().get(record.url)
         const row = upsertEndpoint().get(record)
         if (existing) updatedCount++
@@ -83,7 +109,42 @@ export async function pollMPP() {
     }
   }
 
+  // Normalization-failure amplification guard: if most endpoints failed to normalize,
+  // seenUrls will be much smaller than the API response, causing an overly broad sweep.
+  // Skip sweep if <10% of services produced valid URLs.
+  let swept = 0
+  if (seenUrls.size < services.length * 0.1) {
+    console.warn(`[mpp] Normalization anomaly: only ${seenUrls.size} URLs from ${services.length} services — skipping sweep`)
+    const totalSynced = newCount + updatedCount
+    console.log(`[mpp] Synced ${totalSynced} endpoints (${newCount} new, ${updatedCount} updated${errorCount > 0 ? `, ${errorCount} errors` : ''})`)
+    return { new: newCount, updated: updatedCount, errors: errorCount, swept: 0 }
+  }
+
+  // (b) Sweep stale rows via temp table
+  try {
+    createSeenTable().run()
+    clearSeenTable().run()
+
+    const insertSeenStmt = insertSeen()
+    db.transaction(() => {
+      for (const url of seenUrls) {
+        insertSeenStmt.run(url)
+      }
+    })()
+
+    const result = sweepStale().run()
+    swept = result.changes
+    if (swept > 0) {
+      console.log(`[mpp] Swept ${swept} stale rows`)
+    }
+
+    dropSeenTable().run()
+  } catch (err) {
+    console.error(`[mpp] Sweep error: ${err.message}`)
+    try { dropSeenTable().run() } catch { /* ignore cleanup error */ }
+  }
+
   const totalSynced = newCount + updatedCount
-  console.log(`[mpp] Synced ${totalSynced} endpoints (${newCount} new, ${updatedCount} updated${errorCount > 0 ? `, ${errorCount} errors` : ''})`)
-  return { new: newCount, updated: updatedCount, errors: errorCount }
+  console.log(`[mpp] Synced ${totalSynced} endpoints (${newCount} new, ${updatedCount} updated${errorCount > 0 ? `, ${errorCount} errors` : ''}${swept > 0 ? `, ${swept} swept` : ''})`)
+  return { new: newCount, updated: updatedCount, errors: errorCount, swept }
 }

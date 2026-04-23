@@ -120,8 +120,17 @@ const MPP_FIXTURE = {
 }
 
 function cleanupMppServices() {
-  db.prepare("DELETE FROM health_checks WHERE service_id IN (SELECT id FROM services WHERE source = 'mpp')").run()
-  db.prepare("DELETE FROM services WHERE source = 'mpp'").run()
+  db.prepare("DELETE FROM health_checks WHERE service_id IN (SELECT id FROM services WHERE source LIKE '%mpp%')").run()
+  db.prepare("DELETE FROM services WHERE source LIKE '%mpp%'").run()
+}
+
+function seedRow({ url, protocol = 'MPP', source = 'mpp', provider_deleted = 0, deleted_at = null, name = 'Test', source_id = null }) {
+  const id = crypto.randomUUID()
+  db.prepare(`
+    INSERT INTO services (id, name, url, protocol, source, source_id, provider_deleted, deleted_at, hostname)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, url, protocol, source, source_id || `seed:${url}`, provider_deleted, deleted_at, 'test.example.com')
+  return id
 }
 
 describe('pollMPP', () => {
@@ -362,6 +371,239 @@ describe('MPP POST auto-detection (unit)', () => {
     const { classifyHealthStatus } = await import('../src/health/checker.js')
     const result = classifyHealthStatus(400, null, 0, null, 200)
     assert.notEqual(result.healthStatus, 'healthy')
+  })
+})
+
+describe('pollMPP sweep + reactivation', () => {
+  beforeEach(() => {
+    cleanupMppServices()
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+    cleanupMppServices()
+  })
+
+  it('reactivates a soft-deleted row when it reappears in the API', async () => {
+    // Seed a soft-deleted row whose URL matches the fixture
+    const url = 'https://openai.mpp.tempo.xyz/v1/responses'
+    seedRow({ url, provider_deleted: 1, deleted_at: '2026-04-01 00:00:00' })
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    const row = db.prepare("SELECT provider_deleted, deleted_at FROM services WHERE url = ? AND protocol = 'MPP'").get(url)
+    assert.equal(row.provider_deleted, 0, 'row should be reactivated')
+    // The reappearing row should count as new (not updated), since findExisting excludes soft-deleted
+    assert.ok(result.new >= 1, 'reactivated row should count as new')
+  })
+
+  it('sweeps stale rows not present in API response', async () => {
+    // Seed a row that won't appear in the fixture
+    seedRow({ url: 'https://stale.example.com/v1/old', source: 'mpp' })
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    assert.equal(typeof result.swept, 'number', 'result must include swept count')
+    assert.ok(result.swept >= 1, 'stale row should be swept')
+
+    const stale = db.prepare("SELECT provider_deleted, deleted_at FROM services WHERE url = 'https://stale.example.com/v1/old' AND protocol = 'MPP'").get()
+    assert.equal(stale.provider_deleted, 1, 'stale row should be soft-deleted')
+    assert.ok(stale.deleted_at, 'deleted_at must be set for purgeSoftDeleted()')
+  })
+
+  it('sweep is idempotent — second run sweeps 0', async () => {
+    seedRow({ url: 'https://orphan.example.com/v1/dead', source: 'mpp' })
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const first = await pollMPP()
+    assert.ok(first.swept >= 1, 'first run should sweep orphans')
+
+    const second = await pollMPP()
+    assert.equal(second.swept, 0, 'second run should sweep 0')
+  })
+
+  it('does NOT sweep when API returns empty services array', async () => {
+    seedRow({ url: 'https://keeper.example.com/v1/stay', source: 'mpp' })
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ services: [] }),
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    assert.equal(result.swept, 0, 'sweep must be skipped on empty response')
+
+    const row = db.prepare("SELECT provider_deleted FROM services WHERE url = 'https://keeper.example.com/v1/stay' AND protocol = 'MPP'").get()
+    assert.equal(row.provider_deleted, 0, 'existing row must not be soft-deleted')
+  })
+
+  it('sweep scope is exact source=mpp — does NOT touch mppscan or multi-source rows', async () => {
+    seedRow({ url: 'https://multi.example.com/v1/a', source: 'mpp,bazaar' })
+    seedRow({ url: 'https://multi.example.com/v1/b', source: 'bazaar,mpp' })
+    seedRow({ url: 'https://scan.example.com/v1/c', source: 'mppscan' })
+    seedRow({ url: 'https://only-mpp.example.com/v1/d', source: 'mpp' })
+
+    // Fixture has none of these URLs
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    await pollMPP()
+
+    // Multi-source and mppscan rows must NOT be swept
+    const multi1 = db.prepare("SELECT provider_deleted FROM services WHERE url = 'https://multi.example.com/v1/a'").get()
+    assert.equal(multi1.provider_deleted, 0, 'mpp,bazaar row must not be swept')
+
+    const multi2 = db.prepare("SELECT provider_deleted FROM services WHERE url = 'https://multi.example.com/v1/b'").get()
+    assert.equal(multi2.provider_deleted, 0, 'bazaar,mpp row must not be swept')
+
+    const scan = db.prepare("SELECT provider_deleted FROM services WHERE url = 'https://scan.example.com/v1/c'").get()
+    assert.equal(scan.provider_deleted, 0, 'mppscan row must not be swept')
+
+    // Pure mpp row should be swept
+    const pure = db.prepare("SELECT provider_deleted FROM services WHERE url = 'https://only-mpp.example.com/v1/d'").get()
+    assert.equal(pure.provider_deleted, 1, 'source=mpp row should be swept')
+  })
+
+  it('deleted_at is set on swept rows for purgeSoftDeleted()', async () => {
+    seedRow({ url: 'https://purgable.example.com/v1/x', source: 'mpp' })
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    await pollMPP()
+
+    const row = db.prepare("SELECT deleted_at FROM services WHERE url = 'https://purgable.example.com/v1/x'").get()
+    assert.ok(row.deleted_at, 'deleted_at must be set so purgeSoftDeleted() can fire')
+  })
+
+  it('skips sweep when most normalizations fail (amplification guard)', async () => {
+    // Seed 20 rows that would be swept if guard fails
+    for (let i = 0; i < 20; i++) {
+      seedRow({ url: `https://real-service-${i}.example.com/v1/api`, source: 'mpp' })
+    }
+
+    // 100 services but all with broken URLs that normalize to null
+    const brokenFixture = { version: 1, services: [] }
+    for (let i = 0; i < 100; i++) {
+      brokenFixture.services.push({
+        id: `broken-${i}`,
+        name: `Broken ${i}`,
+        // missing url and serviceUrl — normalizeMppEndpoint returns null
+        categories: ['ai'],
+        provider: { name: `Provider ${i}` },
+        endpoints: [{
+          method: 'GET',
+          path: '/v1/data',
+          description: 'Data endpoint',
+          payment: { amount: '1000', decimals: 6, method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50' },
+        }],
+      })
+    }
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => brokenFixture,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    const result = await pollMPP()
+
+    assert.equal(result.swept, 0, 'sweep must be skipped when most normalizations fail')
+
+    // Verify existing rows were NOT swept
+    const alive = db.prepare("SELECT COUNT(*) as c FROM services WHERE source = 'mpp' AND provider_deleted = 0").get()
+    assert.ok(alive.c >= 20, 'existing rows must survive normalization-failure scenario')
+  })
+
+  it('handles 1500+ URLs without SQLITE_LIMIT_VARIABLE_NUMBER error', async () => {
+    // Generate a fixture with 1500+ endpoints
+    const bigFixture = { version: 1, services: [] }
+    for (let i = 0; i < 1500; i++) {
+      bigFixture.services.push({
+        id: `svc-${i}`,
+        name: `Service ${i}`,
+        url: `https://big${i}.mpp.tempo.xyz`,
+        serviceUrl: `https://big${i}.mpp.tempo.xyz`,
+        categories: ['ai'],
+        provider: { name: `Provider ${i}` },
+        endpoints: [{
+          method: 'GET',
+          path: '/v1/data',
+          description: 'Data endpoint',
+          payment: { amount: '1000', decimals: 6, method: 'tempo', currency: '0x20c000000000000000000000b9537d11c60e8b50' },
+        }],
+      })
+    }
+
+    // Seed one orphan that should be swept
+    seedRow({ url: 'https://big-orphan.example.com/v1/z', source: 'mpp' })
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => bigFixture,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    // Must not throw SQLITE_ERROR: too many SQL variables
+    const result = await pollMPP()
+    assert.equal(typeof result.swept, 'number', 'sweep must complete without variable-limit error')
+    assert.ok(result.swept >= 1, 'orphan should be swept')
+  })
+})
+
+describe('pollMPP source-merge fix', () => {
+  beforeEach(() => {
+    cleanupMppServices()
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch
+    cleanupMppServices()
+  })
+
+  it('appends ,mpp to mppscan-only rows (source-merge exact match)', async () => {
+    // Seed a row with source='mppscan' that has the same URL as a fixture endpoint
+    const url = 'https://openai.mpp.tempo.xyz/v1/responses'
+    seedRow({ url, source: 'mppscan', source_id: 'openai:/v1/responses' })
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => MPP_FIXTURE,
+    })
+
+    const { pollMPP } = await import('../src/aggregators/mpp.js')
+    await pollMPP()
+
+    const row = db.prepare("SELECT source FROM services WHERE url = ? AND protocol = 'MPP'").get(url)
+    assert.ok(row.source.includes('mppscan'), 'must retain mppscan')
+    assert.ok(row.source.includes('mpp'), 'must include mpp')
+    // The old LIKE '%mpp%' bug would match 'mppscan' and skip appending ',mpp'
+    assert.match(row.source, /mppscan,mpp|mpp,mppscan/, 'source must contain both tokens')
   })
 })
 
