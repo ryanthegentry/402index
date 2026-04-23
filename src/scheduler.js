@@ -5,6 +5,7 @@ import { pollL402Apps } from './aggregators/l402apps.js'
 import { pollSponge } from './aggregators/sponge.js'
 import { pollL402Directory } from './aggregators/l402directory.js'
 import { pollMPP } from './aggregators/mpp.js'
+import { pollMppscan } from './aggregators/mppscan.js'
 import { runHealthChecks } from './health/checker.js'
 import { classifyServices } from './services/classify.js'
 import { captureSnapshot } from './services/daily-snapshot.js'
@@ -62,6 +63,15 @@ function runMPPPoll() {
     .catch(err => console.error('[scheduler] MPP poll failed:', err.message))
 }
 
+function runMppscanPoll() {
+  return pollMppscan()
+    .then(() => {
+      loadFeatured()
+      classifyServices()
+    })
+    .catch(err => console.error('[scheduler] MPPscan poll failed:', err.message))
+}
+
 function runHealthCheckGuarded() {
   if (healthCheckRunning) return
   healthCheckRunning = true
@@ -92,6 +102,7 @@ export function startScheduler() {
   runSpongePoll()
   runL402DirectoryPoll()
   runMPPPoll()
+  runMppscanPoll()
 
   const bazaarInterval = parseInt(process.env.BAZAAR_POLL_INTERVAL_MS) || 3600000
   setInterval(runPolls, bazaarInterval)
@@ -110,6 +121,10 @@ export function startScheduler() {
   // MPP: hourly poll (simple API, no rate limits)
   const mppInterval = parseInt(process.env.MPP_POLL_INTERVAL_MS) || 3600000
   setInterval(runMPPPoll, mppInterval)
+
+  // MPPscan: daily poll (unannounced API, avoid hammering)
+  const mppscanInterval = parseInt(process.env.MPPSCAN_POLL_INTERVAL_MS) || 86400000
+  setInterval(runMppscanPoll, mppscanInterval)
 
   // Delay health checks 30s to let polls finish first
   setTimeout(runHealthCheckGuarded, 30000)
