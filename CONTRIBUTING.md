@@ -1,44 +1,62 @@
-# Contributing to 402index
+# Contributing to 402 Index
 
-402index.io is a protocol-agnostic directory of paid APIs for AI agents. We aggregate services from multiple sources and welcome new listings — especially L402 (Lightning) APIs.
+Thanks for considering a contribution. 402 Index is a community-owned registry — PRs for listings, code, docs, and infrastructure are all welcome.
 
-## Submitting a New Listing
+## Ways to contribute
 
-### Option 1: YAML Pull Request (preferred)
+- **Submit a new listing** (your API or one you know of) → see [Submitting a listing](#submitting-a-listing).
+- **Fix a bug or add a feature** → browse [open issues](https://github.com/ryanthegentry/402index/issues), especially those labeled `good-first-issue`.
+- **Improve docs** → typo fixes, clearer explanations, API examples — all appreciated.
+- **Report a bug** → [open an issue](https://github.com/ryanthegentry/402index/issues/new).
+
+Security issues should go through [SECURITY.md](SECURITY.md), not public issues.
+
+## Submitting a listing
+
+### Option 1: Self-serve API
+
+```bash
+curl -X POST https://402index.io/api/v1/register \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://api.example.com/v1/resource"}'
+```
+
+The probe will validate the 402 challenge, detect L402 and/or x402 support, and list automatically.
+
+### Option 2: YAML pull request
 
 1. Fork this repo
-2. Create a new YAML file in `listings/` named after your service (e.g., `listings/my-api.yaml`)
-3. Use this template:
+2. Create a new YAML file in `listings/` named after your service (e.g., `listings/my-api.yaml`):
 
 ```yaml
 name: "My Lightning API"
 description: "One-line description of what this API does"
 url: "https://api.example.com/v1/resource"
 protocol: "L402"          # L402 or x402
-price_sats: 100           # Price per request in satoshis (for L402)
-# price_usd: 0.001        # Price per request in USD (for x402)
-payment_asset: "BTC/Lightning"
-payment_network: "lightning"
+price_sats: 100           # For L402 (satoshis per request)
+# price_usd: 0.001        # For x402 (USD per request)
+payment_asset: "BTC"
+payment_network: "Lightning"
 category: "ai/ml"         # See categories below
 provider: "Your Org Name"
 ```
 
-4. Open a PR with the title: `Add listing: [Your Service Name]`
+3. Open a PR titled `Add listing: [Your Service Name]`.
 
-### Option 2: Submit via l402apps.com
+### Option 3: Already listed elsewhere
 
-Visit [l402apps.com](https://www.l402apps.com) and use the Submit button. Your listing will be automatically ingested into 402index on the next sync.
+If your endpoint is on the x402 Bazaar, Satring, l402apps, or MPP's OpenAPI directory, you're already indexed — no action needed. If you're missing, open an issue with the source and we'll investigate the aggregator.
 
-## Requirements
+### Listing requirements
 
-- **The URL must be a real, working endpoint.** We run automated health checks every 15 minutes.
-- **L402 services must return HTTP 402** when accessed without a valid L402 token. This is how we verify the paywall is working.
-- **x402 services must return HTTP 402** with a valid x402 payment challenge.
-- **No duplicate URLs.** We dedup by URL + protocol. If your service is already listed (e.g., via Bazaar or Satring), your PR will update the existing entry.
+- The URL must resolve to a real, reachable endpoint. Automated health checks run every 15 minutes.
+- L402 services must return HTTP 402 with a valid L402 challenge when accessed without a token.
+- x402 services must return HTTP 402 with a valid x402 payment challenge.
+- Dedup is by `(url, protocol)`. A PR with a duplicate URL will update the existing entry.
 
-## Categories
+### Categories
 
-Use one of these categories (or propose a new one):
+Use one of these (or propose a new one in your PR):
 
 | Category | Description |
 |----------|-------------|
@@ -57,27 +75,51 @@ Use one of these categories (or propose a new one):
 | `tools/moderation` | Content moderation, filtering |
 | `tools/marketplace` | Job boards, task markets |
 
-## What Happens After You Submit
+### After submission
 
-1. Your PR is reviewed (usually within 24 hours)
+1. PR reviewed (usually within 24 hours)
 2. Once merged, the listing appears on [402index.io](https://402index.io) immediately
 3. Health checks begin within 15 minutes
-4. If the endpoint responds with 402, it's marked **healthy**
-5. If it doesn't respond correctly, it's marked **degraded** or **down**
+4. Healthy services appear with a green shield. Verified services (domain + payment) appear with a blue shield.
 
-## Featured Listings
+### Featured listings
 
-Want your service featured (pinned to the top)? Open an issue or mention it in your PR. Featured listings must be healthy and actively maintained.
+Want your service pinned to the top of the directory? Open an issue or mention it in your PR. Featured listings must be healthy and actively maintained.
 
-## Assertion Guardrail
+## Code contributions
 
-This project has a structural check (`scripts/check-assertion-flips.sh`) that detects when an existing test assertion is modified — specifically, when an assertion is removed and a new one is added within the same diff hunk. This prevents accidental regression-cementing, where a test is silently changed to match buggy behavior instead of catching it.
+### Setup
 
-### When you modify an existing test assertion
+```bash
+git clone https://github.com/ryanthegentry/402index.git
+cd 402index
+npm install
+npm test
+npm run dev
+```
 
-Add one of these keywords to your **commit message body** (not the subject line):
+### Development flow
 
-**`BEHAVIOR-CHANGE: <summary>`** — Use when the user-facing behavior is intentionally changing.
+1. Fork the repo and create a topic branch off `master`.
+2. Make your change. Keep PRs focused — one concern per PR.
+3. Add or update tests. See [CLAUDE.md](CLAUDE.md) for the bug-fix protocol (failing-test-first).
+4. Run `npm test` and ensure all tests pass.
+5. Open a PR with a clear title and description. Link related issues.
+
+### Commit messages
+
+Conventional commits are preferred (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`), but not strictly enforced.
+
+### Assertion guardrail
+
+This project has a structural check that detects when an existing test assertion is modified — specifically, when an assertion is removed and a new one is added within the same diff hunk. This prevents accidentally rewriting tests to match buggy behavior instead of catching it.
+
+When you intentionally modify an existing test assertion, add one of these keywords to the **body** of your commit message (not the subject line):
+
+- **`BEHAVIOR-CHANGE: <summary>`** — use when the user-facing behavior is intentionally changing.
+- **`ASSERTION-REFACTOR: <summary>`** — use for cosmetic changes that don't alter behavioral contracts (variable renames, switching assertion methods, reformatting).
+
+Example:
 
 ```
 fix: add auth gate to admin dashboard
@@ -88,42 +130,14 @@ accessible.
 BEHAVIOR-CHANGE: admin page now requires server-side auth gate
 ```
 
-**`ASSERTION-REFACTOR: <summary>`** — Use for cosmetic changes that don't alter behavioral contracts (variable renames, switching assertion methods, reformatting).
+The check triggers only when a hunk in `test/**/*.test.js` contains both a removed (`-`) and added (`+`) line matching common assertion methods (`assert.equal`, `assert.ok`, `assert.deepEqual`, `assert.strictEqual`, etc.). It does NOT trigger for adding new assertions, deleting without replacement, or changes in separate hunks.
 
-```
-refactor: use strictEqual in admin tests
+## Code of conduct
 
-ASSERTION-REFACTOR: switch assert.equal to assert.strictEqual for consistency
-```
-
-### What triggers the check
-
-- A diff hunk in `test/**/*.test.js` that contains both a removed (`-`) and added (`+`) line matching common assertion methods (`assert.equal`, `assert.ok`, `assert.deepEqual`, `assert.strictEqual`, etc.)
-
-### What does NOT trigger the check
-
-- Adding new assertions (no removals in the same hunk)
-- Deleting assertions without replacement
-- Changes to non-test files (`src/`, `scripts/`, etc.)
-- Modifications in separate hunks (a deletion in one hunk and an addition in a different hunk)
-
-### If the check fires
-
-The error message will show the exact file, hunk, and assertion pair that triggered the detection, along with instructions for adding the appropriate keyword.
-
-## Dispatch Recovery
-
-If a wrapper subshell gets stuck, the dispatch loop will auto-kill it via `check_timeouts()` (per-stage thresholds in `MAX_SESSION_MINUTES_*` env vars). No manual action required.
-
-If the dispatch loop itself becomes unresponsive (rare):
-
-1. Find the loop PID: `pgrep -f 'cc-dispatch.sh --watch'`
-2. Send SIGTERM to trigger the global shutdown trap: `kill <pid>`
-3. The global trap kills all background wrappers via `kill $(jobs -rp)`. Each wrapper's EXIT trap then kills its `claude` child and cleans state.
-4. If wrappers don't exit within ~15s: `pkill -9 -f 'cc-dispatch.sh'` and `pkill -9 -f 'claude --print'` as a last resort, then manually `gh issue edit --remove-label in-progress` on any issues left in-progress.
-
-A standalone `scripts/cc-dispatch-killstuck.sh` operator script is **deferred** as a follow-up. Defects 1+2 should make manual intervention rare; the script is justified only if production observation shows it's needed.
+Be kind, be specific, be patient. Disagree technically, not personally. Maintainers and contributors are volunteers.
 
 ## Questions?
 
-Open an issue on this repo or email hello@402index.io.
+- [Open a discussion](https://github.com/ryanthegentry/402index/discussions)
+- [Open an issue](https://github.com/ryanthegentry/402index/issues/new)
+- Email: hello@402index.io
