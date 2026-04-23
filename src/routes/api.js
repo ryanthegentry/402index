@@ -1274,6 +1274,37 @@ router.post('/admin/services/:id/restore', (req, res) => {
   res.json({ restored: true, id: req.params.id, name: service.name })
 })
 
+// POST /admin/services/:id/probe-status — Toggle probe_status for unprobeable gateways (#236)
+router.post('/admin/services/:id/probe-status', (req, res) => {
+  const { probe_status } = req.body || {}
+  if (!probe_status || !['probeable', 'unprobeable'].includes(probe_status)) {
+    return res.status(400).json({ error: "probe_status must be 'probeable' or 'unprobeable'" })
+  }
+  const service = db.prepare('SELECT id, name, probe_status FROM services WHERE id = ?').get(req.params.id)
+  if (!service) {
+    return res.status(404).json({ error: 'Service not found' })
+  }
+  const oldStatus = service.probe_status || 'probeable'
+  if (probe_status === 'unprobeable') {
+    // Reset stale health metrics when marking unprobeable
+    db.prepare(`
+      UPDATE services SET
+        probe_status = 'unprobeable',
+        health_status = 'unknown',
+        consecutive_failures = 0,
+        uptime_30d = NULL,
+        latency_p50_ms = NULL,
+        reliability_score = NULL,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `).run(req.params.id)
+  } else {
+    db.prepare("UPDATE services SET probe_status = 'probeable', updated_at = datetime('now') WHERE id = ?").run(req.params.id)
+  }
+  console.log(`[admin/probe-status] ${service.name}: ${oldStatus} → ${probe_status}`)
+  res.json({ id: req.params.id, probe_status, previous: oldStatus })
+})
+
 // ─── Admin Domain Verification Funnel ─────────────────────────────────────
 
 router.get('/admin/domains', (req, res) => {

@@ -63,7 +63,8 @@ export function createTestDb() {
       l402_degrade_reason TEXT,
       l402_format TEXT,
       consecutive_latency_spikes INTEGER DEFAULT 0,
-      lnget_compatible INTEGER
+      lnget_compatible INTEGER,
+      probe_status TEXT DEFAULT 'probeable'
     );
 
     CREATE INDEX idx_services_protocol ON services(protocol);

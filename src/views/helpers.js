@@ -21,7 +21,10 @@ export function escapeXml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
 }
 
-export function healthDot(status) {
+export function healthDot(status, probeStatus) {
+  if (probeStatus === 'unprobeable') {
+    return '<span class="health-dot health-unprobeable"></span>unprobeable'
+  }
   const s = escapeHtml(status)
   return `<span class="health-dot health-${s}"></span>${s}`
 }
