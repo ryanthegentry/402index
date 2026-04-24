@@ -21,7 +21,7 @@ const ROUTE_MAP = [
       if (p.get('limit') === '1') return 'services-limit-1.json'
       if (p.get('limit') === '3') return 'services-limit-3.json'
       if (p.get('limit') === '5') return 'services-limit-5.json'
-      return 'services-limit-5.json'
+      return null
     },
   },
 ]
@@ -37,7 +37,11 @@ function resolveFixture(urlStr) {
 
   for (const route of ROUTE_MAP) {
     if (route.pathname === pathname) {
-      return typeof route.match === 'function' ? route.match(url) : route.fixture
+      const fixture = typeof route.match === 'function' ? route.match(url) : route.fixture
+      if (!fixture) {
+        throw new Error(`[mock-fetch] No fixture for services query: ${url.search} — add a fixture and update the match() function in mock-fetch.js`)
+      }
+      return fixture
     }
   }
 
