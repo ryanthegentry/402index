@@ -1,8 +1,16 @@
-import { describe, it } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { installMockFetch, restoreFetch } from './helpers/mock-fetch.js'
+
+const useLive = process.env.MCP_SMOKE_LIVE === '1'
+
+if (!useLive) {
+  before(() => installMockFetch())
+  after(() => restoreFetch())
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
@@ -124,8 +132,8 @@ describe('DEFAULT_FIELDS / filterFields / toCsv helpers (unit)', () => {
 
 // ─── Feature parity: search_services (live API) ───────────────────────────────
 
-describe('search_services feature parity (live API)', () => {
-  const BASE = process.env.INDEX_URL || 'https://402index.io'
+describe('search_services feature parity', () => {
+  const BASE = process.env.INDEX_URL || 'http://mock.test'
 
   it('search_services default response contains only DEFAULT_FIELDS', async () => {
     const { filterFields, DEFAULT_FIELDS } = await import('../dist/index.js')
@@ -161,10 +169,10 @@ describe('search_services feature parity (live API)', () => {
   })
 })
 
-// ─── list_categories summary shape (live API) ────────────────────────────────
+// ─── list_categories summary shape ────────────────────────────────────────────
 
-describe('list_categories summary=true shape (live API)', () => {
-  const BASE = process.env.INDEX_URL || 'https://402index.io'
+describe('list_categories summary=true shape', () => {
+  const BASE = process.env.INDEX_URL || 'http://mock.test'
 
   it('categories response flattens to name+count shape with summary logic', async () => {
     const res = await fetch(`${BASE}/api/v1/categories`)

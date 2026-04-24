@@ -47,6 +47,16 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
+      - name: Check if version already on npm
+        id: npm_check
+        run: |
+          if npm view "@402index/mcp-server@${{ env.VERSION }}" version 2>/dev/null | grep -qF "${{ env.VERSION }}"; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::@402index/mcp-server@${{ env.VERSION }} already on npm — publish + propagation wait will be skipped."
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Pack tarball
         run: cd mcp-server && npm pack
 
@@ -71,10 +81,12 @@ jobs:
           retention-days: 90
 
       - name: Publish to npm (OIDC trusted publisher)
+        if: steps.npm_check.outputs.already_published != 'true'
         run: npm publish --access public
         working-directory: mcp-server
 
       - name: Wait for npm registry propagation
+        if: steps.npm_check.outputs.already_published != 'true'
         run: |
           MAX_ATTEMPTS=10
           ATTEMPT=0

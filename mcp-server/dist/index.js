@@ -6,7 +6,23 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 const INDEX_URL = process.env.INDEX_URL || 'https://402index.io';
 export const USER_AGENT = '402index-mcp/0.3.0';
-async function fetchJson(path, params) {
+/**
+ * Fetch JSON from the 402 Index API with retry on 5xx.
+ *
+ * @internal Exported for test access only. Not part of the public library API.
+ * Consumers should use the MCP tool handlers (`search_services`, `get_service_detail`,
+ * `list_categories`, `get_directory_stats`) which wrap this function.
+ *
+ * Retry behavior is controlled by the `FETCH_RETRIES` env var:
+ * - unset (default): 2 attempts with 500ms backoff between
+ * - `0` or `''`: 1 attempt, fail-fast (no retries)
+ * - positive integer: that many attempts
+ * - invalid (NaN, negative, non-finite): falls back to default 2
+ *
+ * 4xx responses are NEVER retried. Only 5xx triggers retry.
+ * Returns `{error: true, status, message}` on final failure — does not throw.
+ */
+export async function fetchJson(path, params) {
     const url = new URL(path, INDEX_URL);
     if (params) {
         for (const [k, v] of Object.entries(params)) {
@@ -14,11 +30,19 @@ async function fetchJson(path, params) {
                 url.searchParams.set(k, v);
         }
     }
-    const res = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } });
-    if (!res.ok) {
-        return { error: true, status: res.status, message: `API returned ${res.status}` };
+    const raw = Number(process.env.FETCH_RETRIES);
+    const maxAttempts = Number.isFinite(raw) && raw >= 0 ? Math.max(1, raw) : 2;
+    let lastRes;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        lastRes = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } });
+        if (lastRes.ok)
+            return await lastRes.json();
+        if (lastRes.status < 500)
+            break;
+        if (attempt < maxAttempts - 1)
+            await new Promise((r) => setTimeout(r, 500));
     }
-    return await res.json();
+    return { error: true, status: lastRes.status, message: `API returned ${lastRes.status}` };
 }
 export const DEFAULT_FIELDS = ['name', 'url', 'protocol', 'price_sats', 'health_status'];
 export function filterFields(services, fields) {
