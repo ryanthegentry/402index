@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -105,4 +105,29 @@ describe('publish-mcp workflow structural assertions', () => {
       'Publish to MCP Registry step must NOT be gated on npm_check'
     );
   });
+});
+
+// ─── Constraint #12: no hardcoded production URL in mock-based test files ─────
+
+describe('constraint #12 — no hardcoded 402index.io in mock-based test files', () => {
+  const MOCK_TEST_FILES = ['tools.test.js', 'mcp-0.2.5-parity.test.js', 'mcp-verified.test.js'];
+
+  for (const filename of MOCK_TEST_FILES) {
+    it(`${filename} does not contain hardcoded https://402index.io as a fetch URL`, () => {
+      const content = readFileSync(join(__dirname, filename), 'utf8');
+      // Filter out lines that are purely package.json metadata assertions (e.g. homepage, author)
+      const lines = content.split('\n');
+      const violating = lines.filter((line) => {
+        if (!line.includes('https://402index.io')) return false;
+        // Allow: string comparisons against package.json field values (homepage, author, bugs.url)
+        if (/assert\.\w+\(.*https:\/\/402index\.io/.test(line)) return false;
+        return true;
+      });
+      assert.strictEqual(
+        violating.length,
+        0,
+        `${filename} contains ${violating.length} hardcoded https://402index.io reference(s) used as fetch URL — the module under test owns the URL, tests must not hardcode it:\n${violating.map((l) => l.trim()).join('\n')}`
+      );
+    });
+  }
 });

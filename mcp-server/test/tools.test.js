@@ -9,7 +9,7 @@ if (!useLive) {
   after(() => restoreFetch())
 }
 
-const INDEX_URL = process.env.INDEX_URL || 'https://402index.io'
+const INDEX_URL = process.env.INDEX_URL || 'http://mock.test'
 
 async function fetchJson(path) {
   const res = await fetch(`${INDEX_URL}${path}`)

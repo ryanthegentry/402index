@@ -9,7 +9,7 @@ if (!useLive) {
   after(() => restoreFetch())
 }
 
-const INDEX_URL = process.env.INDEX_URL || 'https://402index.io'
+const INDEX_URL = process.env.INDEX_URL || 'http://mock.test'
 
 describe('402 Index API — verified param contract tests (#125)', () => {
   it('GET /api/v1/services?verified=true accepts the parameter', async () => {

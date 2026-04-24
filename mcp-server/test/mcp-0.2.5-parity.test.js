@@ -133,7 +133,7 @@ describe('DEFAULT_FIELDS / filterFields / toCsv helpers (unit)', () => {
 // ─── Feature parity: search_services (live API) ───────────────────────────────
 
 describe('search_services feature parity', () => {
-  const BASE = process.env.INDEX_URL || 'https://402index.io'
+  const BASE = process.env.INDEX_URL || 'http://mock.test'
 
   it('search_services default response contains only DEFAULT_FIELDS', async () => {
     const { filterFields, DEFAULT_FIELDS } = await import('../dist/index.js')
@@ -172,7 +172,7 @@ describe('search_services feature parity', () => {
 // ─── list_categories summary shape ────────────────────────────────────────────
 
 describe('list_categories summary=true shape', () => {
-  const BASE = process.env.INDEX_URL || 'https://402index.io'
+  const BASE = process.env.INDEX_URL || 'http://mock.test'
 
   it('categories response flattens to name+count shape with summary logic', async () => {
     const res = await fetch(`${BASE}/api/v1/categories`)
