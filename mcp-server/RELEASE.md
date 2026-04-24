@@ -13,7 +13,7 @@ These steps are performed once and do not repeat per release.
 **GitHub Actions environment `mcp-publish`:**
 - Create at: https://github.com/ryanthegentry/402index/settings/environments
 - Name: `mcp-publish` (no description field exists in GHA environments)
-- Required reviewers: not available on Free plan for private repos. Activates automatically when repo flips public (per PRD #164 D11). Until then, the pre-tag local smoke test is the human gate.
+- Required reviewers: not available on Free plan for private repos. Activates automatically when repo flips public. Until then, the pre-tag local smoke test is the human gate.
 
 **MCP Registry namespace:**
 - Confirm `mcp-server/package.json#mcpName` === `mcp-server/server.json#name` === `io.github.ryanthegentry/402index`

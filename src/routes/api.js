@@ -8,6 +8,7 @@ import { normalizeUrl, extractHostname } from '../services/url-normalize.js'
 import { probeEndpoint } from '../services/probe-endpoint.js'
 import { getPrimaryDetection } from '../services/detect-protocol.js'
 import { getProvider } from '../services/l402-provider.js'
+import { DEPRECATED_ENV_SECRET, DEPRECATED_HEADER, DEPRECATED_PROVIDER } from '../services/partner-gateway-aliases.js'
 import { registerWebhook, deleteWebhook, getWebhook } from '../services/webhooks.js'
 import { emit } from '../services/events.js'
 import { findOpportunities } from '../services/opportunities.js'
@@ -780,19 +781,19 @@ router.post('/register', async (req, res) => {
     let service = registerUpsert().get(params)
 
     // Auto-approve trusted providers — probe already validated compliance above
-    // Requires GOLEM_GATEWAY_SECRET env var + matching X-Golem-Gateway-Secret header
-    const golemSecret = process.env.GOLEM_GATEWAY_SECRET
-    const golemHeader = req.get('x-golem-gateway-secret')
-    let golemSecretValid = false
-    if (golemSecret && golemHeader) {
-      golemSecretValid = constantTimeEqual(golemSecret, golemHeader)
+    // Requires PARTNER_GATEWAY_SECRET env var + matching X-Partner-Gateway-Secret header
+    const gatewaySecret = process.env.PARTNER_GATEWAY_SECRET || process.env[DEPRECATED_ENV_SECRET]
+    const gatewayHeader = req.get('x-partner-gateway-secret') || req.get(DEPRECATED_HEADER)
+    let gatewaySecretValid = false
+    if (gatewaySecret && gatewayHeader) {
+      gatewaySecretValid = constantTimeEqual(gatewaySecret, gatewayHeader)
     }
-    if (service.status === 'pending' && body.provider === 'golem-gateway' && golemSecretValid) {
+    if (service.status === 'pending' && (body.provider === 'partner-gateway' || body.provider === DEPRECATED_PROVIDER) && gatewaySecretValid) {
       db.prepare(
-        "UPDATE services SET status = 'active', approval_reason = 'golem-gateway', updated_at = datetime('now') WHERE id = ? AND status = 'pending'"
+        "UPDATE services SET status = 'active', approval_reason = 'partner-gateway', updated_at = datetime('now') WHERE id = ? AND status = 'pending'"
       ).run(service.id)
-      service = { ...service, status: 'active', approval_reason: 'golem-gateway' }
-      console.log(`[register] Auto-approved golem-gateway registration: ${url}`)
+      service = { ...service, status: 'active', approval_reason: 'partner-gateway' }
+      console.log(`[register] Auto-approved partner-gateway registration: ${url}`)
     }
 
     // Auto-approve if registering domain is verified (reuse lookup from rate limit check)
@@ -851,11 +852,11 @@ router.post('/register', async (req, res) => {
       let bonusService = registerUpsert().get(bonusParams)
 
       // Apply same auto-approval logic to bonus row
-      if (bonusService.status === 'pending' && body.provider === 'golem-gateway' && golemSecretValid) {
+      if (bonusService.status === 'pending' && (body.provider === 'partner-gateway' || body.provider === DEPRECATED_PROVIDER) && gatewaySecretValid) {
         db.prepare(
-          "UPDATE services SET status = 'active', approval_reason = 'golem-gateway', updated_at = datetime('now') WHERE id = ? AND status = 'pending'"
+          "UPDATE services SET status = 'active', approval_reason = 'partner-gateway', updated_at = datetime('now') WHERE id = ? AND status = 'pending'"
         ).run(bonusService.id)
-        bonusService = { ...bonusService, status: 'active', approval_reason: 'golem-gateway' }
+        bonusService = { ...bonusService, status: 'active', approval_reason: 'partner-gateway' }
       }
 
       if (bonusService.status === 'pending' && isVerifiedDomain) {

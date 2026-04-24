@@ -23,7 +23,7 @@ Use this skill when:
 
 - **Run payment commands synchronously.** Do NOT background lnget or mppx calls. Image generation takes 60-90s — wait for the result inline.
 - **`--no-pay` only works for L402 endpoints, NOT for MPP.** To preview MPP costs, check the price in the 402index listing before paying. Do not use `--no-pay` with `--prefer-scheme payment`.
-- **If search returns errors, skip to the known-good endpoints below.** Do not retry with different query variations — use the Tested Quick Start or category-based search instead.
+- **If search returns errors, skip to the known-good endpoints below.** Do not retry with different query variations — use the Quick Start or category-based search instead.
 
 ## Quick Start
 
@@ -82,7 +82,7 @@ If text search (`q=`) returns 500 errors, use category-based search instead:
 search_services({ category: "ai/image-generation", health: "healthy" })
 ```
 
-Or skip discovery entirely and use a known-good endpoint from the Tested Quick Start section above.
+Or skip discovery entirely and use a known-good endpoint from the Quick Start section above.
 
 ## Step 2: Evaluate the Endpoint
 
@@ -368,7 +368,7 @@ curl -sL "$image_url" -o /tmp/generated-logo.png
 | "exceeds max cost" exit code 2 | Price > --max-cost | Increase `--max-cost` or use `--no-pay` to preview |
 | "payment failed" exit code 3 | Insufficient balance or routing failure | Check `lnget ln status` and wallet balance |
 | `--no-pay` still paid on MPP | `--no-pay` only suppresses L402 payments | For MPP endpoints, check the 402index listing price instead. Do not use `--no-pay` with `--prefer-scheme payment` |
-| 402 Index search returns 500 | Text search (`q=`) intermittently errors | Use category-based search (`category=ai/image-generation`) or skip to Tested Quick Start |
+| 402 Index search returns 500 | Text search (`q=`) intermittently errors | Use category-based search (`category=ai/image-generation`) or skip to Quick Start |
 | 402 Index returns no results | Filters too narrow | Broaden search: remove protocol/category filter, try different query terms |
 | Endpoint shows "degraded" | Paywall works but challenge may be malformed | Try it anyway — if challenge parses, it may still work |
 | mppx "no account" error | Tempo wallet not created | Run `npx mppx account create` then `npx mppx account fund` |

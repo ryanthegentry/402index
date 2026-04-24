@@ -590,7 +590,7 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     assert.ok(r.body.error.includes('Invalid protocol'))
   })
 
-  it('golem-gateway auto-approve works with valid secret', async (t) => {
+  it('partner-gateway auto-approve works with valid secret', async (t) => {
     const ipv6 = findPublicIpv6()
     if (!ipv6) return t.skip('requires public IPv6')
     let serverAvailable = false
@@ -600,16 +600,16 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     } catch { serverAvailable = false }
     if (!serverAvailable) return t.skip('requires running 402index server')
 
-    const secret = process.env.GOLEM_GATEWAY_SECRET
-    if (!secret) return t.skip('requires GOLEM_GATEWAY_SECRET env var')
+    const secret = process.env.PARTNER_GATEWAY_SECRET
+    if (!secret) return t.skip('requires PARTNER_GATEWAY_SECRET env var')
 
     const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${VALID_INVOICE}"`
     const { server, port } = await startMockL402Server(wwwAuth)
     try {
       const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
       const r = await register(
-        { url, name: 'Golem Gateway Test', protocol: 'L402', provider: 'golem-gateway' },
-        { 'x-golem-gateway-secret': secret }
+        { url, name: 'Partner Gateway Test', protocol: 'L402', provider: 'partner-gateway' },
+        { 'x-partner-gateway-secret': secret }
       )
       assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
       assert.equal(r.body.service.status, 'active')
@@ -618,7 +618,7 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     }
   })
 
-  it('golem-gateway without secret header stays pending', async (t) => {
+  it('partner-gateway without secret header stays pending', async (t) => {
     const ipv6 = findPublicIpv6()
     if (!ipv6) return t.skip('requires public IPv6')
     let serverAvailable = false
@@ -628,15 +628,15 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     } catch { serverAvailable = false }
     if (!serverAvailable) return t.skip('requires running 402index server')
 
-    const secret = process.env.GOLEM_GATEWAY_SECRET
-    if (!secret) return t.skip('requires GOLEM_GATEWAY_SECRET env var')
+    const secret = process.env.PARTNER_GATEWAY_SECRET
+    if (!secret) return t.skip('requires PARTNER_GATEWAY_SECRET env var')
 
     const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${VALID_INVOICE}"`
     const { server, port } = await startMockL402Server(wwwAuth)
     try {
       const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
       const r = await register(
-        { url, name: 'Golem No Secret Test', protocol: 'L402', provider: 'golem-gateway' }
+        { url, name: 'Partner No Secret Test', protocol: 'L402', provider: 'partner-gateway' }
       )
       assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
       assert.equal(r.body.service.status, 'pending', 'should NOT auto-approve without secret header')
@@ -645,7 +645,7 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     }
   })
 
-  it('golem-gateway with wrong secret stays pending', async (t) => {
+  it('partner-gateway with wrong secret stays pending', async (t) => {
     const ipv6 = findPublicIpv6()
     if (!ipv6) return t.skip('requires public IPv6')
     let serverAvailable = false
@@ -655,16 +655,16 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     } catch { serverAvailable = false }
     if (!serverAvailable) return t.skip('requires running 402index server')
 
-    const secret = process.env.GOLEM_GATEWAY_SECRET
-    if (!secret) return t.skip('requires GOLEM_GATEWAY_SECRET env var')
+    const secret = process.env.PARTNER_GATEWAY_SECRET
+    if (!secret) return t.skip('requires PARTNER_GATEWAY_SECRET env var')
 
     const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${VALID_INVOICE}"`
     const { server, port } = await startMockL402Server(wwwAuth)
     try {
       const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
       const r = await register(
-        { url, name: 'Golem Wrong Secret Test', protocol: 'L402', provider: 'golem-gateway' },
-        { 'x-golem-gateway-secret': 'wrong-secret-value' }
+        { url, name: 'Partner Wrong Secret Test', protocol: 'L402', provider: 'partner-gateway' },
+        { 'x-partner-gateway-secret': 'wrong-secret-value' }
       )
       assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
       assert.equal(r.body.service.status, 'pending', 'should NOT auto-approve with wrong secret')
@@ -685,12 +685,12 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     assert.ok(!src.includes('Length mismatch'), 'catch-clause comment must be removed')
   })
 
-  it('structural: api.js uses constantTimeEqual(golemSecret, golemHeader)', () => {
+  it('structural: api.js uses constantTimeEqual(gatewaySecret, gatewayHeader)', () => {
     const src = readFileSync(new URL('../src/routes/api.js', import.meta.url), 'utf8')
-    assert.ok(src.includes('constantTimeEqual(golemSecret, golemHeader)'), 'must use constantTimeEqual for Golem comparison')
+    assert.ok(src.includes('constantTimeEqual(gatewaySecret, gatewayHeader)'), 'must use constantTimeEqual for gateway comparison')
   })
 
-  it('behavioral: golem-gateway with short wrong secret returns 201 pending (not 500)', async (t) => {
+  it('behavioral: partner-gateway with short wrong secret returns 201 pending (not 500)', async (t) => {
     const ipv6 = findPublicIpv6()
     if (!ipv6) return t.skip('requires public IPv6')
     let serverAvailable = false
@@ -700,16 +700,16 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
     } catch { serverAvailable = false }
     if (!serverAvailable) return t.skip('requires running 402index server')
 
-    const secret = process.env.GOLEM_GATEWAY_SECRET
-    if (!secret) return t.skip('requires GOLEM_GATEWAY_SECRET env var')
+    const secret = process.env.PARTNER_GATEWAY_SECRET
+    if (!secret) return t.skip('requires PARTNER_GATEWAY_SECRET env var')
 
     const wwwAuth = `L402 macaroon="${VALID_MACAROON}", invoice="${VALID_INVOICE}"`
     const { server, port } = await startMockL402Server(wwwAuth)
     try {
       const url = `http://[${ipv6}]:${port}/api/${randomUUID()}`
       const r = await register(
-        { url, name: 'Golem Short Secret Test', protocol: 'L402', provider: 'golem-gateway' },
-        { 'x-golem-gateway-secret': 'wrong' }
+        { url, name: 'Partner Short Secret Test', protocol: 'L402', provider: 'partner-gateway' },
+        { 'x-partner-gateway-secret': 'wrong' }
       )
       assert.equal(r.status, 201, `expected 201, got ${r.status}: ${JSON.stringify(r.body)}`)
       assert.equal(r.body.service.status, 'pending', 'short wrong secret must not auto-approve')

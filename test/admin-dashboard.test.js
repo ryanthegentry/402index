@@ -59,7 +59,7 @@ function seedService(overrides = {}) {
     protocol: overrides.protocol ?? 'L402',
     source: overrides.source ?? 'self-registered',
     status: overrides.status ?? 'active',
-    provider: overrides.provider ?? 'golem-gateway',
+    provider: overrides.provider ?? 'partner-gateway',
     category: overrides.category ?? 'test',
     price_sats: overrides.price_sats ?? 100,
     payment_asset: overrides.payment_asset ?? 'BTC',
@@ -225,9 +225,9 @@ describe('GET /api/v1/admin/search', () => {
   })
 
   it('matches by provider', async () => {
-    const res = await adminFetch('/admin/search?q=golem-gateway')
+    const res = await adminFetch('/admin/search?q=partner-gateway')
     const data = await res.json()
-    // All our test services use golem-gateway as provider
+    // All our test services use partner-gateway as provider
     const ids = data.services.map(s => s.id)
     assert.ok(ids.includes(activeId), 'should find service by provider')
   })
