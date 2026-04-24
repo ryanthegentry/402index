@@ -98,6 +98,39 @@ describe('fetchJson retry behavior', () => {
     assert.equal(result.error, true, 'should return error on first 500 with fail-fast')
   })
 
+  it('treats FETCH_RETRIES=foo (NaN) as default 2 attempts', async () => {
+    process.env.FETCH_RETRIES = 'foo'
+    mockFetchSequence([
+      { status: 500, body: {} },
+      { status: 200, body: { ok: true } },
+    ])
+    const result = await fetchJson('/api/v1/health')
+    assert.equal(callCount, 2, 'NaN FETCH_RETRIES should fall back to 2 attempts')
+    assert.deepStrictEqual(result, { ok: true })
+  })
+
+  it('treats FETCH_RETRIES=-1 (negative) as default 2 attempts', async () => {
+    process.env.FETCH_RETRIES = '-1'
+    mockFetchSequence([
+      { status: 500, body: {} },
+      { status: 200, body: { ok: true } },
+    ])
+    const result = await fetchJson('/api/v1/health')
+    assert.equal(callCount, 2, 'negative FETCH_RETRIES should fall back to 2 attempts')
+    assert.deepStrictEqual(result, { ok: true })
+  })
+
+  it('treats empty FETCH_RETRIES as fail-fast (1 attempt)', async () => {
+    process.env.FETCH_RETRIES = ''
+    mockFetchSequence([
+      { status: 500, body: {} },
+      { status: 200, body: { ok: true } },
+    ])
+    const result = await fetchJson('/api/v1/health')
+    assert.equal(callCount, 1, 'empty FETCH_RETRIES should be fail-fast')
+    assert.equal(result.error, true)
+  })
+
   it('respects arbitrary FETCH_RETRIES count', async () => {
     process.env.FETCH_RETRIES = '4'
     mockFetchSequence([
