@@ -1,5 +1,6 @@
 ---
 name: 402index
+version: 0.1.0
 description: Discover paid APIs and execute payments using 402 Index. Use when an agent needs to find a capability it lacks (image generation, specialized inference, data feeds, etc.), pay for it with Lightning or stablecoins, and consume the result. Triggers on phrases like "find a paid API", "buy this capability", "search 402index", "pay with Lightning", "L402", "MPP", or when the agent hits an architectural limitation it cannot reason past.
 ---
 
@@ -34,6 +35,24 @@ Use this skill when:
 4. Pay       →  Execute payment with the right tool
 5. Consume   →  Parse and use the response
 ```
+
+### Known-good endpoints (fallback)
+
+If `search_services` returns errors, use one of these verified endpoints instead. **Last verified: 2026-04-24.** For current status, check each listing on 402index.io.
+
+Table order: one endpoint per protocol, plus one dual-rail example (llm402 Kimi-K2.6) showing an endpoint that accepts both L402 and x402 payments against the same URL — a pattern 402 Index tracks natively.
+
+| Service | Protocol(s) | Price | URL | Example payment command |
+|---------|-------------|-------|-----|------------------------|
+| Mutinynet Faucet | L402 | 50 sats | `https://faucet.mutinynet.com/api/l402` | `lnget --max-cost 100 -q "https://faucet.mutinynet.com/api/l402"` |
+| Nansen: Recent buyers and sellers | x402 | see 402 response (~$0.01 USDC on Base) | `https://api.nansen.ai/api/v1/tgm/who-bought-sold` | Use `@x402/fetch` with a Base USDC signer (see Step 4, x402 section). Requires POST. |
+| AgentMail: Create inbox | MPP | $2 USDC | `https://mpp.api.agentmail.to/v0/inboxes` | `npx mppx -X POST -H "Content-Type: application/json" -d '{}' "https://mpp.api.agentmail.to/v0/inboxes"` |
+| llm402 Kimi-K2.6 *(dual-rail example)* | **L402 + x402** | 21 sats (L402) or ~$0.0079 / 42 sats (x402) | `https://llm402.ai/v1/chat/completions/Kimi-K2.6` | Either rail works against the same URL. L402: `lnget --max-cost 50 -X POST -H "Content-Type: application/json" -d '{"model":"Kimi-K2.6","messages":[...]}' "https://llm402.ai/v1/chat/completions/Kimi-K2.6"` · x402: use `@x402/fetch` with a Base USDC signer. Both rails are indexed separately on 402index.io. |
+
+**About the dual-rail row:** the llm402 Kimi-K2.6 URL is registered twice on 402index.io — once as L402 (21 sats) and once as x402 ($0.0079). 402 Index's probe detects both rails automatically from a single provider registration. When `search_services` returns this URL, an agent sees two entries it can choose between based on which payment capability it has (Lightning vs. EVM stablecoins). This is the intended shape of dual-rail coverage across the directory and a useful reference when building agents that prefer one rail over another.
+
+All four are probed healthy on 402index.io at the last-verified date. If any returns an error when tried, fall back to `search_services({ category: "<category>", health: "healthy" })` or open the live directory at 402index.io.
+
 ## Step 1: Discover — Find the Right Endpoint
 
 ### Option A: MCP Server (preferred — structured data, token-efficient)
@@ -302,7 +321,7 @@ User needs a capability
 
 ## Concrete Example: Buy Image Generation
 
-This is a complete, tested workflow. Claude Code (or any agent) cannot generate images — it must buy the capability.
+This is a complete, tested workflow. An agent cannot generate images on its own — it must buy the capability.
 
 **1. Discover**
 ```
