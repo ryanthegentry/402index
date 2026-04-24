@@ -303,8 +303,11 @@ Content-Type: application/json
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     }
 
-    function healthDotHtml(status) {
-      const s = escapeHtmlClient(status || 'unknown')
+    function healthDotHtml(svc) {
+      if (svc.probe_status === 'unprobeable') {
+        return '<span class="health-dot health-unprobeable"></span>unprobeable'
+      }
+      var s = escapeHtmlClient(svc.health_status || 'unknown')
       return '<span class="health-dot health-' + s + '"></span>' + s
     }
 
@@ -338,7 +341,7 @@ Content-Type: application/json
         html += '<div class="demo-result-name">' + escapeHtmlClient(svc.name) + verifiedBadgeHtml(svc) + '</div>'
         html += '<div class="demo-result-meta">'
         html += protocolBadgeHtml(svc.protocol) + ' '
-        html += healthDotHtml(svc.health_status) + ' '
+        html += healthDotHtml(svc) + ' '
         if (svc.reliability_score != null) html += '<span class="demo-result-reliability">Reliability: ' + svc.reliability_score + '</span> '
         if (svc.latency_p50_ms != null) html += '<span class="demo-result-latency">' + svc.latency_p50_ms + 'ms</span> '
         if (svc.price_usd != null) html += '<span class="demo-result-price">$' + svc.price_usd + '</span>'

@@ -36,6 +36,7 @@ export function apiDocsPage() {
               <tr><td>category</td><td>string</td><td>Filter by category (prefix match — <code>crypto</code> matches <code>crypto/nft</code>)</td></tr>
               <tr><td>health</td><td>string</td><td>Filter by health: <code>healthy</code>, <code>degraded</code>, <code>down</code>, <code>unknown</code></td></tr>
               <tr><td>source</td><td>string</td><td>Filter by source: <code>bazaar</code>, <code>satring</code>, <code>l402apps</code>, <code>sponge</code>, <code>well-known</code>, <code>exclusive</code>, <code>self-registered</code>, <code>discovery</code></td></tr>
+              <tr><td>probe_status</td><td>string</td><td>Filter by probe status: <code>probeable</code> or <code>unprobeable</code>. Unprobeable services have gateways that validate request parameters before presenting payment challenges, so generic health probes cannot elicit a 402.</td></tr>
               <tr><td>featured</td><td>boolean</td><td>Only featured services: <code>true</code></td></tr>
               <tr><td>q</td><td>string</td><td>Hybrid semantic + LIKE search (see below)</td></tr>
               <tr><td>max_price_usd</td><td>number</td><td>Maximum price in USD</td></tr>
@@ -168,7 +169,7 @@ export function apiDocsPage() {
             <span style="background:rgba(240,165,0,0.15);color:#f0a500;padding:2px 8px;border-radius:4px;font-size:12px;margin-left:8px">L402 Required</span>
           </div>
           <p>Export the full directory as CSV. Requires L402 payment — no free tier. Supports the same filters as <code>/api/v1/services</code>.</p>
-          <p><strong>CSV columns:</strong> id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, health_status, uptime_30d, latency_p50_ms, last_checked, http_method, reliability_score</p>
+          <p><strong>CSV columns:</strong> id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, provider, source, health_status, probe_status, uptime_30d, latency_p50_ms, last_checked, http_method, reliability_score</p>
           <p>Sats-only prices are automatically converted to USD using the current BTC/USD rate.</p>
           <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -H 'Authorization: L402 &lt;macaroon&gt;:&lt;preimage&gt;' \\
   'https://402index.io/api/v1/export.csv?protocol=l402'</div>
@@ -278,6 +279,7 @@ export function apiDocsPage() {
               source: 'exclusive',
               featured: 1,
               health_status: 'healthy',
+              probe_status: 'probeable',
               uptime_30d: 0.997,
               latency_p50_ms: 245,
               last_checked: '2025-02-28T12:00:00Z',
@@ -459,6 +461,40 @@ export function apiDocsPage() {
               <tr><td><code>200</code></td><td>Domain reset. Returns <code>verification_token</code>, <code>verification_hash</code>, <code>verification_url</code>, <code>expires_at</code>, and <code>instructions</code>.</td></tr>
               <tr><td><code>401</code></td><td>Missing or invalid admin authorization.</td></tr>
               <tr><td><code>404</code></td><td>No claim found for this domain.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-header">
+            <span class="endpoint-method" style="color:#f0a500;background:rgba(240,165,0,0.1)">POST</span>
+            <span class="endpoint-path">/api/v1/admin/services/:id/probe-status</span>
+            <span style="background:rgba(255,90,90,0.15);color:var(--red);padding:2px 8px;border-radius:4px;font-size:12px;margin-left:8px">Admin Only</span>
+          </div>
+          <p>Toggle a service's probe status. When marking <code>unprobeable</code>, resets health metrics (<code>health_status</code> → <code>unknown</code>, <code>consecutive_failures</code> → 0, <code>uptime_30d</code> → NULL, <code>latency_p50_ms</code> → NULL, <code>reliability_score</code> → NULL).</p>
+          <table class="params-table">
+            <thead>
+              <tr><th scope="col">Parameter</th><th scope="col">Type</th><th scope="col">Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>id</td><td>string (path)</td><td><strong>Required.</strong> Service ID</td></tr>
+              <tr><td>probe_status</td><td>string</td><td><strong>Required.</strong> One of <code>probeable</code> or <code>unprobeable</code></td></tr>
+            </tbody>
+          </table>
+          <div class="example-block"><button class="copy-btn" onclick="copyExample(this)">Copy</button>curl -X POST https://402index.io/api/v1/admin/services/42/probe-status \\
+  -H 'Authorization: Bearer YOUR_ADMIN_SECRET' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"probe_status": "unprobeable"}'</div>
+          <p style="margin-top:12px"><strong>Response codes:</strong></p>
+          <table class="params-table">
+            <thead>
+              <tr><th scope="col">Status</th><th scope="col">Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>200</code></td><td>Success. Returns <code>id</code>, <code>probe_status</code>, and <code>previous</code> probe status.</td></tr>
+              <tr><td><code>400</code></td><td>Invalid <code>probe_status</code> value (must be <code>probeable</code> or <code>unprobeable</code>).</td></tr>
+              <tr><td><code>401</code></td><td>Missing or invalid admin authorization.</td></tr>
+              <tr><td><code>404</code></td><td>Service not found.</td></tr>
             </tbody>
           </table>
         </div>
