@@ -268,7 +268,7 @@ describe('demoPage — client-side XSS prevention', () => {
   it('healthDotHtml uses escapeHtmlClient for status', () => {
     const html = demoPage({ stats: sampleStats, probeSample: sampleProbeSample })
     // Verify the client-side healthDotHtml function applies escapeHtmlClient
-    assert.ok(html.includes('escapeHtmlClient(status'), 'healthDotHtml must escape status via escapeHtmlClient')
+    assert.ok(html.includes('escapeHtmlClient(svc.health_status'), 'healthDotHtml must escape health_status via escapeHtmlClient')
   })
 
   it('protocolBadgeHtml uses escapeHtmlClient for protocol', () => {
