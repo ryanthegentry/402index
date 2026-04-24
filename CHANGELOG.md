@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- `SKILL.md`: added `### Known-good endpoints (fallback)` sub-section under Quick Start with four verified endpoints — one per protocol (L402, x402, MPP) plus a dual-rail example (llm402 Kimi-K2.6, L402 + x402) — for use when `search_services` returns errors (#250)
+- `SKILL.md`: added `version: 0.1.0` to YAML frontmatter to match plugin manifest semver
+
+### Changed
+- `SKILL.md`: generalized line 305 phrasing from "Claude Code" to "an agent" — ahead of plugin submissions to Codex/Cursor/Cline/Windsurf/Gemini CLI
+
 ### Fixed
 - `publish-mcp.yml`: Added `npm_check` guard to skip npm publish when the tagged version already exists on the registry, preventing E403 failures on re-triggered workflows (#248)
 - `mcp-server/src/index.ts`: `fetchJson` now retries on 5xx responses (2 attempts by default, 500ms backoff, configurable via `FETCH_RETRIES` env var) — transparent to callers, no breaking changes
