@@ -9,7 +9,7 @@ const INDEX_URL = process.env.INDEX_URL || 'https://402index.io'
 
 export const USER_AGENT = '402index-mcp/0.3.0'
 
-async function fetchJson(path: string, params?: Record<string, string>) {
+export async function fetchJson(path: string, params?: Record<string, string>) {
   const url = new URL(path, INDEX_URL)
   if (params) {
     for (const [k, v] of Object.entries(params)) {

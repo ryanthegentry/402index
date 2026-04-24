@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 const INDEX_URL = process.env.INDEX_URL || 'https://402index.io';
 export const USER_AGENT = '402index-mcp/0.3.0';
-async function fetchJson(path, params) {
+export async function fetchJson(path, params) {
     const url = new URL(path, INDEX_URL);
     if (params) {
         for (const [k, v] of Object.entries(params)) {

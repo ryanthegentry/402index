@@ -1,0 +1,39 @@
+{
+    "services": [
+        {
+            "id": "a63c1e77-cab0-4740-8d82-5a6fe451794f",
+            "name": "L402 Apps: Get APIs Directory",
+            "description": "Get the complete JSON listing of all L402-powered API endpoints.",
+            "url": "https://www.l402apps.com/api/apis",
+            "protocol": "L402",
+            "price_sats": 10,
+            "price_usd": 0.0077819,
+            "payment_asset": "BTC",
+            "payment_network": "Lightning",
+            "category": "tools/directory",
+            "provider": "L402 Apps",
+            "source": "l402apps",
+            "featured": 1,
+            "health_status": "healthy",
+            "probe_status": "probeable",
+            "uptime_30d": 1,
+            "latency_p50_ms": 398,
+            "last_checked": "2026-04-24 16:25:13",
+            "registered_at": "2026-03-02 01:01:14",
+            "http_method": "GET",
+            "reliability_score": 95,
+            "x402_payment_valid": null,
+            "domain_verified": 0,
+            "x402_facilitator_reachable": null,
+            "x402_asset_known": null,
+            "l402_compliant": null,
+            "l402_degrade_reason": null,
+            "l402_format": "unknown",
+            "lnget_compatible": 0,
+            "related_protocols": []
+        }
+    ],
+    "total": 25432,
+    "limit": 1,
+    "offset": 0
+}

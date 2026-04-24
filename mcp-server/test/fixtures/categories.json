@@ -1,0 +1,1131 @@
+{
+    "categories": {
+        "uncategorized": {
+            "L402": 26,
+            "x402": 20169,
+            "MPP": 0,
+            "total": 20195,
+            "subcategories": {}
+        },
+        "tools": {
+            "L402": 92,
+            "x402": 1332,
+            "MPP": 0,
+            "total": 1424,
+            "subcategories": {
+                "search": {
+                    "L402": 2,
+                    "x402": 1109,
+                    "MPP": 0,
+                    "total": 1111
+                },
+                "utilities": {
+                    "L402": 0,
+                    "x402": 162,
+                    "MPP": 0,
+                    "total": 162
+                },
+                "directory": {
+                    "L402": 5,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 5
+                },
+                "marketplace": {
+                    "L402": 3,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "ai": {
+                    "L402": 1,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "testing": {
+                    "L402": 1,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "moderation": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "security": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "ai": {
+            "L402": 569,
+            "x402": 517,
+            "MPP": 163,
+            "total": 1249,
+            "subcategories": {
+                "llm": {
+                    "L402": 372,
+                    "x402": 372,
+                    "MPP": 130,
+                    "total": 874
+                },
+                "ml": {
+                    "L402": 91,
+                    "x402": 55,
+                    "MPP": 5,
+                    "total": 151
+                },
+                "image": {
+                    "L402": 42,
+                    "x402": 42,
+                    "MPP": 1,
+                    "total": 85
+                },
+                "video": {
+                    "L402": 22,
+                    "x402": 22,
+                    "MPP": 0,
+                    "total": 44
+                },
+                "video-generation": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 16,
+                    "total": 16
+                },
+                "image-generation": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 7,
+                    "total": 7
+                },
+                "text": {
+                    "L402": 7,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 7
+                },
+                "code": {
+                    "L402": 3,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "intelligence": {
+                    "L402": 0,
+                    "x402": 3,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "agents": {
+                    "L402": 1,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "api": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 1,
+                    "total": 1
+                },
+                "content": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "embeddings": {
+                    "L402": 1,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "image-editing": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 1,
+                    "total": 1
+                },
+                "inference": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 1,
+                    "total": 2
+                },
+                "streaming": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 1,
+                    "total": 1
+                }
+            }
+        },
+        "data": {
+            "L402": 40,
+            "x402": 122,
+            "MPP": 400,
+            "total": 562,
+            "subcategories": {
+                "government": {
+                    "L402": 4,
+                    "x402": 21,
+                    "MPP": 0,
+                    "total": 25
+                },
+                "finance": {
+                    "L402": 5,
+                    "x402": 16,
+                    "MPP": 0,
+                    "total": 21
+                },
+                "social": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 14,
+                    "total": 14
+                },
+                "enrichment": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 11,
+                    "total": 11
+                },
+                "weather": {
+                    "L402": 1,
+                    "x402": 9,
+                    "MPP": 0,
+                    "total": 10
+                },
+                "health": {
+                    "L402": 3,
+                    "x402": 8,
+                    "MPP": 0,
+                    "total": 11
+                },
+                "location": {
+                    "L402": 1,
+                    "x402": 7,
+                    "MPP": 0,
+                    "total": 8
+                },
+                "geolocation": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 6,
+                    "total": 6
+                },
+                "web-search": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 6,
+                    "total": 6
+                },
+                "science": {
+                    "L402": 5,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 5
+                },
+                "compliance": {
+                    "L402": 0,
+                    "x402": 4,
+                    "MPP": 0,
+                    "total": 4
+                },
+                "sports": {
+                    "L402": 0,
+                    "x402": 4,
+                    "MPP": 0,
+                    "total": 4
+                },
+                "util": {
+                    "L402": 0,
+                    "x402": 4,
+                    "MPP": 0,
+                    "total": 4
+                },
+                "aviation": {
+                    "L402": 0,
+                    "x402": 3,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "web": {
+                    "L402": 0,
+                    "x402": 3,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "ai": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "misc": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "network-intelligence": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "networking": {
+                    "L402": 2,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "oracle": {
+                    "L402": 1,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "random": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "web-scraping": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 2,
+                    "total": 2
+                },
+                "wellness": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "astronomy": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "auto": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "crypto": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "dev": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "developer": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "dns": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "environment": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "legal": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "media": {
+                    "L402": 1,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "music": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "reference": {
+                    "L402": 1,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "tools": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "whois": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "world": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "crypto": {
+            "L402": 4,
+            "x402": 619,
+            "MPP": 6,
+            "total": 629,
+            "subcategories": {
+                "defi": {
+                    "L402": 0,
+                    "x402": 226,
+                    "MPP": 1,
+                    "total": 227
+                },
+                "wallet": {
+                    "L402": 0,
+                    "x402": 156,
+                    "MPP": 0,
+                    "total": 156
+                },
+                "transactions": {
+                    "L402": 0,
+                    "x402": 71,
+                    "MPP": 0,
+                    "total": 71
+                },
+                "data": {
+                    "L402": 0,
+                    "x402": 52,
+                    "MPP": 0,
+                    "total": 52
+                },
+                "nft": {
+                    "L402": 0,
+                    "x402": 50,
+                    "MPP": 0,
+                    "total": 50
+                },
+                "prices": {
+                    "L402": 3,
+                    "x402": 43,
+                    "MPP": 0,
+                    "total": 46
+                },
+                "balances": {
+                    "L402": 0,
+                    "x402": 7,
+                    "MPP": 0,
+                    "total": 7
+                },
+                "trading": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 4,
+                    "total": 4
+                },
+                "defi/arbitrage": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "payments": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "real-time-data": {
+            "L402": 136,
+            "x402": 199,
+            "MPP": 0,
+            "total": 335,
+            "subcategories": {
+                "news": {
+                    "L402": 0,
+                    "x402": 75,
+                    "MPP": 0,
+                    "total": 75
+                },
+                "weather": {
+                    "L402": 0,
+                    "x402": 43,
+                    "MPP": 0,
+                    "total": 43
+                },
+                "finance": {
+                    "L402": 0,
+                    "x402": 5,
+                    "MPP": 0,
+                    "total": 5
+                },
+                "geolocation": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "media": {
+            "L402": 3,
+            "x402": 121,
+            "MPP": 1,
+            "total": 125,
+            "subcategories": {
+                "images": {
+                    "L402": 1,
+                    "x402": 121,
+                    "MPP": 0,
+                    "total": 122
+                }
+            }
+        },
+        "blockchain": {
+            "L402": 0,
+            "x402": 0,
+            "MPP": 68,
+            "total": 68,
+            "subcategories": {
+                "data": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 1,
+                    "total": 1
+                }
+            }
+        },
+        "social": {
+            "L402": 3,
+            "x402": 5,
+            "MPP": 49,
+            "total": 57,
+            "subcategories": {}
+        },
+        "energy": {
+            "L402": 48,
+            "x402": 0,
+            "MPP": 0,
+            "total": 48,
+            "subcategories": {
+                "intelligence": {
+                    "L402": 48,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 48
+                }
+            }
+        },
+        "email": {
+            "L402": 0,
+            "x402": 42,
+            "MPP": 0,
+            "total": 42,
+            "subcategories": {}
+        },
+        "identity": {
+            "L402": 41,
+            "x402": 3,
+            "MPP": 0,
+            "total": 44,
+            "subcategories": {
+                "security": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "video": {
+            "L402": 35,
+            "x402": 0,
+            "MPP": 0,
+            "total": 35,
+            "subcategories": {}
+        },
+        "bitcoin": {
+            "L402": 40,
+            "x402": 6,
+            "MPP": 0,
+            "total": 46,
+            "subcategories": {
+                "bolt11": {
+                    "L402": 17,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 17
+                }
+            }
+        },
+        "search": {
+            "L402": 2,
+            "x402": 6,
+            "MPP": 18,
+            "total": 26,
+            "subcategories": {}
+        },
+        "web-scraping": {
+            "L402": 0,
+            "x402": 0,
+            "MPP": 17,
+            "total": 17,
+            "subcategories": {}
+        },
+        "predict": {
+            "L402": 0,
+            "x402": 16,
+            "MPP": 0,
+            "total": 16,
+            "subcategories": {}
+        },
+        "compute": {
+            "L402": 0,
+            "x402": 3,
+            "MPP": 13,
+            "total": 16,
+            "subcategories": {}
+        },
+        "nostr": {
+            "L402": 14,
+            "x402": 0,
+            "MPP": 0,
+            "total": 14,
+            "subcategories": {
+                "wot": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "prospect": {
+            "L402": 0,
+            "x402": 13,
+            "MPP": 0,
+            "total": 13,
+            "subcategories": {}
+        },
+        "payments": {
+            "L402": 1,
+            "x402": 12,
+            "MPP": 0,
+            "total": 13,
+            "subcategories": {}
+        },
+        "guides": {
+            "L402": 11,
+            "x402": 0,
+            "MPP": 0,
+            "total": 11,
+            "subcategories": {}
+        },
+        "AI": {
+            "L402": 8,
+            "x402": 10,
+            "MPP": 0,
+            "total": 18,
+            "subcategories": {}
+        },
+        "defi": {
+            "L402": 0,
+            "x402": 10,
+            "MPP": 0,
+            "total": 10,
+            "subcategories": {}
+        },
+        "agent-iam": {
+            "L402": 0,
+            "x402": 9,
+            "MPP": 0,
+            "total": 9,
+            "subcategories": {}
+        },
+        "gaming": {
+            "L402": 0,
+            "x402": 9,
+            "MPP": 0,
+            "total": 9,
+            "subcategories": {
+                "nft": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "generated": {
+            "L402": 0,
+            "x402": 25,
+            "MPP": 0,
+            "total": 25,
+            "subcategories": {
+                "music": {
+                    "L402": 0,
+                    "x402": 7,
+                    "MPP": 0,
+                    "total": 7
+                },
+                "interior": {
+                    "L402": 0,
+                    "x402": 4,
+                    "MPP": 0,
+                    "total": 4
+                },
+                "auto": {
+                    "L402": 0,
+                    "x402": 3,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "fitness": {
+                    "L402": 0,
+                    "x402": 3,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "wellness": {
+                    "L402": 0,
+                    "x402": 3,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "photo": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "astronomy": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "aviation": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "media": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "storage": {
+            "L402": 5,
+            "x402": 3,
+            "MPP": 7,
+            "total": 15,
+            "subcategories": {}
+        },
+        "financial-intelligence": {
+            "L402": 0,
+            "x402": 6,
+            "MPP": 0,
+            "total": 6,
+            "subcategories": {}
+        },
+        "lightning": {
+            "L402": 6,
+            "x402": 0,
+            "MPP": 0,
+            "total": 6,
+            "subcategories": {}
+        },
+        "l402": {
+            "L402": 5,
+            "x402": 0,
+            "MPP": 0,
+            "total": 5,
+            "subcategories": {
+                "tools": {
+                    "L402": 5,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 5
+                }
+            }
+        },
+        "llm": {
+            "L402": 0,
+            "x402": 5,
+            "MPP": 0,
+            "total": 5,
+            "subcategories": {}
+        },
+        "marketplace": {
+            "L402": 0,
+            "x402": 5,
+            "MPP": 0,
+            "total": 5,
+            "subcategories": {}
+        },
+        "ai-agents": {
+            "L402": 0,
+            "x402": 4,
+            "MPP": 0,
+            "total": 4,
+            "subcategories": {}
+        },
+        "communication": {
+            "L402": 4,
+            "x402": 2,
+            "MPP": 0,
+            "total": 6,
+            "subcategories": {}
+        },
+        "finance": {
+            "L402": 0,
+            "x402": 9,
+            "MPP": 2,
+            "total": 11,
+            "subcategories": {
+                "payments": {
+                    "L402": 0,
+                    "x402": 4,
+                    "MPP": 0,
+                    "total": 4
+                },
+                "market-intelligence": {
+                    "L402": 0,
+                    "x402": 3,
+                    "MPP": 0,
+                    "total": 3
+                },
+                "housing": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "crawl": {
+            "L402": 0,
+            "x402": 3,
+            "MPP": 0,
+            "total": 3,
+            "subcategories": {}
+        },
+        "crypto-data": {
+            "L402": 0,
+            "x402": 3,
+            "MPP": 0,
+            "total": 3,
+            "subcategories": {}
+        },
+        "market-data": {
+            "L402": 0,
+            "x402": 3,
+            "MPP": 0,
+            "total": 3,
+            "subcategories": {}
+        },
+        "other": {
+            "L402": 0,
+            "x402": 3,
+            "MPP": 0,
+            "total": 3,
+            "subcategories": {}
+        },
+        "podcasts": {
+            "L402": 3,
+            "x402": 0,
+            "MPP": 0,
+            "total": 3,
+            "subcategories": {}
+        },
+        "utility": {
+            "L402": 3,
+            "x402": 0,
+            "MPP": 0,
+            "total": 3,
+            "subcategories": {}
+        },
+        "CuseTheJuice": {
+            "L402": 0,
+            "x402": 2,
+            "MPP": 0,
+            "total": 2,
+            "subcategories": {}
+        },
+        "commerce": {
+            "L402": 2,
+            "x402": 3,
+            "MPP": 0,
+            "total": 5,
+            "subcategories": {
+                "settlement": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                },
+                "housing": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "retail": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "shopping": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "commodities": {
+            "L402": 0,
+            "x402": 2,
+            "MPP": 0,
+            "total": 2,
+            "subcategories": {}
+        },
+        "document": {
+            "L402": 0,
+            "x402": 2,
+            "MPP": 0,
+            "total": 2,
+            "subcategories": {
+                "parse": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                }
+            }
+        },
+        "parse": {
+            "L402": 0,
+            "x402": 2,
+            "MPP": 0,
+            "total": 2,
+            "subcategories": {}
+        },
+        "prediction-markets": {
+            "L402": 0,
+            "x402": 0,
+            "MPP": 2,
+            "total": 2,
+            "subcategories": {}
+        },
+        "research": {
+            "L402": 0,
+            "x402": 2,
+            "MPP": 0,
+            "total": 2,
+            "subcategories": {
+                "ai": {
+                    "L402": 0,
+                    "x402": 2,
+                    "MPP": 0,
+                    "total": 2
+                }
+            }
+        },
+        "sms": {
+            "L402": 0,
+            "x402": 2,
+            "MPP": 0,
+            "total": 2,
+            "subcategories": {}
+        },
+        "AI Infrastructure": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "Data": {
+            "L402": 1,
+            "x402": 0,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "browser": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "crypto-sentiment": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "developer-tools": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "directory": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "earn": {
+            "L402": 2,
+            "x402": 0,
+            "MPP": 0,
+            "total": 2,
+            "subcategories": {
+                "cashback": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                },
+                "optimization": {
+                    "L402": 1,
+                    "x402": 0,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "education": {
+            "L402": 1,
+            "x402": 0,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "financial analysis": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "image": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "infrastructure": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "music": {
+            "L402": 0,
+            "x402": 0,
+            "MPP": 1,
+            "total": 1,
+            "subcategories": {
+                "generation": {
+                    "L402": 0,
+                    "x402": 0,
+                    "MPP": 1,
+                    "total": 1
+                }
+            }
+        },
+        "risk-analysis": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "security": {
+            "L402": 0,
+            "x402": 0,
+            "MPP": 1,
+            "total": 1,
+            "subcategories": {}
+        },
+        "technology": {
+            "L402": 1,
+            "x402": 0,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "testing": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        },
+        "translation": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {
+                "localization": {
+                    "L402": 0,
+                    "x402": 1,
+                    "MPP": 0,
+                    "total": 1
+                }
+            }
+        },
+        "whale-tracking": {
+            "L402": 0,
+            "x402": 1,
+            "MPP": 0,
+            "total": 1,
+            "subcategories": {}
+        }
+    }
+}
