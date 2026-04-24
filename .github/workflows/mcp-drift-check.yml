@@ -13,6 +13,8 @@ on:
   pull_request:
     paths:
       - 'mcp-server/**'
+  schedule:
+    - cron: '0 8 * * *'
 
 jobs:
   drift-check:
@@ -69,3 +71,24 @@ jobs:
             echo "     or update mcp-server/package.json#files to match the allowlist."
             exit 1
           fi
+
+  live-smoke:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: mcp-server/package-lock.json
+      - working-directory: mcp-server
+        run: npm ci && npm run build
+      - name: Run contract tests against live prod
+        working-directory: mcp-server
+        env:
+          INDEX_URL: https://402index.io
+          MCP_SMOKE_LIVE: '1'
+        run: node --test test/tools.test.js test/mcp-0.2.5-parity.test.js test/mcp-verified.test.js

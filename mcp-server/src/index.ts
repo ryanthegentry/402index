@@ -16,11 +16,15 @@ export async function fetchJson(path: string, params?: Record<string, string>) {
       if (v !== undefined && v !== '') url.searchParams.set(k, v)
     }
   }
-  const res = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } })
-  if (!res.ok) {
-    return { error: true, status: res.status, message: `API returned ${res.status}` }
+  const maxAttempts = process.env.FETCH_RETRIES !== undefined ? Math.max(1, Number(process.env.FETCH_RETRIES)) : 2
+  let lastRes: Response | undefined
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    lastRes = await fetch(url.toString(), { headers: { 'User-Agent': USER_AGENT } })
+    if (lastRes.ok) return await lastRes.json()
+    if (lastRes.status < 500) break
+    if (attempt < maxAttempts - 1) await new Promise((r) => setTimeout(r, 500))
   }
-  return await res.json()
+  return { error: true, status: lastRes!.status, message: `API returned ${lastRes!.status}` }
 }
 
 export const DEFAULT_FIELDS = ['name', 'url', 'protocol', 'price_sats', 'health_status']
