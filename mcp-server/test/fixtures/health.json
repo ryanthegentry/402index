@@ -1,0 +1,61 @@
+{
+    "status": "ok",
+    "total_endpoints": 25432,
+    "distinct_services": 956,
+    "distinct_providers_raw": 956,
+    "distinct_providers": 800,
+    "excluded_templates": 249,
+    "excluded_demos": 60,
+    "by_protocol": {
+        "L402": {
+            "endpoints": 1115,
+            "services": 78,
+            "providers_raw": 78,
+            "providers": 74
+        },
+        "MPP": {
+            "endpoints": 757,
+            "services": 98,
+            "providers_raw": 98,
+            "providers": 96
+        },
+        "x402": {
+            "endpoints": 23560,
+            "services": 808,
+            "providers_raw": 808,
+            "providers": 655
+        }
+    },
+    "by_health": {
+        "degraded": 2782,
+        "down": 598,
+        "healthy": 21989,
+        "unknown": 63
+    },
+    "by_source": {
+        "bazaar": 22515,
+        "bazaar,sponge": 26,
+        "discovery": 171,
+        "exclusive": 1,
+        "l402apps": 40,
+        "l402directory": 8,
+        "l402directory,l402apps": 3,
+        "mpp": 663,
+        "satring": 442,
+        "satring,l402apps": 28,
+        "self-registered": 1365,
+        "self-registered,l402apps": 3,
+        "self-registered,l402directory": 6,
+        "sponge": 161
+    },
+    "last_bazaar_sync": "2026-04-24 16:28:29",
+    "last_satring_sync": "2026-04-24 16:28:26",
+    "last_l402apps_sync": "2026-04-24 16:28:25",
+    "last_mpp_sync": "2026-04-24 16:28:29",
+    "last_health_check_run": "2026-04-24 16:28:29",
+    "embedding_queue_depth": 0,
+    "embedding_circuit": "closed",
+    "embedding_circuit_failures": 0,
+    "embedding_circuit_opened_at": null,
+    "embedding_half_open_trial": false
+}

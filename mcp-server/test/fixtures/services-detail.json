@@ -1,0 +1,218 @@
+{
+    "id": "a63c1e77-cab0-4740-8d82-5a6fe451794f",
+    "name": "L402 Apps: Get APIs Directory",
+    "description": "Get the complete JSON listing of all L402-powered API endpoints.",
+    "url": "https://www.l402apps.com/api/apis",
+    "protocol": "L402",
+    "price_sats": 10,
+    "price_usd": 0.0077819,
+    "payment_asset": "BTC",
+    "payment_network": "Lightning",
+    "category": "tools/directory",
+    "input_schema": null,
+    "output_schema": null,
+    "provider": "L402 Apps",
+    "source": "l402apps",
+    "source_id": "l402apps-get-apis",
+    "featured": 1,
+    "registered_at": "2026-03-02 01:01:14",
+    "updated_at": "2026-04-24 16:25:13",
+    "health_status": "healthy",
+    "uptime_30d": 1,
+    "latency_p50_ms": 398,
+    "last_checked": "2026-04-24 16:25:13",
+    "last_seen_healthy": "2026-04-24 16:25:13",
+    "consecutive_failures": 0,
+    "is_template": 0,
+    "is_demo": 0,
+    "verified": 0,
+    "contact_email": "rgentry918@gmail.com",
+    "status": "active",
+    "http_method": "GET",
+    "reliability_score": 95,
+    "x402_payment_valid": null,
+    "x402_facilitator_reachable": null,
+    "x402_asset_known": null,
+    "probe_body": null,
+    "l402_version": null,
+    "agent_spec_url": null,
+    "capabilities": null,
+    "token_format": null,
+    "invoice_type": null,
+    "pricing_model": null,
+    "content_domain": null,
+    "domain_verified": 0,
+    "provider_deleted": 0,
+    "deleted_at": null,
+    "approval_reason": null,
+    "hostname": "www.l402apps.com",
+    "l402_compliant": null,
+    "l402_degrade_reason": null,
+    "l402_format": "unknown",
+    "lnget_compatible": 0,
+    "consecutive_latency_spikes": 0,
+    "probe_status": "probeable",
+    "health_checks": [
+        {
+            "id": 24505862,
+            "checked_at": "2026-04-24 16:25:13",
+            "status": "healthy",
+            "response_time_ms": 365,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24464587,
+            "checked_at": "2026-04-24 14:28:03",
+            "status": "healthy",
+            "response_time_ms": 360,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24448476,
+            "checked_at": "2026-04-24 12:48:59",
+            "status": "healthy",
+            "response_time_ms": 405,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24412286,
+            "checked_at": "2026-04-24 10:17:19",
+            "status": "healthy",
+            "response_time_ms": 386,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24393647,
+            "checked_at": "2026-04-24 08:34:55",
+            "status": "healthy",
+            "response_time_ms": 416,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24368478,
+            "checked_at": "2026-04-24 06:34:59",
+            "status": "healthy",
+            "response_time_ms": 449,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24331495,
+            "checked_at": "2026-04-24 04:03:12",
+            "status": "healthy",
+            "response_time_ms": 461,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24321333,
+            "checked_at": "2026-04-24 02:40:03",
+            "status": "healthy",
+            "response_time_ms": 417,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24280184,
+            "checked_at": "2026-04-24 00:58:58",
+            "status": "healthy",
+            "response_time_ms": 394,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24272937,
+            "checked_at": "2026-04-24 00:40:04",
+            "status": "healthy",
+            "response_time_ms": 400,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24244533,
+            "checked_at": "2026-04-23 23:33:23",
+            "status": "healthy",
+            "response_time_ms": 398,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24215332,
+            "checked_at": "2026-04-23 22:22:37",
+            "status": "healthy",
+            "response_time_ms": 398,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24176483,
+            "checked_at": "2026-04-23 20:50:18",
+            "status": "healthy",
+            "response_time_ms": 374,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24159467,
+            "checked_at": "2026-04-23 20:09:30",
+            "status": "healthy",
+            "response_time_ms": 385,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24156682,
+            "checked_at": "2026-04-23 20:02:17",
+            "status": "healthy",
+            "response_time_ms": 420,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24122278,
+            "checked_at": "2026-04-23 18:37:41",
+            "status": "healthy",
+            "response_time_ms": 397,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24107027,
+            "checked_at": "2026-04-23 18:01:54",
+            "status": "healthy",
+            "response_time_ms": 395,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24092758,
+            "checked_at": "2026-04-23 17:28:52",
+            "status": "healthy",
+            "response_time_ms": 386,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24079507,
+            "checked_at": "2026-04-23 16:58:17",
+            "status": "healthy",
+            "response_time_ms": 412,
+            "http_status": 402,
+            "error_message": null
+        },
+        {
+            "id": 24061813,
+            "checked_at": "2026-04-23 16:13:08",
+            "status": "healthy",
+            "response_time_ms": 424,
+            "http_status": 402,
+            "error_message": null
+        }
+    ],
+    "related_services": []
+}

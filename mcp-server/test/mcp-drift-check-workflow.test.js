@@ -81,4 +81,43 @@ describe('mcp-drift-check workflow structural assertions', () => {
       'Expected timeout-minutes: 3 at job level'
     )
   })
+
+  it('l. has schedule trigger with cron string', () => {
+    assert.ok(
+      workflowContent.includes('schedule:'),
+      'Expected schedule: trigger'
+    )
+    assert.ok(
+      /cron:\s*'[^']*'/.test(workflowContent),
+      'Expected cron string in schedule trigger'
+    )
+  })
+
+  it('m. has live-smoke job', () => {
+    assert.ok(
+      workflowContent.includes('live-smoke:'),
+      'Expected live-smoke job definition'
+    )
+  })
+
+  it('n. live-smoke job has continue-on-error: true', () => {
+    // Extract the live-smoke job block
+    const liveIdx = workflowContent.indexOf('live-smoke:')
+    assert.ok(liveIdx !== -1, 'Expected live-smoke job')
+    const block = workflowContent.substring(liveIdx, liveIdx + 500)
+    assert.ok(
+      block.includes('continue-on-error: true'),
+      'live-smoke job must have continue-on-error: true'
+    )
+  })
+
+  it('o. live-smoke job runs only on schedule trigger', () => {
+    const liveIdx = workflowContent.indexOf('live-smoke:')
+    assert.ok(liveIdx !== -1, 'Expected live-smoke job')
+    const block = workflowContent.substring(liveIdx, liveIdx + 500)
+    assert.ok(
+      block.includes("github.event_name == 'schedule'"),
+      'live-smoke job must have if: github.event_name == \'schedule\''
+    )
+  })
 })

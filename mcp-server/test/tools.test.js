@@ -1,7 +1,15 @@
-import { describe, it } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { installMockFetch, restoreFetch } from './helpers/mock-fetch.js'
 
-const INDEX_URL = process.env.INDEX_URL || 'https://402index.io'
+const useLive = process.env.MCP_SMOKE_LIVE === '1'
+
+if (!useLive) {
+  before(() => installMockFetch())
+  after(() => restoreFetch())
+}
+
+const INDEX_URL = process.env.INDEX_URL || 'http://mock.test'
 
 async function fetchJson(path) {
   const res = await fetch(`${INDEX_URL}${path}`)
