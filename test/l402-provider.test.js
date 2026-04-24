@@ -79,16 +79,17 @@ describe('l402-provider', () => {
     })
   })
 
-  describe('GolemL402Provider', () => {
-    it('throws if GOLEM_API_KEY is not set', () => {
-      process.env.L402_GATEWAY = 'golem'
+  describe('PartnerGatewayL402Provider', () => {
+    it('throws if PARTNER_GATEWAY_API_KEY is not set', () => {
+      process.env.L402_GATEWAY = 'partner'
+      delete process.env.PARTNER_GATEWAY_API_KEY
       delete process.env.GOLEM_API_KEY
-      assert.throws(() => getProvider(), /GOLEM_API_KEY/)
+      assert.throws(() => getProvider(), /PARTNER_GATEWAY_API_KEY/)
     })
 
-    it('constructs successfully with GOLEM_API_KEY set', () => {
-      process.env.L402_GATEWAY = 'golem'
-      process.env.GOLEM_API_KEY = 'test-key-123'
+    it('constructs successfully with PARTNER_GATEWAY_API_KEY set', () => {
+      process.env.L402_GATEWAY = 'partner'
+      process.env.PARTNER_GATEWAY_API_KEY = 'test-key-123'
       const provider = getProvider()
       assert.ok(provider)
     })

@@ -132,6 +132,13 @@ BEHAVIOR-CHANGE: admin page now requires server-side auth gate
 
 The check triggers only when a hunk in `test/**/*.test.js` contains both a removed (`-`) and added (`+`) line matching common assertion methods (`assert.equal`, `assert.ok`, `assert.deepEqual`, `assert.strictEqual`, etc.). It does NOT trigger for adding new assertions, deleting without replacement, or changes in separate hunks.
 
+## Security tests
+
+Some security-relevant tests (constant-time comparison timing gates) are
+sensitive to CPU contention and are disabled by default. To run them:
+
+    RUN_TIMING_TESTS=1 npm test -- test/constant-time.test.js
+
 ## Code of conduct
 
 Be kind, be specific, be patient. Disagree technically, not personally. Maintainers and contributors are volunteers.

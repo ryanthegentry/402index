@@ -68,11 +68,11 @@ describe('registerWebhook', () => {
 
   it('accepts HTTP URLs for *.railway.internal (Railway private networking)', () => {
     const result = registerWebhook(db, {
-      url: 'http://herald.railway.internal:8080/webhook',
+      url: 'http://svc-a.railway.internal:8080/webhook',
       secret: 'my-secret-123',
     })
     assert.ok(result.id)
-    assert.equal(result.url, 'http://herald.railway.internal:8080/webhook')
+    assert.equal(result.url, 'http://svc-a.railway.internal:8080/webhook')
   })
 
   it('rejects subdomain spoofing of railway.internal', () => {

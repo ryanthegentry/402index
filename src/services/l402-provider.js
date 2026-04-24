@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { DEPRECATED_ENV_URL, DEPRECATED_ENV_API_KEY, DEPRECATED_GATEWAY } from './partner-gateway-aliases.js'
 
 class StubL402Provider {
   async createChallenge() { return null }
@@ -33,12 +34,22 @@ class MockL402Provider {
   }
 }
 
-class GolemL402Provider {
+class PartnerGatewayL402Provider {
   constructor() {
-    this.baseUrl = process.env.GOLEM_INTERNAL_URL || 'http://golem.railway.internal:8402'
-    this.apiKey = process.env.GOLEM_API_KEY
+    this.baseUrl = process.env.PARTNER_GATEWAY_URL
+    if (!this.baseUrl && process.env[DEPRECATED_ENV_URL]) {
+      console.warn('[l402-provider] GOLEM_INTERNAL_URL is deprecated, use PARTNER_GATEWAY_URL')
+      this.baseUrl = process.env[DEPRECATED_ENV_URL]
+    }
+    if (!this.baseUrl) this.baseUrl = 'http://partner.railway.internal:8402'
+
+    this.apiKey = process.env.PARTNER_GATEWAY_API_KEY
+    if (!this.apiKey && process.env[DEPRECATED_ENV_API_KEY]) {
+      console.warn('[l402-provider] GOLEM_API_KEY is deprecated, use PARTNER_GATEWAY_API_KEY')
+      this.apiKey = process.env[DEPRECATED_ENV_API_KEY]
+    }
     if (!this.apiKey) {
-      throw new Error('GOLEM_API_KEY is required for GolemL402Provider')
+      throw new Error('PARTNER_GATEWAY_API_KEY is required (set PARTNER_GATEWAY_API_KEY or deprecated GOLEM_API_KEY)')
     }
   }
 
@@ -52,7 +63,7 @@ class GolemL402Provider {
       body: JSON.stringify({ price_sats: priceSats, duration_hours: durationHours }),
       signal: AbortSignal.timeout(5000),
     })
-    if (!res.ok) throw new Error(`Golem challenge returned ${res.status}`)
+    if (!res.ok) throw new Error(`Partner gateway challenge returned ${res.status}`)
     return await res.json()
   }
 
@@ -66,7 +77,7 @@ class GolemL402Provider {
       body: JSON.stringify({ authorization }),
       signal: AbortSignal.timeout(5000),
     })
-    if (!res.ok) throw new Error(`Golem verify returned ${res.status}`)
+    if (!res.ok) throw new Error(`Partner gateway verify returned ${res.status}`)
     return await res.json()
   }
 }
@@ -85,8 +96,12 @@ export function getProvider() {
     case 'mock':
       provider = new MockL402Provider()
       break
-    case 'golem':
-      provider = new GolemL402Provider()
+    case 'partner':
+      provider = new PartnerGatewayL402Provider()
+      break
+    case DEPRECATED_GATEWAY:
+      console.warn(`[l402-provider] L402_GATEWAY='${DEPRECATED_GATEWAY}' is deprecated, use 'partner'`)
+      provider = new PartnerGatewayL402Provider()
       break
     default:
       provider = new StubL402Provider()

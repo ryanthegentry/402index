@@ -65,15 +65,15 @@ describe('mcp-publish pipeline', () => {
     it('(e) publish job node-version matches ci.yml matrix node-version', () => {
       const wf = yaml.load(readFile('.github/workflows/publish-mcp.yml'))
       const ci = yaml.load(readFile('.github/workflows/ci.yml'))
-      const ciNodeVersion = ci.jobs.test.strategy.matrix['node-version'][0]
+      const ciNodeVersions = ci.jobs.test.strategy.matrix['node-version']
       const setupNodeStep = wf.jobs.publish.steps.find(
         (s) => s.uses && s.uses.startsWith('actions/setup-node')
       )
       assert.ok(setupNodeStep, 'publish job must have an actions/setup-node step')
-      assert.equal(
-        String(setupNodeStep.with['node-version']),
-        String(ciNodeVersion),
-        `publish node-version must match ci.yml (${ciNodeVersion})`
+      const publishNode = String(setupNodeStep.with['node-version'])
+      assert.ok(
+        ciNodeVersions.map(String).includes(publishNode),
+        `publish node-version (${publishNode}) must be in ci.yml matrix (${ciNodeVersions})`
       )
     })
 

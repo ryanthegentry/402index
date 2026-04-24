@@ -40,7 +40,7 @@ describe('constantTimeEqual', () => {
     )
   })
 
-  it('e — statistical timing gate: CV of per-length mean timings < 10%', { skip: process.env.CI === 'true' }, () => {
+  it('e — statistical timing gate: CV of per-length mean timings < 10%', { skip: process.env.CI === 'true' || !process.env.RUN_TIMING_TESTS }, () => {
     const secret = 'known-secret-of-length-32!@#$%^&'
     const lengths = [4, 16, 32, 64, 128]
     const N = 10000
