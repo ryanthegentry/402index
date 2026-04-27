@@ -62,6 +62,19 @@ describe('demo responsive — mobile CSS (max-width: 768px)', () => {
   })
 })
 
+// ─── Filter chips wrapping ──────────────────────────────────────────────────
+
+describe('demo responsive — filter chips wrapping', () => {
+  it('uses flex-wrap: wrap on the base .demo-filter-chips rule (allows filter row wrapping at narrow desktop widths)', () => {
+    const startIdx = styles.indexOf('.demo-filter-chips {')
+    assert.ok(startIdx !== -1, 'should have .demo-filter-chips rule')
+    const endIdx = styles.indexOf('}', startIdx)
+    const ruleBody = styles.slice(startIdx, endIdx)
+    assert.ok(ruleBody.includes('flex-wrap: wrap'), 'base rule should declare flex-wrap: wrap')
+    assert.ok(!ruleBody.includes('flex-wrap: nowrap'), 'base rule must not declare flex-wrap: nowrap')
+  })
+})
+
 // ─── Desktop CSS ─────────────────────────────────────────────────────────────
 
 describe('demo responsive — desktop CSS (min-width: 1200px)', () => {
