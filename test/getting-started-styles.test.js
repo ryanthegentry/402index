@@ -30,11 +30,22 @@ describe('Getting Started modal styles', () => {
   })
 
   it('@media (max-width: 480px) targets the modal', () => {
-    const mobileRule = styles.match(/@media\s*\(\s*max-width\s*:\s*480px\s*\)\s*\{[\s\S]*?\n\s{4}\}/)
-    assert.ok(mobileRule, 'styles must contain @media (max-width: 480px) rule')
-    assert.ok(
-      mobileRule[0].includes('.gs-modal'),
-      '@media (max-width: 480px) rule must target .gs-modal'
-    )
+    // Find all @media (max-width: 480px) blocks and check if any target .gs-modal
+    const mobileRules = [...styles.matchAll(/@media\s*\(\s*max-width\s*:\s*480px\s*\)\s*\{/g)]
+    assert.ok(mobileRules.length > 0, 'styles must contain @media (max-width: 480px) rule')
+    // Check full content after each match for .gs-modal
+    const hasGsModal = mobileRules.some(m => {
+      const after = styles.slice(m.index)
+      // Find the matching closing brace by counting braces
+      let depth = 0
+      let entered = false
+      for (let i = 0; i < after.length; i++) {
+        if (after[i] === '{') { depth++; entered = true }
+        if (after[i] === '}') depth--
+        if (entered && depth === 0) return after.slice(0, i).includes('.gs-modal')
+      }
+      return false
+    })
+    assert.ok(hasGsModal, '@media (max-width: 480px) rule must target .gs-modal')
   })
 })

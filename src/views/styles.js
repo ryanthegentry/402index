@@ -1406,4 +1406,104 @@ export const styles = `
       .demo-stat-number { font-size: 32px; }
       .demo-flow-steps { max-width: 800px; }
     }
+
+    /* Getting Started modal */
+    .gs-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gs-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 640px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      z-index: 1001;
+    }
+    .gs-modal h2 {
+      font-size: 20px;
+      color: var(--text-bright);
+      margin-bottom: 4px;
+    }
+    .gs-subhead {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .gs-close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px 8px;
+      line-height: 1;
+    }
+    .gs-close:hover { color: var(--text-bright); }
+    .gs-section {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .gs-section h3 {
+      font-size: 15px;
+      color: var(--text-bright);
+      margin-bottom: 8px;
+    }
+    .gs-section p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      line-height: 1.6;
+    }
+    .gs-helper {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+    .gs-footer-ctas {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .gs-cta {
+      flex: 1;
+      text-align: center;
+      padding: 10px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .gs-cta:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+    @media (max-width: 480px) {
+      .gs-modal {
+        top: 0; left: 0; right: 0; bottom: 0;
+        transform: none;
+        border-radius: 0;
+        max-width: none;
+        width: 100%;
+        max-height: 100vh;
+      }
+      .gs-footer-ctas { flex-direction: column; }
+    }
 `
