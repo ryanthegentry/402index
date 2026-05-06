@@ -25,18 +25,29 @@ describe('Getting Started modal', () => {
     )
   })
 
-  it('modal has correct ARIA attributes', () => {
+  it('role="dialog" is on .gs-modal, not .gs-backdrop', () => {
+    // Extract the .gs-modal div's opening tag
+    const gsModalTag = html.match(/<div\s+class="gs-modal"[^>]*>/)
+    assert.ok(gsModalTag, 'Expected <div class="gs-modal"> in layout output')
     assert.ok(
-      html.includes('role="dialog"'),
-      'Modal must have role="dialog"'
+      gsModalTag[0].includes('role="dialog"'),
+      '.gs-modal must have role="dialog"'
     )
     assert.ok(
-      html.includes('aria-modal="true"'),
-      'Modal must have aria-modal="true"'
+      gsModalTag[0].includes('aria-modal="true"'),
+      '.gs-modal must have aria-modal="true"'
     )
     assert.ok(
-      html.includes('aria-labelledby="gs-headline"'),
-      'Modal must have aria-labelledby="gs-headline"'
+      gsModalTag[0].includes('aria-labelledby="gs-headline"'),
+      '.gs-modal must have aria-labelledby="gs-headline"'
+    )
+
+    // Negative: .gs-backdrop must NOT have role="dialog"
+    const gsBackdropTag = html.match(/<div\s+class="gs-backdrop"[^>]*>/)
+    assert.ok(gsBackdropTag, 'Expected <div class="gs-backdrop"> in layout output')
+    assert.ok(
+      !gsBackdropTag[0].includes('role="dialog"'),
+      '.gs-backdrop must NOT have role="dialog"'
     )
   })
 
@@ -56,9 +67,8 @@ describe('Getting Started modal', () => {
   })
 
   it('footer CTAs link to /directory and /api-docs inside the modal', () => {
-    // Extract modal content (between role="dialog" and its closing)
-    const modalMatch = html.match(/role="dialog"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/)
-    assert.ok(modalMatch, 'Expected modal markup with role="dialog"')
+    const modalMatch = html.match(/class="gs-backdrop"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/)
+    assert.ok(modalMatch, 'Expected modal markup with class="gs-backdrop"')
     const modalContent = modalMatch[0]
     assert.ok(
       modalContent.includes('href="/directory"'),
@@ -71,7 +81,7 @@ describe('Getting Started modal', () => {
   })
 
   it('copy button uses copyExample(this) onclick inside the modal', () => {
-    const modalMatch = html.match(/role="dialog"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/)
+    const modalMatch = html.match(/class="gs-backdrop"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/)
     assert.ok(modalMatch, 'Expected modal markup')
     const modalContent = modalMatch[0]
     assert.ok(
@@ -81,11 +91,11 @@ describe('Getting Started modal', () => {
   })
 
   it('close button exists inside the modal', () => {
-    const modalMatch = html.match(/role="dialog"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/)
+    const modalMatch = html.match(/class="gs-backdrop"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/)
     assert.ok(modalMatch, 'Expected modal markup')
     const modalContent = modalMatch[0]
     assert.ok(
-      /button[^>]*class="gs-close"/.test(modalContent) || /class="gs-close"[^>]*>/.test(modalContent),
+      /button[^>]*class="gs-close"/.test(modalContent),
       'Modal must contain a close button with class="gs-close"'
     )
   })
