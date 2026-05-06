@@ -61,7 +61,6 @@ describe('demo responsive — mobile CSS (max-width: 768px)', () => {
     assert.ok(styles.includes('.demo-filter-group'), 'should have filter group responsive rules')
   })
 })
-
 // ─── Desktop CSS ─────────────────────────────────────────────────────────────
 
 describe('demo responsive — desktop CSS (min-width: 1200px)', () => {

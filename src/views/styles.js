@@ -782,7 +782,7 @@ export const styles = `
     .demo-filter-chips {
       display: flex;
       gap: 8px;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       align-items: center;
     }
     .demo-filter-group { display: flex; flex-direction: row; align-items: center; gap: 4px; }
