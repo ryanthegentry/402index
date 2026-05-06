@@ -49,7 +49,7 @@ export function layout(title, content, meta = {}) {
       </button>
     </div>
   </header>
-  <div class="gs-backdrop" id="gs-backdrop" style="display:none">
+  <div class="gs-backdrop" id="gs-backdrop">
     <div class="gs-modal" role="dialog" aria-modal="true" aria-labelledby="gs-headline">
       <button class="gs-close" id="gs-close" aria-label="Close">&times;</button>
       <h2 id="gs-headline">Discover the best paid APIs on the agentic web</h2>
@@ -95,14 +95,14 @@ export function layout(title, content, meta = {}) {
     function openModal(e) {
       e.preventDefault();
       document.querySelector('nav').classList.remove('nav-open');
-      backdrop.style.display = '';
+      backdrop.classList.add('gs-open');
       closeBtn.focus();
       if (window.plausible) plausible('Getting Started Opened');
       document.addEventListener('keydown', onKey);
     }
 
     function closeModal() {
-      backdrop.style.display = 'none';
+      backdrop.classList.remove('gs-open');
       trigger.focus();
       document.removeEventListener('keydown', onKey);
     }
