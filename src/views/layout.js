@@ -119,12 +119,15 @@ export function layout(title, content, meta = {}) {
 
     function copyExample(btn) {
       var block = btn.parentElement;
-      var text = block.textContent.replace('Copy', '').trim();
+      var clone = block.cloneNode(true);
+      var btnEl = clone.querySelector('.copy-btn');
+      if (btnEl) btnEl.remove();
+      var text = clone.textContent.trim();
       navigator.clipboard.writeText(text).then(function() {
         btn.textContent = 'Copied!';
         setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
       });
-      if (window.plausible) plausible('Install Command Copied');
+      if (block.closest('.gs-section') && window.plausible) plausible('Install Command Copied');
     }
     window.copyExample = copyExample;
 
