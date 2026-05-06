@@ -34,7 +34,11 @@ test.describe('Inline handler smoke tests', () => {
 
       await page.goto(tc.route, { waitUntil: 'domcontentloaded' })
 
-      const el = page.locator(tc.selector).nth(tc.nth)
+      // Exclude elements inside the modal (its copy-btn shifts nth indices)
+      const outside = page.locator(`${tc.selector}:not(.gs-backdrop *)`)
+      const count = await outside.count()
+      test.skip(count <= tc.nth, `${tc.selector} nth=${tc.nth} only in modal — covered by getting-started-modal.spec.js`)
+      const el = outside.nth(tc.nth)
       await expect(el).toBeAttached({ timeout: 5000 })
 
       if (tc.type === 'click') {
