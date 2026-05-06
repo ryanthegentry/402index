@@ -1174,10 +1174,12 @@ describe('statsSimplePage', () => {
     assert.ok(html.includes('gap-category'), 'Should have category cells')
   })
 
-  it('has no <script> tags (pure server-rendered)', async () => {
+  it('has no page-specific <script> tags (only layout-level Getting Started modal script)', async () => {
     const { statsSimplePage } = await import('../src/views/stats-simple.js')
     const html = statsSimplePage(testData)
-    assert.ok(!html.includes('<script'), 'Should have no script tags')
+    const scriptCount = (html.match(/<script/g) || []).length
+    // Layout adds one inline script for the Getting Started modal; stats page adds none of its own
+    assert.ok(scriptCount <= 1, `Expected at most 1 script tag (layout modal), got ${scriptCount}`)
   })
 
   it('has correct meta tags', async () => {
