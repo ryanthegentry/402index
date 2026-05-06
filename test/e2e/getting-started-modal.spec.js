@@ -45,6 +45,18 @@ test.describe('Getting Started modal behavior', () => {
     await expect(page.locator('#getting-started-link')).toBeFocused()
   })
 
+  test('opening modal closes the mobile nav', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+
+    await page.click('.nav-toggle')
+    await expect(page.locator('nav')).toHaveClass(/nav-open/)
+
+    await page.click('#getting-started-link')
+    await expect(page.locator('nav')).not.toHaveClass(/nav-open/)
+    await expect(page.locator('.gs-backdrop')).toHaveClass(/gs-open/)
+  })
+
   test('Tab traps focus within modal', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' })
     await page.click('#getting-started-link')
