@@ -49,8 +49,8 @@ export function layout(title, content, meta = {}) {
       </button>
     </div>
   </header>
-  <div class="gs-backdrop" id="gs-backdrop" role="dialog" aria-modal="true" aria-labelledby="gs-headline" style="display:none">
-    <div class="gs-modal">
+  <div class="gs-backdrop" id="gs-backdrop" style="display:none">
+    <div class="gs-modal" role="dialog" aria-modal="true" aria-labelledby="gs-headline">
       <button class="gs-close" id="gs-close" aria-label="Close">&times;</button>
       <h2 id="gs-headline">Discover the best paid APIs on the agentic web</h2>
       <p class="gs-subhead">Two ways to give your agent the 402 Index toolkit.</p>
