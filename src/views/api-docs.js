@@ -667,15 +667,5 @@ export function apiDocsPage() {
         </div>
       </div>
     </div>
-    <script>
-    function copyExample(btn) {
-      const block = btn.parentElement
-      const text = block.textContent.replace('Copy', '').trim()
-      navigator.clipboard.writeText(text).then(function() {
-        btn.textContent = 'Copied!'
-        setTimeout(function() { btn.textContent = 'Copy' }, 1500)
-      })
-    }
-    </script>
   `)
 }
