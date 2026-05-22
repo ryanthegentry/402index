@@ -72,7 +72,7 @@ Live numbers at [402index.io/api/v1/health](https://402index.io/api/v1/health).
 
 - **Node.js + Express**, SQLite via `better-sqlite3`, static HTML via template literals (no framework).
 - **Aggregators** (`src/aggregators/`) poll Bazaar / Satring / l402apps on a schedule and upsert normalized listings.
-- **Health checker** (`src/health/checker.js`) probes every listing every 15 minutes with SSRF-safe fetch, records status, emits events.
+- **Health checker** (`src/health/checker.js`) probes listings on a configurable interval, defaulting to 60 minutes (`HEALTH_CHECK_INTERVAL_MS`), with SSRF-safe fetch, records status, emits events.
 - **Semantic search** via [`sqlite-vec`](https://github.com/asg017/sqlite-vec) + hybrid LIKE/vector re-rank, with circuit-breaker fallback to LIKE-only when the embeddings service is down.
 - **Distribution:** HTTP API, MCP server, RSS, Nostr (NIP-99), webhooks (HMAC-SHA256).
 - **Verifier** handles BOLT11 invoices (L402) and ERC-20 stablecoin challenges (x402), including x402-over-Lightning.

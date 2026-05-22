@@ -49,7 +49,7 @@ If your endpoint is on the x402 Bazaar, Satring, l402apps, or MPP's OpenAPI dire
 
 ### Listing requirements
 
-- The URL must resolve to a real, reachable endpoint. Automated health checks run every 15 minutes.
+- The URL must resolve to a real, reachable endpoint. Automated health checks run on a configurable interval, currently defaulting to 60 minutes.
 - L402 services must return HTTP 402 with a valid L402 challenge when accessed without a token.
 - x402 services must return HTTP 402 with a valid x402 payment challenge.
 - Dedup is by `(url, protocol)`. A PR with a duplicate URL will update the existing entry.
@@ -79,7 +79,7 @@ Use one of these (or propose a new one in your PR):
 
 1. PR reviewed (usually within 24 hours)
 2. Once merged, the listing appears on [402index.io](https://402index.io) immediately
-3. Health checks begin within 15 minutes
+3. Health checks begin within the next scheduled health-check window
 4. Healthy services appear with a green shield. Verified services (domain + payment) appear with a blue shield.
 
 ### Featured listings
@@ -148,5 +148,3 @@ Be kind, be specific, be patient. Disagree technically, not personally. Maintain
 - [Open a discussion](https://github.com/ryanthegentry/402index/discussions)
 - [Open an issue](https://github.com/ryanthegentry/402index/issues/new)
 - Email: hello@402index.io
-
-<!-- Dispatch system lives at ~/workspace/agent-state/dispatch/402index/ -->

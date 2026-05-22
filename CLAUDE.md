@@ -23,7 +23,7 @@ Private per-developer overrides can live in `CLAUDE.local.md` (gitignored). This
 │   │   ├── satring.js     # Satring L402 polling + normalization
 │   │   └── l402apps.js    # l402apps.com polling (HTML scrape, daily)
 │   ├── health/
-│   │   └── checker.js     # Health check runner (every 15min) + event emission
+│   │   └── checker.js     # Health check runner (configurable interval) + event emission
 │   ├── middleware/         # Express middleware (L402, rate limiting, helmet)
 │   ├── services/
 │   │   ├── events.js      # Central event dispatcher: emit() → webhooks + Nostr + email
@@ -90,6 +90,17 @@ When fixing a bug:
 5. Run the full test suite to confirm no regressions
 
 Never skip step 1. If you can't write a failing test, the bug isn't well-enough understood to fix.
+
+## AI-Assisted Workflow
+
+This repository uses AI coding agents as implementation and review assistants, not as commit authorities.
+
+- Work starts from a concrete issue, spec, or failing behavior. Agents receive bounded tasks with the expected files, tests, and acceptance criteria.
+- Bug fixes follow the failing-test-first protocol above. The red test must fail for the behavior under investigation before code is changed.
+- Test assertion changes require an explicit commit-body marker documented in `CONTRIBUTING.md`: `BEHAVIOR-CHANGE:` for intentional contract changes or `ASSERTION-REFACTOR:` for non-behavioral assertion rewrites.
+- Dispatch automation may break larger work into small tasks, but generated patches are reviewed, edited, and committed by the maintainer.
+- The codex-review workflow is a second-pass review tool. Its findings are treated as review input, not automatic approval.
+- Private local overrides and dispatch state stay outside the repository. Public agent instructions belong in this file and `AGENTS.md`.
 
 ## Key Design Decisions
 

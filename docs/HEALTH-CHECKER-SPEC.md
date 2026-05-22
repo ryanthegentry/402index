@@ -312,7 +312,7 @@ The health checker now:
 
 | Setting | Value | Source |
 |---------|-------|--------|
-| Health check interval | 15 minutes | `HEALTH_CHECK_INTERVAL_MS` env var, default 900000 |
+| Health check interval | 60 minutes | `HEALTH_CHECK_INTERVAL_MS` env var, default 3600000 |
 | Health check pass duration | ~16 minutes | Production measurement (13,700+ endpoints / 10 concurrent / 5s timeout) |
 | Retention (checker.js) | 3 days | `HEALTH_CHECK_RETENTION_DAYS` constant |
 | Retention (db.js pruning) | 1 day | Hardcoded in startup prune query |
@@ -321,7 +321,7 @@ The health checker now:
 
 ### Issues
 
-1. **Back-to-back checks**: 16-min pass + 15-min interval = checks run continuously with no idle gap. One pass finishes and the next starts almost immediately.
+1. **Back-to-back checks**: resolved by moving the default interval from 15 minutes to 60 minutes, leaving idle time between production passes.
 
 2. **Retention mismatch**: `checker.js` says 3 days, `db.js` prunes at 1 day. The db.js prune wins because it runs hourly. This means:
    - `uptime_30d` metric queries 30 days of data but only has ~1 day of history
