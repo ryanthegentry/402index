@@ -1,0 +1,7 @@
+a5ec53bf4d30aa2ba0f6068069c7f22f3942db70:test/verify-hash.test.js:generic-api-key:75
+bad2d83025422d305329b55ed1b3ce12663cfb0a:test/verify-hash.test.js:generic-api-key:71
+1b4fb3031a1858d1cfca8f21fc49f0ce810725ed:test/l402-verify.test.js:generic-api-key:400
+49d7b2956f4b62c2742ee8582887707ad6baa61e:test/nostr.test.js:generic-api-key:40
+49d7b2956f4b62c2742ee8582887707ad6baa61e:test/nostr.test.js:generic-api-key:47
+9a9922813a99697207fe77036ec859c4981087ac:test/l402-verify.test.js:jwt:89
+f2a040e64d6482a6643975f761d22fc8460e525e:reports/l402-discovery-2026-03-05.json:generic-api-key:1142
