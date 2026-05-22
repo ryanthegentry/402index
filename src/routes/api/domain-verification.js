@@ -1,3 +1,10 @@
+// Domain-verification routes. Owns:
+//   /claim, /claim/verify, /claim/revoke              — domain-claim lifecycle
+//   PATCH /services/:id, DELETE /services/:id         — verified-provider edits
+//   POST /services/bulk-delete                        — verified-provider bulk soft-delete
+// All /services/* routes here are domain-verified-token-gated; non-token edit
+// flows live in admin.js. The file name leads with "domain-verification" but
+// the surface extends to the verified-provider self-service edit endpoints.
 import { Router } from 'express'
 import { initiateClaim, verifyClaim, editService, revokeClaim, deleteService, bulkDeleteServices } from '../../services/domain-verify.js'
 

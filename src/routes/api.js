@@ -24,4 +24,6 @@ router.use(webhooksRoutes)
 router.use(domainVerificationRoutes)
 
 export default router
+// Re-exported for the backward-compat import in test/registration-bulk.test.js:21.
+// The actual state lives in src/routes/api/register.js.
 export { domainProbeQueue, PROBE_INTER_DELAY_MS }
