@@ -30,7 +30,7 @@
     "helmet": "^8.1.0",
     "js-yaml": "^4.1.0",
     "light-bolt11-decoder": "^3.2.0",
-    "nostr-tools": "^2.23.3"
+    "nostr-tools": "^2.23.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
