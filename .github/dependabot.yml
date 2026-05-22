@@ -11,6 +11,15 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # @types/node tracks runtime types — keep aligned with .nvmrc (Node 22)
+      # rather than chasing major bumps for unused future-API surface.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript major bumps deserve a dedicated PR with build verification,
+      # not an unattended Dependabot drop-in.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
