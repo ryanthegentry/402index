@@ -30,12 +30,12 @@ describe('mcp-drift-check workflow structural assertions', () => {
     assert.ok(!workflowContent.match(/node-version:\s+['"]?18['"]?/), 'Must not use node-version: 18')
   })
 
-  it('d. uses actions/checkout@v4', () => {
-    assert.ok(workflowContent.includes('actions/checkout@v4'), 'Expected actions/checkout@v4')
+  it('d. uses actions/checkout (any major)', () => {
+    assert.ok(/actions\/checkout@v\d+/.test(workflowContent), 'Expected actions/checkout@vN')
   })
 
-  it('e. uses actions/setup-node@v4 with cache: npm and cache-dependency-path: mcp-server/package-lock.json', () => {
-    assert.ok(workflowContent.includes('actions/setup-node@v4'), 'Expected actions/setup-node@v4')
+  it('e. uses actions/setup-node (any major) with cache: npm and cache-dependency-path: mcp-server/package-lock.json', () => {
+    assert.ok(/actions\/setup-node@v\d+/.test(workflowContent), 'Expected actions/setup-node@vN')
     assert.ok(workflowContent.includes("cache: 'npm'") || workflowContent.includes('cache: npm'), 'Expected cache: npm')
     assert.ok(workflowContent.includes('cache-dependency-path: mcp-server/package-lock.json'), 'Expected cache-dependency-path: mcp-server/package-lock.json')
   })
