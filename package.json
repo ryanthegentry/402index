@@ -27,7 +27,7 @@
     "better-sqlite3": "^12.6.2",
     "express": "^4.21.0",
     "express-rate-limit": "^8.3.1",
-    "helmet": "^8.1.0",
+    "helmet": "^8.2.0",
     "js-yaml": "^4.1.0",
     "light-bolt11-decoder": "^3.2.0",
     "nostr-tools": "^2.23.3"
