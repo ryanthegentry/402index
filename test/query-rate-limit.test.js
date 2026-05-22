@@ -89,8 +89,8 @@ describe('Group RL4 — L402-verified requests bypass query limiters', () => {
 
   after(() => new Promise(r => rl4Server.close(r)))
 
-  it('RL4-chain: l402Verified injector is mounted before both query limiters in app._router.stack', () => {
-    const stack = rl4App._router.stack
+  it('RL4-chain: l402Verified injector is mounted before both query limiters in app.router.stack', () => {
+    const stack = rl4App.router.stack
     const injectorIdx = stack.findIndex(l => l.handle === l402Injector)
     const minIdx = stack.findIndex(l => l.handle === queryRateLimiterMin)
     const hourIdx = stack.findIndex(l => l.handle === queryRateLimiterHour)
