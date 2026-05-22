@@ -6,7 +6,7 @@ Protocol-agnostic directory of paid APIs for AI agents.
 [![npm: @402index/mcp-server](https://img.shields.io/npm/v/@402index/mcp-server.svg)](https://www.npmjs.com/package/@402index/mcp-server)
 [![Live: 402index.io](https://img.shields.io/badge/live-402index.io-green.svg)](https://402index.io)
 
-**What it is:** a registry of HTTP 402–priced APIs across every major machine-payment protocol — [L402](https://github.com/lightninglabs/L402) (Lightning), [x402](https://github.com/coinbase/x402) (stablecoins), and MPP (Stripe/Tempo) — surfaced to AI agents via HTTP, RSS, Nostr, and MCP.
+**What it is:** a registry of HTTP 402–priced APIs across every major machine-payment protocol — [L402](https://github.com/lightninglabs/L402) (Lightning), [x402](https://github.com/coinbase/x402) (stablecoins), and [MPP](https://mpp.dev/) (Stripe/Tempo) — surfaced to AI agents via HTTP, RSS, Nostr, and MCP.
 
 **Who it's for:** AI-agent developers looking for services to call, and API providers looking to get discovered by agents. The directory is community-owned: open source, MIT-licensed, no captive protocol.
 
