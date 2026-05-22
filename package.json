@@ -24,7 +24,7 @@
     "backfill:embeddings": "node scripts/backfill-embeddings.mjs"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.10.0",
     "express": "^4.21.0",
     "express-rate-limit": "^8.3.1",
     "helmet": "^8.1.0",
