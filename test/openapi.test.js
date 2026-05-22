@@ -336,10 +336,10 @@ describe('API docs page — dual-protocol fields', async () => {
 
 describe('OpenAPI route — cache headers', async () => {
   // Verify the route source sets Cache-Control
-  const apiSource = readFileSync(join(__dirname, '../src/routes/api.js'), 'utf-8')
+  const docsRouteSource = readFileSync(join(__dirname, '../src/routes/api/docs.js'), 'utf-8')
 
   it('openapi.json route sets Cache-Control public max-age=86400', () => {
-    assert.ok(apiSource.includes('openapi.json'), 'Missing openapi.json route')
-    assert.ok(apiSource.includes('86400'), 'Missing 86400 max-age for openapi.json route')
+    assert.ok(docsRouteSource.includes('openapi.json'), 'Missing openapi.json route')
+    assert.ok(docsRouteSource.includes('86400'), 'Missing 86400 max-age for openapi.json route')
   })
 })

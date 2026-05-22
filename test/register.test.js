@@ -675,18 +675,18 @@ describe('POST /api/v1/register — Protocol Dispatcher', () => {
 
   // ─── Timing-leak migration structural + behavioral regression (#156) ──
 
-  it('structural: api.js does not contain timingSafeEqual(', () => {
-    const src = readFileSync(new URL('../src/routes/api.js', import.meta.url), 'utf8')
-    assert.ok(!src.includes('timingSafeEqual('), 'timingSafeEqual( must be removed from api.js')
+  it('structural: register route does not contain timingSafeEqual(', () => {
+    const src = readFileSync(new URL('../src/routes/api/register.js', import.meta.url), 'utf8')
+    assert.ok(!src.includes('timingSafeEqual('), 'timingSafeEqual( must be removed from register route')
   })
 
-  it('structural: api.js does not contain Length mismatch catch-clause comment', () => {
-    const src = readFileSync(new URL('../src/routes/api.js', import.meta.url), 'utf8')
+  it('structural: register route does not contain Length mismatch catch-clause comment', () => {
+    const src = readFileSync(new URL('../src/routes/api/register.js', import.meta.url), 'utf8')
     assert.ok(!src.includes('Length mismatch'), 'catch-clause comment must be removed')
   })
 
-  it('structural: api.js uses constantTimeEqual(gatewaySecret, gatewayHeader)', () => {
-    const src = readFileSync(new URL('../src/routes/api.js', import.meta.url), 'utf8')
+  it('structural: register route uses constantTimeEqual(gatewaySecret, gatewayHeader)', () => {
+    const src = readFileSync(new URL('../src/routes/api/register.js', import.meta.url), 'utf8')
     assert.ok(src.includes('constantTimeEqual(gatewaySecret, gatewayHeader)'), 'must use constantTimeEqual for gateway comparison')
   })
 

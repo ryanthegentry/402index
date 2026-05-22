@@ -249,9 +249,9 @@ describe('admin page — Traffic tab', async () => {
 })
 
 describe('admin traffic API routes', async () => {
-  const apiSource = readFileSync(join(__dirname, '../src/routes/api.js'), 'utf-8')
+  const adminRouteSource = readFileSync(join(__dirname, '../src/routes/api/admin.js'), 'utf-8')
 
   it('has /admin/traffic route', () => {
-    assert.ok(apiSource.includes("'/admin/traffic'") || apiSource.includes('"/admin/traffic"'))
+    assert.ok(adminRouteSource.includes("'/admin/traffic'") || adminRouteSource.includes('"/admin/traffic"'))
   })
 })
