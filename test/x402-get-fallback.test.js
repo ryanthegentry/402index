@@ -253,6 +253,7 @@ describe('scoreboard stats SQL — NULL handling', () => {
     const x402_payment_valid = null
     // SQL: NOT ('x402' = 'x402' AND NULL = 0) → NOT (true AND NULL) → NOT NULL → NULL → excluded
     // This is NOT the same as the JS behavior
+    // eslint-disable-next-line no-constant-binary-expression -- literal `true` mirrors the always-true SQL predicate ('x402' = 'x402') so the JS expression matches the SQL clause structurally; see comment block above
     const sqlResult = !(true && (x402_payment_valid === 0)) // JS: !(true && false) = true ← DIFFERENT from SQL
     assert.equal(sqlResult, true, 'JS handles NULL correctly but SQL does not — this test documents the bug')
   })
