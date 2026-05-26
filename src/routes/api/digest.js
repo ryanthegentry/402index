@@ -3,6 +3,17 @@ import db from '../../db.js'
 
 const router = Router()
 
+// Classify a raw User-Agent string into a coarse client type for the digest's
+// top-agents breakdown. Restored here after the #276 route-split moved the
+// /digest handler out of the monolithic src/routes/api.js without carrying the
+// helper across. Behaviour is verbatim from the pre-split api.js.
+function classifyAgent(ua) {
+  if (!ua || ua === '') return 'api'
+  if (ua.includes('402index-mcp')) return 'mcp'
+  if (ua.includes('Mozilla') || ua.includes('Chrome') || ua.includes('Safari')) return 'browser'
+  return 'api'
+}
+
 router.get('/digest', (req, res) => {
   try {
     const ACTIVE = "(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
