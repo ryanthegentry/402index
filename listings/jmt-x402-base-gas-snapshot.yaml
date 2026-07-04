@@ -1,0 +1,9 @@
+name: "JMT x402 Base Gas Snapshot"
+description: "Live Base gas snapshot endpoint from a real Base-mainnet x402 provider. Discovery docs at /llms.txt, /openapi.json, and /.well-known/x402."
+url: "https://certificate-casting-radio-finder.trycloudflare.com/api/gas-snapshot"
+protocol: x402
+price_usd: 0.001
+payment_asset: "USDC"
+payment_network: "Base mainnet"
+category: "crypto/defi"
+provider: "JMT x402 Real-Money Agent Tools"
