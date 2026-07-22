@@ -17,58 +17,63 @@ export function isHealthCheckRunning() {
   return healthCheckRunning
 }
 
+/**
+ * Refresh featured flags + template/demo classification after a poll.
+ *
+ * Never throws. Both calls write to SQLite, so on a full volume they raise SQLITE_FULL; when that
+ * escaped an uncaught `.then()` it became an unhandled rejection and killed the process (the
+ * 2026-07-22 crash loop). Poll failures are logged and skipped, per CLAUDE.md: "log and continue
+ * for aggregator/health failures — never crash the server."
+ *
+ * @returns {boolean} true if both refreshes succeeded.
+ */
+export function refreshDerivedState({ featured = loadFeatured, classify = classifyServices } = {}) {
+  try {
+    featured()
+    classify()
+    return true
+  } catch (err) {
+    console.error('[scheduler] Derived-state refresh failed:', err.message)
+    return false
+  }
+}
+
 function runPolls() {
   return Promise.all([
     pollBazaar().catch(err => console.error('[scheduler] Bazaar poll failed:', err.message)),
     pollSatring().catch(err => console.error('[scheduler] Satring poll failed:', err.message)),
-  ]).then(() => {
-    loadFeatured()
-    classifyServices()
-  })
+  ])
+    .then(() => refreshDerivedState())
+    .catch(err => console.error('[scheduler] Bazaar/Satring cycle failed:', err.message))
 }
 
 function runL402AppsPoll() {
   return pollL402Apps()
-    .then(() => {
-      loadFeatured()
-      classifyServices()
-    })
+    .then(() => refreshDerivedState())
     .catch(err => console.error('[scheduler] l402apps poll failed:', err.message))
 }
 
 function runSpongePoll() {
   return pollSponge()
-    .then(() => {
-      loadFeatured()
-      classifyServices()
-    })
+    .then(() => refreshDerivedState())
     .catch(err => console.error('[scheduler] sponge poll failed:', err.message))
 }
 
 function runL402DirectoryPoll() {
   return pollL402Directory()
-    .then(() => {
-      loadFeatured()
-      classifyServices()
-    })
+    .then(() => refreshDerivedState())
     .catch(err => console.error('[scheduler] l402directory poll failed:', err.message))
 }
 
 function runMPPPoll() {
   return pollMPP()
-    .then(() => {
-      loadFeatured()
-      classifyServices()
-    })
+    .then(() => refreshDerivedState())
     .catch(err => console.error('[scheduler] MPP poll failed:', err.message))
 }
 
 function runMppscanPoll() {
   return pollMppscan()
-    .then(() => {
-      loadFeatured()
-      classifyServices()
-    })
+    .then(() => refreshDerivedState())
     .catch(err => console.error('[scheduler] MPPscan poll failed:', err.message))
 }
 

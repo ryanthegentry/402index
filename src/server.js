@@ -9,6 +9,7 @@ import { adminAuth, digestAuth } from './middleware/admin-auth.js'
 import apiRoutes from './routes/api.js'
 import pageRoutes from './routes/pages.js'
 import { startScheduler, shutdown } from './scheduler.js'
+import { installProcessGuards } from './util/process-guards.js'
 
 const app = express()
 const PORT = process.env.PORT || 3402
@@ -116,6 +117,7 @@ export { app }
 // Start server (skip when imported as a module for tests)
 const isDirectRun = process.argv[1] === fileURLToPath(import.meta.url)
 if (isDirectRun) {
+  installProcessGuards()
   const server = app.listen(PORT, () => {
     console.log(`[server] 402index listening on port ${PORT}`)
     if (!process.env.DIGEST_API_KEY) {

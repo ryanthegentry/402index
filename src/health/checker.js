@@ -857,22 +857,35 @@ function pruneOldHealthChecks() {
   }
 }
 
-/** Check disk usage and take action if volume is filling up. */
-async function checkDiskSpace() {
+/**
+ * Check disk usage and decide whether this health-check run may proceed.
+ *
+ * Above 90% the run is skipped after an emergency prune. It used to prune and then continue into
+ * a full pass over every endpoint — hundreds of thousands of writes against the volume that just
+ * reported itself nearly full, which is how the 2026-07-22 crash loop kept its footing.
+ *
+ * @returns {Promise<'continue'|'skip'>}
+ */
+export async function checkDiskSpace({ statfsFn = statfs, database = db } = {}) {
   try {
-    const stats = await statfs(dirname(DB_PATH))
+    const stats = await statfsFn(dirname(DB_PATH))
     const totalBytes = stats.blocks * stats.bsize
     const freeBytes = stats.bfree * stats.bsize
     const usedPct = ((totalBytes - freeBytes) / totalBytes) * 100
 
     if (usedPct > 90) {
-      console.warn(`[health] CRITICAL: Disk ${usedPct.toFixed(1)}% full — emergency prune (1 day retention)`)
-      const result = db.prepare(
-        "DELETE FROM health_checks WHERE checked_at < datetime('now', '-1 day')"
-      ).run()
-      console.warn(`[health] Emergency prune deleted ${result.changes} rows`)
-      db.pragma('incremental_vacuum')
-      return 'continue'
+      console.warn(`[health] CRITICAL: Disk ${usedPct.toFixed(1)}% full — emergency prune (1 day retention), skipping run`)
+      try {
+        const result = database.prepare(
+          "DELETE FROM health_checks WHERE checked_at < datetime('now', '-1 day')"
+        ).run()
+        console.warn(`[health] Emergency prune deleted ${result.changes} rows`)
+        database.pragma('incremental_vacuum')
+      } catch (pruneErr) {
+        // On a genuinely full volume even DELETE fails — it needs rollback-journal space.
+        console.error(`[health] Emergency prune failed: ${pruneErr.message}`)
+      }
+      return 'skip'
     }
 
     if (usedPct > 80) {
@@ -882,6 +895,12 @@ async function checkDiskSpace() {
 
     return 'continue'
   } catch (err) {
+    // A full volume surfaces here as SQLITE_FULL; anything else is treated as a benign
+    // statfs failure and must not stop health checks from running.
+    if (err.code === 'SQLITE_FULL' || /disk is full/i.test(err.message || '')) {
+      console.error(`[health] Disk full while checking space: ${err.message} — skipping run`)
+      return 'skip'
+    }
     console.warn(`[health] Could not check disk space: ${err.message} — continuing anyway`)
     return 'continue'
   }
