@@ -326,28 +326,40 @@ try {
 }
 
 // Migration: expand health_checks status CHECK constraint to include rate_limited, method_not_allowed
-try {
-  const cols = db.pragma("table_info('health_checks')")
-  const statusCol = cols.find(c => c.name === 'status')
-  // Check if constraint needs updating by trying an insert with new value
-  const needsMigration = (() => {
-    try {
-      db.exec("INSERT INTO health_checks (service_id, status) VALUES ('__test__', 'rate_limited')")
-      db.exec("DELETE FROM health_checks WHERE service_id = '__test__'")
-      return false // constraint already allows it
-    } catch {
-      return true
-    }
-  })()
+export const HEALTH_CHECK_STATUSES = [
+  'healthy', 'degraded', 'down', 'timeout', 'error', 'rate_limited', 'method_not_allowed',
+]
 
-  if (needsMigration) {
-    console.log('[db] Migrating health_checks table to expand status CHECK constraint...')
-    db.exec(`
+/**
+ * Rebuild health_checks if its status CHECK constraint is missing any allowed value.
+ *
+ * Detection reads the stored CREATE TABLE text rather than probing with an INSERT: a probe
+ * insert always fails under `foreign_keys = ON` (the fake service_id has no parent row), which
+ * made this migration re-run on every boot and rewrite the whole table each time.
+ *
+ * The rebuild runs in one transaction and drops any leftover health_checks_new first, so a run
+ * killed part-way (SQLITE_FULL, restart) cannot wedge every later boot.
+ *
+ * @returns {boolean} true if the table was rebuilt, false if it was already current.
+ */
+export function migrateHealthChecksStatusConstraint(database = db) {
+  const table = database.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'health_checks'"
+  ).get()
+  if (!table) return false
+
+  const missing = HEALTH_CHECK_STATUSES.filter(s => !table.sql.includes(`'${s}'`))
+  if (missing.length === 0) return false
+
+  console.log(`[db] Migrating health_checks status CHECK constraint (missing: ${missing.join(', ')})...`)
+  const rebuild = database.transaction(() => {
+    database.exec('DROP TABLE IF EXISTS health_checks_new')
+    database.exec(`
       CREATE TABLE health_checks_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         service_id TEXT NOT NULL REFERENCES services(id),
         checked_at TEXT NOT NULL DEFAULT (datetime('now')),
-        status TEXT NOT NULL CHECK(status IN ('healthy', 'degraded', 'down', 'timeout', 'error', 'rate_limited', 'method_not_allowed')),
+        status TEXT NOT NULL CHECK(status IN (${HEALTH_CHECK_STATUSES.map(s => `'${s}'`).join(', ')})),
         response_time_ms INTEGER,
         http_status INTEGER,
         error_message TEXT
@@ -355,10 +367,16 @@ try {
       INSERT INTO health_checks_new SELECT * FROM health_checks;
       DROP TABLE health_checks;
       ALTER TABLE health_checks_new RENAME TO health_checks;
-      CREATE INDEX idx_health_checks_service ON health_checks(service_id, checked_at);
+      CREATE INDEX IF NOT EXISTS idx_health_checks_service ON health_checks(service_id, checked_at);
     `)
-    console.log('[db] health_checks CHECK constraint updated')
-  }
+  })
+  rebuild()
+  console.log('[db] health_checks CHECK constraint updated')
+  return true
+}
+
+try {
+  migrateHealthChecksStatusConstraint(db)
 } catch (err) {
   console.warn(`[db] health_checks migration note: ${err.message}`)
 }
@@ -833,17 +851,40 @@ function pruneHealthChecks() {
   }
 }
 
-function purgeSoftDeleted() {
+/**
+ * Hard-delete services soft-deleted more than `retentionDays` ago.
+ *
+ * health_checks and service_embeddings both reference services(id) with no ON DELETE CASCADE,
+ * so the child rows must go first or the whole statement fails on a FOREIGN KEY constraint and
+ * nothing is ever purged. Runs in one transaction so a failure leaves no orphaned children.
+ *
+ * @returns {number} count of services hard-deleted.
+ */
+export function purgeSoftDeleted(database = db, retentionDays = 30) {
+  const cutoff = `-${retentionDays} days`
   try {
-    const result = db.prepare(
-      "DELETE FROM services WHERE provider_deleted = 1 AND deleted_at < datetime('now', '-30 days')"
-    ).run()
-    if (result.changes > 0) {
-      console.log(`[db] Hard-deleted ${result.changes} soft-deleted services older than 30 days`)
-      db.pragma('incremental_vacuum')
+    const purge = database.transaction(() => {
+      const doomed = database.prepare(
+        "SELECT id FROM services WHERE provider_deleted = 1 AND deleted_at < datetime('now', ?)"
+      ).all(cutoff).map(r => r.id)
+      if (doomed.length === 0) return 0
+
+      const placeholders = doomed.map(() => '?').join(', ')
+      database.prepare(`DELETE FROM health_checks WHERE service_id IN (${placeholders})`).run(...doomed)
+      database.prepare(`DELETE FROM service_embeddings WHERE service_id IN (${placeholders})`).run(...doomed)
+      database.prepare(`DELETE FROM services WHERE id IN (${placeholders})`).run(...doomed)
+      return doomed.length
+    })
+
+    const removed = purge()
+    if (removed > 0) {
+      console.log(`[db] Hard-deleted ${removed} soft-deleted services older than ${retentionDays} days`)
+      database.pragma('incremental_vacuum')
     }
+    return removed
   } catch (err) {
     console.warn(`[db] Soft-delete purge failed: ${err.message}`)
+    return 0
   }
 }
 
