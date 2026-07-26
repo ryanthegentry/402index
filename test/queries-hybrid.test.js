@@ -6,7 +6,7 @@ const originalFetch = globalThis.fetch
 
 let db, SQLITE_VEC_AVAILABLE, logQuery
 let queryServices, queryServicesHybrid, buildServiceQuery, buildHybridComparator, API_COLUMNS
-let embedQuery, cosineSimilarity, getCircuitState, resetCircuit
+let embedQuery, cosineSimilarity, getCircuitState, resetCircuit, resetQueryEmbeddingCache
 let startServer, stopServer, API
 
 // ─── Fixture embeddings ──────────────────────────────────────────────────────
@@ -94,6 +94,8 @@ before(async () => {
   SQLITE_VEC_AVAILABLE = dbMod.SQLITE_VEC_AVAILABLE
   logQuery = dbMod.logQuery
 
+  ;({ resetQueryEmbeddingCache } = await import('../src/services/embeddings.js'))
+
   const queries = await import('../src/queries/services.js')
   queryServices = queries.queryServices
   queryServicesHybrid = queries.queryServicesHybrid
@@ -159,6 +161,9 @@ after(async () => {
 
 beforeEach(() => {
   globalThis.fetch = originalFetch
+  // A cached query vector short-circuits callOpenAI, so the timeout/error paths these
+  // tests inject would never be reached on a repeated query string.
+  if (resetQueryEmbeddingCache) resetQueryEmbeddingCache()
 })
 
 // Helper: stub embedQuery to return a specific vector (or simulate timeout/error)

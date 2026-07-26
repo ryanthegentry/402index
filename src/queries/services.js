@@ -6,6 +6,11 @@ import { SQLITE_VEC_AVAILABLE } from '../db.js'
 // consistent with the SQL LIKE path.
 const asciiLower = (s) => s.replace(/[A-Z]/g, c => c.toLowerCase())
 
+// Budget for the semantic scan itself. Measured on sqlite-vec 0.1.9: a top-50 KNN
+// over 80k × 1536-dim float32 vectors runs in ~20ms, so exceeding this means
+// something has changed, not that the index is inherently too slow.
+const VEC_SCAN_BUDGET_MS = 500
+
 const SORT_COLUMNS = { name: 'name', price: 'price_usd', latency: 'latency_p50_ms', uptime: 'uptime_30d', reliability: 'reliability_score', registered_at: 'registered_at' }
 const VALID_HEALTH = new Set(['healthy', 'degraded', 'down', 'unknown'])
 const VALID_PROBE_STATUS = new Set(['probeable', 'unprobeable'])
@@ -269,32 +274,44 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
   let vecDegraded = null
   const K = Math.max(50, limit) // top-K semantic window; semantic_cap = true when saturated
 
+  // better-sqlite3 is synchronous. The old code raced the query against a
+  // setTimeout, but the Promise executor ran the query to completion before the
+  // timer was even created, so the deadline could never fire: it aborted nothing
+  // and reported nothing. Time the call and judge it afterwards instead — that is
+  // the only honest option while the driver is synchronous.
   if (SQLITE_VEC_AVAILABLE) {
-    // sqlite-vec top-K with 500ms deadline
+    const started = Date.now()
     try {
-      let vecTimer
-      const vecResult = await Promise.race([
-        new Promise((resolve) => {
-          const blob = Buffer.from(embedding.buffer)
-          const rows = db.prepare(
-            `SELECT service_id, distance FROM vec_service_embeddings WHERE embedding MATCH ? ORDER BY distance LIMIT ?`
-          ).all(blob, K)
-          resolve(rows)
-        }),
-        new Promise(resolve => { vecTimer = setTimeout(() => resolve('__vec_deadline__'), 500) }),
-      ])
-      clearTimeout(vecTimer)
+      const blob = Buffer.from(embedding.buffer)
+      const rows = db.prepare(
+        `SELECT service_id, distance FROM vec_service_embeddings WHERE embedding MATCH ? ORDER BY distance LIMIT ?`
+      ).all(blob, K)
+      const elapsed = Date.now() - started
 
-      if (vecResult === '__vec_deadline__') {
-        vecDegraded = 'vec-deadline'
-      } else {
-        for (const row of vecResult) {
-          // sqlite-vec returns distance (lower = more similar), convert to similarity
-          semanticScores.set(row.service_id, 1 - row.distance)
-        }
+      if (rows.length === 0) {
+        // Separate "index not populated yet" from "no neighbours for this query".
+        // Only reached when KNN returns nothing, so this COUNT stays off the hot path.
+        const indexed = db.prepare('SELECT COUNT(*) as c FROM vec_service_embeddings').get().c
+        if (indexed === 0) vecDegraded = 'vec-unbuilt'
       }
-    } catch {
-      vecDegraded = 'vec-deadline'
+
+      for (const row of rows) {
+        // sqlite-vec returns distance (lower = more similar), convert to similarity
+        semanticScores.set(row.service_id, 1 - row.distance)
+      }
+
+      // A slow-but-complete scan still produced correct results, so it is logged
+      // rather than flagged — degradedReason means "semantic results are missing",
+      // and blurring that would make the degraded rate useless as a signal.
+      if (!vecDegraded && elapsed > VEC_SCAN_BUDGET_MS) {
+        console.warn(`[search] slow vec scan: ${elapsed}ms for k=${K} (budget ${VEC_SCAN_BUDGET_MS}ms)`)
+      }
+    } catch (err) {
+      // A thrown error is not a deadline. Calling it `vec-deadline` is precisely how
+      // the missing-index bug hid: the log blamed a timeout that never happened while
+      // the real message — `no such table: vec_service_embeddings` — was swallowed.
+      console.warn(`[search] vec query failed: ${err.message}`)
+      vecDegraded = 'vec-error'
     }
   } else {
     // Pure-JS fallback with row count guard
@@ -302,36 +319,24 @@ export async function queryServicesHybrid(db, opts, columns = API_COLUMNS) {
     if (countRow.c > 5000) {
       vecDegraded = 'js-fallback-too-large'
     } else {
-      // Load all embeddings and compute cosine
+      const started = Date.now()
       try {
-        let jsTimer
-        const result = await Promise.race([
-          new Promise((resolve) => {
-            const rows = db.prepare('SELECT service_id, embedding FROM service_embeddings').all()
-            const scores = []
-            for (const row of rows) {
-              if (row.embedding.byteLength % 4 !== 0) throw new Error(`Malformed embedding for ${row.service_id}: byteLength=${row.embedding.byteLength} not divisible by 4`)
-              const vec = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4)
-              if (vec.length === 1536) {
-                const score = cosineSimilarity(embedding, vec)
-                scores.push({ service_id: row.service_id, score })
-              }
-            }
-            resolve(scores)
-          }),
-          new Promise(resolve => { jsTimer = setTimeout(() => resolve('__vec_deadline__'), 500) }),
-        ])
-        clearTimeout(jsTimer)
-
-        if (result === '__vec_deadline__') {
-          vecDegraded = 'vec-deadline'
-        } else {
-          for (const { service_id, score } of result) {
-            semanticScores.set(service_id, score)
+        const rows = db.prepare('SELECT service_id, embedding FROM service_embeddings').all()
+        for (const row of rows) {
+          if (row.embedding.byteLength % 4 !== 0) throw new Error(`Malformed embedding for ${row.service_id}: byteLength=${row.embedding.byteLength} not divisible by 4`)
+          const vec = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4)
+          if (vec.length === 1536) {
+            semanticScores.set(row.service_id, cosineSimilarity(embedding, vec))
           }
         }
-      } catch {
-        vecDegraded = 'vec-deadline'
+        const elapsed = Date.now() - started
+        if (elapsed > VEC_SCAN_BUDGET_MS) {
+          console.warn(`[search] slow JS cosine fallback: ${elapsed}ms over ${rows.length} embeddings`)
+        }
+      } catch (err) {
+        console.warn(`[search] JS cosine fallback failed: ${err.message}`)
+        semanticScores = new Map()
+        vecDegraded = 'vec-error'
       }
     }
   }

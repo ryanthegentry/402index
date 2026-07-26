@@ -1,4 +1,4 @@
-import db from '../db.js'
+import db, { syncVecEmbedding } from '../db.js'
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const EMBEDDINGS_ENABLED = Boolean(OPENAI_API_KEY)
@@ -132,6 +132,10 @@ export async function generateEmbedding(serviceId) {
     const embeddedAt = Math.floor(Date.now() / 1000)
 
     upsertEmbedding.run(serviceId, blob, MODEL, embeddedAt)
+    // Keep the KNN index in step with the blob store. This is the only write path
+    // for embeddings, so an explicit call here replaces the sync triggers that
+    // corrupted the FTS5 shadow tables on 2026-04-15.
+    syncVecEmbedding(serviceId, blob)
   } catch (err) {
     console.warn(`[embeddings] generateEmbedding error for ${serviceId}: ${err.message}`)
   } finally {
@@ -212,6 +216,53 @@ export function resetCircuit(opts = {}) {
   halfOpenTrialInFlight = false
 }
 
+// ─── Query embedding cache ───────────────────────────────────────────────────
+// The OpenAI round-trip, not the KNN scan, is what dominates search latency: a
+// 1536-dim KNN over 80k rows takes ~20ms, while the embed call takes 250-1200ms.
+// Agent traffic is extremely repetitive — the top two queries alone were 2,696 of
+// 4,501 searches in 24h — so caching query vectors takes those searches off the
+// network entirely. Only successes are cached: caching a failure would pin one
+// bad response to a hot query for the whole TTL.
+const QUERY_CACHE_MAX = 500
+const QUERY_CACHE_TTL_MS = 6 * 60 * 60 * 1000
+const queryCache = new Map() // text → { embedding, expiresAt }
+let queryCacheHits = 0
+let queryCacheMisses = 0
+
+function cacheGet(text) {
+  const entry = queryCache.get(text)
+  if (!entry) return null
+  if (_now() > entry.expiresAt) {
+    queryCache.delete(text)
+    return null
+  }
+  // Refresh recency for LRU eviction.
+  queryCache.delete(text)
+  queryCache.set(text, entry)
+  return entry.embedding
+}
+
+function cacheSet(text, embedding) {
+  if (queryCache.has(text)) queryCache.delete(text)
+  queryCache.set(text, { embedding, expiresAt: _now() + QUERY_CACHE_TTL_MS })
+  while (queryCache.size > QUERY_CACHE_MAX) {
+    // Map preserves insertion order, so the first key is the least recently used.
+    queryCache.delete(queryCache.keys().next().value)
+  }
+}
+
+/** Cache counters for /api/v1/health and tests. */
+export function getQueryEmbeddingCacheStats() {
+  return { size: queryCache.size, hits: queryCacheHits, misses: queryCacheMisses, max: QUERY_CACHE_MAX }
+}
+
+/** Clear the cache. Used by tests and after a model change. */
+export function resetQueryEmbeddingCache() {
+  queryCache.clear()
+  queryCacheHits = 0
+  queryCacheMisses = 0
+}
+
 /**
  * Embed a query for the read path. Returns { embedding, degradedReason }.
  * degradedReason is null on success, or one of the reason codes on failure.
@@ -221,6 +272,13 @@ export async function embedQueryForRead(text, timeoutMs = 1500) {
   if (!process.env.OPENAI_API_KEY) {
     return { embedding: null, degradedReason: 'no-api-key' }
   }
+
+  const cached = cacheGet(text)
+  if (cached) {
+    queryCacheHits++
+    return { embedding: cached, degradedReason: null }
+  }
+  queryCacheMisses++
 
   // Circuit breaker check
   const state = getCircuitState()
@@ -255,6 +313,7 @@ export async function embedQueryForRead(text, timeoutMs = 1500) {
     }
 
     recordSuccess()
+    cacheSet(text, result)
     return { embedding: result, degradedReason: null }
   } catch (err) {
     clearTimeout(timer)

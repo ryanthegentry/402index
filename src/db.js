@@ -584,14 +584,26 @@ try {
   console.warn(`[db] Incremental vacuum note: ${err.message}`)
 }
 
-// TODO: Remove this DROP after semantic search (#129) stabilizes. FTS5 tests were retired in #135.
 // ─── FTS5 Full-Text Search Index (DISABLED — corrupt vtab recovery) ────────
+// Dropped during the 2026-04-15 outage and never rebuilt: no code path queries FTS5,
+// keyword matching runs through LIKE in src/queries/services.js. This stays as a guard
+// against a database that still carries the old objects.
+//
+// It used to log unconditionally, so `[db] Dropped FTS5 index and triggers` appeared on
+// every boot long after there was anything left to drop — which read like a recurring
+// fault during the 2026-07-25 search investigation. Log only when it actually removes
+// something.
 try {
-  db.exec('DROP TRIGGER IF EXISTS services_fts_insert')
-  db.exec('DROP TRIGGER IF EXISTS services_fts_update')
-  db.exec('DROP TRIGGER IF EXISTS services_fts_delete')
-  db.exec('DROP TABLE IF EXISTS services_fts')
-  console.log('[db] Dropped FTS5 index and triggers (recovery mode)')
+  const ftsObjects = db.prepare(
+    "SELECT COUNT(*) AS c FROM sqlite_master WHERE name IN ('services_fts', 'services_fts_insert', 'services_fts_update', 'services_fts_delete')"
+  ).get().c
+  if (ftsObjects > 0) {
+    db.exec('DROP TRIGGER IF EXISTS services_fts_insert')
+    db.exec('DROP TRIGGER IF EXISTS services_fts_update')
+    db.exec('DROP TRIGGER IF EXISTS services_fts_delete')
+    db.exec('DROP TABLE IF EXISTS services_fts')
+    console.log(`[db] Dropped ${ftsObjects} leftover FTS5 object(s) (recovery mode)`)
+  }
 } catch (err) {
   console.warn(`[db] FTS5 cleanup note: ${err.message}`)
 }
@@ -612,6 +624,99 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_service_embeddings_embedded_at
     ON service_embeddings(embedded_at);
 `)
+
+// ─── Vector KNN index ────────────────────────────────────────────────────────
+// service_embeddings holds the authoritative float32 BLOBs. vec_service_embeddings
+// is the sqlite-vec index the search path actually queries.
+//
+// Until 2026-07-25 this table was created only inside test/queries-hybrid.test.js.
+// Production never had it, so every semantic search threw `no such table`, the bare
+// catch in queries/services.js relabelled that as `vec-deadline`, and 100% of q=
+// searches silently fell back to LIKE-only. The tests passed because the fixture
+// built the table the application never did.
+//
+// Two things are deliberately NOT done here, per the 2026-04-15 FTS5 outage:
+//   * no triggers on services or service_embeddings, and
+//   * no backfill at startup.
+// That outage came from a startup backfill interleaving with concurrent poller
+// writes through sync triggers, which corrupted the FTS5 shadow tables. vec0 has
+// shadow tables too, so the same shape is off-limits. Creating the virtual table
+// is DDL only — it moves no rows — and the index is kept current by explicit calls
+// from the single embedding write path. Existing rows are loaded once, out of band,
+// by scripts/backfill-vec-index.mjs.
+
+export const VEC_DIMENSIONS = 1536
+
+export function ensureVecIndex(database = db) {
+  if (!SQLITE_VEC_AVAILABLE) return false
+  try {
+    database.exec(
+      `CREATE VIRTUAL TABLE IF NOT EXISTS vec_service_embeddings USING vec0(service_id text primary key, embedding float[${VEC_DIMENSIONS}])`
+    )
+    return true
+  } catch (err) {
+    console.warn(`[db] vec index unavailable: ${err.message}`)
+    return false
+  }
+}
+
+// vec0 rejects INSERT OR REPLACE with a UNIQUE constraint error, so the upsert is
+// delete-then-insert inside a transaction.
+export function syncVecEmbedding(serviceId, blob, database = db) {
+  if (!SQLITE_VEC_AVAILABLE) return false
+  try {
+    const del = database.prepare('DELETE FROM vec_service_embeddings WHERE service_id = ?')
+    const ins = database.prepare('INSERT INTO vec_service_embeddings(service_id, embedding) VALUES (?, ?)')
+    database.transaction(() => { del.run(serviceId); ins.run(serviceId, blob) })()
+    return true
+  } catch (err) {
+    console.warn(`[db] syncVecEmbedding failed for ${serviceId}: ${err.message}`)
+    return false
+  }
+}
+
+export function deleteVecEmbedding(serviceId, database = db) {
+  if (!SQLITE_VEC_AVAILABLE) return false
+  try {
+    database.prepare('DELETE FROM vec_service_embeddings WHERE service_id = ?').run(serviceId)
+    return true
+  } catch (err) {
+    console.warn(`[db] deleteVecEmbedding failed for ${serviceId}: ${err.message}`)
+    return false
+  }
+}
+
+/**
+ * Whether this specific handle has the vec index. SQLITE_VEC_AVAILABLE only says the
+ * extension loaded — an injected database (tests, scripts) can lack the table, and an
+ * unguarded DELETE against it would roll back the transaction it sits in.
+ */
+export function hasVecIndex(database = db) {
+  if (!SQLITE_VEC_AVAILABLE) return false
+  try {
+    return database.prepare(
+      "SELECT COUNT(*) AS c FROM sqlite_master WHERE name = 'vec_service_embeddings'"
+    ).get().c > 0
+  } catch {
+    return false
+  }
+}
+
+/** Row counts for the embedding store and its index. Used by /health and the backfill. */
+export function getVecIndexStats(database = db) {
+  const stats = { available: SQLITE_VEC_AVAILABLE, embeddings: 0, indexed: 0 }
+  try {
+    stats.embeddings = database.prepare('SELECT COUNT(*) AS c FROM service_embeddings').get().c
+    if (hasVecIndex(database)) {
+      stats.indexed = database.prepare('SELECT COUNT(*) AS c FROM vec_service_embeddings').get().c
+    }
+  } catch (err) {
+    console.warn(`[db] getVecIndexStats failed: ${err.message}`)
+  }
+  return stats
+}
+
+ensureVecIndex()
 
 // ─── Daily Snapshots ────────────────────────────────────────────────────────
 
@@ -872,6 +977,12 @@ export function purgeSoftDeleted(database = db, retentionDays = 30) {
       const placeholders = doomed.map(() => '?').join(', ')
       database.prepare(`DELETE FROM health_checks WHERE service_id IN (${placeholders})`).run(...doomed)
       database.prepare(`DELETE FROM service_embeddings WHERE service_id IN (${placeholders})`).run(...doomed)
+      // vec_service_embeddings is a virtual table and cannot carry a foreign key, so
+      // its rows would otherwise outlive the services they describe and keep scoring
+      // in KNN results. Same id list, same transaction as the blob store.
+      if (hasVecIndex(database)) {
+        database.prepare(`DELETE FROM vec_service_embeddings WHERE service_id IN (${placeholders})`).run(...doomed)
+      }
       database.prepare(`DELETE FROM services WHERE id IN (${placeholders})`).run(...doomed)
       return doomed.length
     })
