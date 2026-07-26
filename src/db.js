@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { mkdirSync, unlinkSync, existsSync, statSync } from 'fs'
+import { mkdirSync, unlinkSync, existsSync, statSync, statfsSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
@@ -67,6 +67,128 @@ if (process.env.DISABLE_SQLITE_VEC === '1') {
 console.log(`[db] SQLITE_VEC_AVAILABLE=${SQLITE_VEC_AVAILABLE}`)
 export { SQLITE_VEC_AVAILABLE }
 
+// ─── health_checks status enum: the single source of truth ───────────────────
+//
+// Every copy of this enum derives from this array: the CREATE TABLE below, the migration that
+// rebuilds an older table, and test/helpers/test-db.js. Three hand-maintained copies is how
+// `not_acceptable` — emitted by classifyHealthStatus for HTTP 406 — ended up rejected by the
+// CHECK constraint on every write, silently, for ~10 endpoints per cycle.
+
+export const HEALTH_CHECK_STATUSES = [
+  'healthy', 'degraded', 'down', 'timeout', 'error', 'rate_limited', 'method_not_allowed', 'not_acceptable',
+]
+
+/** health_checks columns, in canonical order. Used for explicit-column copies during rebuilds. */
+export const HEALTH_CHECK_COLUMNS = [
+  'id', 'service_id', 'checked_at', 'status', 'response_time_ms', 'http_status', 'error_message',
+]
+
+const HEALTH_CHECK_RETENTION_DAYS = 3
+
+/**
+ * Generate the health_checks DDL from HEALTH_CHECK_STATUSES.
+ * @param {string} [tableName='health_checks'] - Target table name (the rebuild uses health_checks_new)
+ * @param {object} [options]
+ * @param {boolean} [options.ifNotExists=false] - Emit CREATE TABLE IF NOT EXISTS
+ * @returns {string} CREATE TABLE statement
+ */
+export function healthChecksTableDDL(tableName = 'health_checks', { ifNotExists = false } = {}) {
+  const allowed = HEALTH_CHECK_STATUSES.map(s => `'${s}'`).join(', ')
+  return `CREATE TABLE ${ifNotExists ? 'IF NOT EXISTS ' : ''}${tableName} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_id TEXT NOT NULL REFERENCES services(id),
+    checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+    status TEXT NOT NULL CHECK(status IN (${allowed})),
+    response_time_ms INTEGER,
+    http_status INTEGER,
+    error_message TEXT
+  )`
+}
+
+// ─── counters: durable, never-pruned key/value aggregates ───────────────────
+//
+// Lives in the DB so it is transactional with the writes it counts, visible from both the server
+// process and scripts/healthcheck.js, and survives deploys. No retention is ever applied here.
+
+export const COUNTERS_TABLE_DDL = `
+  CREATE TABLE IF NOT EXISTS counters (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`
+
+export const COUNTER_KEYS = {
+  MCP_QUERIES_LIFETIME: 'mcp_queries_lifetime',
+  MCP_COUNTER_SEEDED_AT: 'mcp_counter_seeded_at',
+  HEALTH_WRITE_FAILURES: 'health_write_failures_lifetime',
+  HEALTH_SCHEMA_INVALID: 'health_schema_invalid',
+  // Set only when the schema state could not be determined (a lock, most often). Kept apart from
+  // HEALTH_SCHEMA_INVALID so a transient failure cannot cry wolf on a healthy schema.
+  HEALTH_SCHEMA_PROBE_ERROR: 'health_schema_probe_error',
+  LAST_HEALTH_CYCLE: 'last_health_cycle',
+}
+
+export function ensureCountersTable(database = db) {
+  database.exec(COUNTERS_TABLE_DDL)
+}
+
+/** @returns {string|null} raw counter value, or null when unset. */
+export function getCounter(key, database = db) {
+  try {
+    const row = database.prepare('SELECT value FROM counters WHERE key = ?').get(key)
+    return row?.value ?? null
+  } catch {
+    return null
+  }
+}
+
+/** @returns {number} counter value as a number, 0 when unset or non-numeric. */
+export function getCounterInt(key, database = db) {
+  const raw = getCounter(key, database)
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+export function setCounter(key, value, database = db) {
+  try {
+    database.prepare(`
+      INSERT INTO counters (key, value, updated_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(key, value == null ? null : String(value))
+  } catch (err) {
+    console.error(`[db] counter ${key} write failed: ${err.message}`)
+  }
+}
+
+/** Remove a single key. This is key management, not retention — counters are never aged out. */
+export function deleteCounter(key, database = db) {
+  try {
+    database.prepare('DELETE FROM counters WHERE key = ?').run(key)
+  } catch (err) {
+    console.error(`[db] counter ${key} delete failed: ${err.message}`)
+  }
+}
+
+/** @returns {number|null} the new value, or null if the increment failed. */
+export function incrementCounter(key, delta = 1, database = db) {
+  try {
+    const row = database.prepare(`
+      INSERT INTO counters (key, value, updated_at) VALUES (@key, CAST(@delta AS TEXT), datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET
+        value = CAST(CAST(COALESCE(counters.value, '0') AS INTEGER) + @delta AS TEXT),
+        updated_at = datetime('now')
+      RETURNING value
+    `).get({ key, delta })
+    return row ? Number(row.value) : null
+  } catch (err) {
+    console.error(`[db] counter ${key} increment failed: ${err.message}`)
+    return null
+  }
+}
+
+db.exec(COUNTERS_TABLE_DDL)
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS services (
     id TEXT PRIMARY KEY,
@@ -101,15 +223,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_services_health ON services(health_status);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_services_url_protocol ON services(url, protocol);
 
-  CREATE TABLE IF NOT EXISTS health_checks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    service_id TEXT NOT NULL REFERENCES services(id),
-    checked_at TEXT NOT NULL DEFAULT (datetime('now')),
-    status TEXT NOT NULL CHECK(status IN ('healthy', 'degraded', 'down', 'timeout', 'error', 'rate_limited', 'method_not_allowed')),
-    response_time_ms INTEGER,
-    http_status INTEGER,
-    error_message TEXT
-  );
+  ${healthChecksTableDDL('health_checks', { ifNotExists: true })};
 
   CREATE INDEX IF NOT EXISTS idx_health_checks_service ON health_checks(service_id, checked_at);
 
@@ -325,61 +439,272 @@ try {
   console.warn(`[db] Homepage cleanup note: ${err.message}`)
 }
 
-// Migration: expand health_checks status CHECK constraint to include rate_limited, method_not_allowed
-export const HEALTH_CHECK_STATUSES = [
-  'healthy', 'degraded', 'down', 'timeout', 'error', 'rate_limited', 'method_not_allowed',
-]
+// ─── health_checks status CHECK constraint ──────────────────────────────────
+
+const SCHEMA_PROBE_SERVICE_ID = '__health_schema_probe__'
+const SCHEMA_PROBE_URL = 'https://schema-probe.402index.invalid/probe'
 
 /**
- * Rebuild health_checks if its status CHECK constraint is missing any allowed value.
+ * Insert a real (transaction-scoped) services row so the health_checks FK is genuinely satisfied.
+ * Columns are discovered from the live schema: a hard-coded list would break against the several
+ * shapes `services` has had, and a fake parent id would fail the FK instead of the CHECK (#304).
+ */
+function insertSchemaProbeParent(database) {
+  const values = {}
+  for (const col of database.pragma("table_info('services')")) {
+    const required = col.notnull === 1 && col.dflt_value === null
+    const isKey = col.name === 'id' || col.name === 'url' || col.name === 'protocol'
+    if (!required && !isKey) continue
+
+    if (col.name === 'id') values.id = SCHEMA_PROBE_SERVICE_ID
+    else if (col.name === 'url') values.url = SCHEMA_PROBE_URL
+    else if (col.name === 'protocol') values.protocol = 'L402'
+    else if (/INT|REAL|NUM|DOUB|FLOA/i.test(col.type || '')) values[col.name] = 0
+    else values[col.name] = 'schema-probe'
+  }
+  const names = Object.keys(values)
+  database.prepare(
+    `INSERT INTO services (${names.join(', ')}) VALUES (${names.map(n => `@${n}`).join(', ')})`
+  ).run(values)
+}
+
+/**
+ * The probe could not reach a verdict — distinct from "the schema rejected a status".
  *
- * Detection reads the stored CREATE TABLE text rather than probing with an INSERT: a probe
- * insert always fails under `foreign_keys = ON` (the fake service_id has no parent row), which
- * made this migration re-run on every boot and rewrite the whole table each time.
+ * Most often a lock: the probe opens a write transaction at import time, so scripts/healthcheck.js
+ * booting against a mid-write server process can lose the race. That is not evidence of a broken
+ * enum, and flagging it as one would latch a false alarm until the next deploy.
+ */
+export class SchemaProbeUnavailableError extends Error {
+  constructor(message, cause) {
+    super(message)
+    this.name = 'SchemaProbeUnavailableError'
+    this.cause = cause
+    this.code = cause?.code ?? null
+  }
+}
+
+// Lock/contention codes: the probe is worth retrying rather than giving up on.
+const RETRYABLE_PROBE_CODES = new Set([
+  'SQLITE_BUSY', 'SQLITE_BUSY_SNAPSHOT', 'SQLITE_BUSY_TIMEOUT',
+  'SQLITE_LOCKED', 'SQLITE_LOCKED_SHAREDCACHE', 'SQLITE_PROTOCOL',
+])
+
+const PROBE_ATTEMPTS = 3
+const PROBE_RETRY_MS = 50
+
+/** better-sqlite3 is synchronous, so the backoff has to be too. */
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+function probeHealthCheckStatusesOnce(database) {
+  const rejected = []
+  let began = false
+  try {
+    database.exec('BEGIN')
+    began = true
+    insertSchemaProbeParent(database)
+    const insert = database.prepare('INSERT INTO health_checks (service_id, status) VALUES (?, ?)')
+    for (const status of HEALTH_CHECK_STATUSES) {
+      try {
+        insert.run(SCHEMA_PROBE_SERVICE_ID, status)
+      } catch (err) {
+        if (err.code === 'SQLITE_CONSTRAINT_CHECK') rejected.push(status)
+        else throw err
+      }
+    }
+  } finally {
+    if (began) database.exec('ROLLBACK')
+  }
+  return rejected
+}
+
+/**
+ * Which canonical statuses the current health_checks CHECK constraint refuses.
  *
- * The rebuild runs in one transaction and drops any leftover health_checks_new first, so a run
- * killed part-way (SQLITE_FULL, restart) cannot wedge every later boot.
+ * Positive insertability probe rather than DDL substring matching: the stored CREATE TABLE text
+ * can mention a status without allowing it (a column default, a comment), and only an INSERT
+ * proves a write will land. Runs inside BEGIN ... ROLLBACK with a real parent row, so it leaves
+ * nothing behind and cannot fail on the services foreign key.
+ *
+ * Only a CHECK violation is a verdict. Anything else means the probe could not run, is retried
+ * while it looks like contention, and finally surfaces as SchemaProbeUnavailableError — never as
+ * a rejected status.
+ *
+ * @returns {string[]} statuses the constraint rejects (empty when the table is current)
+ * @throws {SchemaProbeUnavailableError} when the probe could not reach a verdict
+ */
+export function probeHealthCheckStatuses(database = db, { attempts = PROBE_ATTEMPTS, retryMs = PROBE_RETRY_MS } = {}) {
+  let lastError
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return probeHealthCheckStatusesOnce(database)
+    } catch (err) {
+      lastError = err
+      if (attempt < attempts && RETRYABLE_PROBE_CODES.has(err.code)) {
+        sleepSync(retryMs * attempt)
+        continue
+      }
+      break
+    }
+  }
+  throw new SchemaProbeUnavailableError(
+    `health_checks status probe could not run: ${lastError?.message ?? 'unknown error'}`,
+    lastError
+  )
+}
+
+/** Bytes currently occupied by health_checks and its index (whole-DB size as a safe upper bound). */
+export function estimateHealthChecksBytes(database = db) {
+  try {
+    const row = database.prepare(
+      "SELECT SUM(pgsize) AS bytes FROM dbstat WHERE name IN ('health_checks', 'idx_health_checks_service')"
+    ).get()
+    if (row?.bytes) return row.bytes
+  } catch {
+    // dbstat not compiled in — fall back to the whole-file size, which over-estimates (safe).
+  }
+  const pageCount = database.pragma('page_count', { simple: true }) || 0
+  const pageSize = database.pragma('page_size', { simple: true }) || 0
+  return pageCount * pageSize
+}
+
+/** A table rebuild needs room for a second copy. Refuse to start without it. */
+function assertSpaceForRebuild(database, statfsSyncFn, logger) {
+  const needed = Math.max(estimateHealthChecksBytes(database) * 2, 1)
+  let free
+  try {
+    const stats = statfsSyncFn(dirname(DB_PATH))
+    free = stats.bfree * stats.bsize
+  } catch (err) {
+    logger.log(`[db] Could not check free space before health_checks rebuild: ${err.message} — continuing`)
+    return
+  }
+  if (free < needed) {
+    throw new Error(`insufficient free space for health_checks rebuild: need ${needed} bytes, ${free} free`)
+  }
+}
+
+/**
+ * Rebuild health_checks when its status CHECK constraint refuses a canonical status.
+ *
+ * Prunes past retention first, refuses to start without room for a second copy, copies with an
+ * explicit column list (a positional `SELECT *` silently shuffles values between columns when the
+ * old table's column order differs), and verifies foreign keys before committing. Any failure
+ * rolls back: the original table stays intact and queryable, and a leftover _new table from a
+ * killed run is cleared on the next attempt.
  *
  * @returns {boolean} true if the table was rebuilt, false if it was already current.
+ * @throws when the rebuild cannot complete — callers must surface it, never swallow it.
  */
-export function migrateHealthChecksStatusConstraint(database = db) {
+export function migrateHealthChecksStatusConstraint(database = db, { statfsSyncFn = statfsSync, logger = console } = {}) {
   const table = database.prepare(
     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'health_checks'"
   ).get()
   if (!table) return false
 
-  const missing = HEALTH_CHECK_STATUSES.filter(s => !table.sql.includes(`'${s}'`))
+  const missing = probeHealthCheckStatuses(database)
   if (missing.length === 0) return false
 
-  console.log(`[db] Migrating health_checks status CHECK constraint (missing: ${missing.join(', ')})...`)
-  const rebuild = database.transaction(() => {
-    database.exec('DROP TABLE IF EXISTS health_checks_new')
-    database.exec(`
-      CREATE TABLE health_checks_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        service_id TEXT NOT NULL REFERENCES services(id),
-        checked_at TEXT NOT NULL DEFAULT (datetime('now')),
-        status TEXT NOT NULL CHECK(status IN (${HEALTH_CHECK_STATUSES.map(s => `'${s}'`).join(', ')})),
-        response_time_ms INTEGER,
-        http_status INTEGER,
-        error_message TEXT
-      );
-      INSERT INTO health_checks_new SELECT * FROM health_checks;
-      DROP TABLE health_checks;
-      ALTER TABLE health_checks_new RENAME TO health_checks;
-      CREATE INDEX IF NOT EXISTS idx_health_checks_service ON health_checks(service_id, checked_at);
-    `)
-  })
-  rebuild()
-  console.log('[db] health_checks CHECK constraint updated')
+  logger.log(`[db] Migrating health_checks status CHECK constraint (rejected: ${missing.join(', ')})...`)
+
+  const pruned = database.prepare(
+    "DELETE FROM health_checks WHERE checked_at < datetime('now', ?)"
+  ).run(`-${HEALTH_CHECK_RETENTION_DAYS} days`)
+  if (pruned.changes > 0) {
+    logger.log(`[db] Pruned ${pruned.changes} health checks past retention before rebuild`)
+  }
+
+  assertSpaceForRebuild(database, statfsSyncFn, logger)
+
+  const columns = HEALTH_CHECK_COLUMNS.join(', ')
+  // FK enforcement must be off for the DROP/RENAME dance, and cannot be toggled inside a
+  // transaction — same pattern as the services rebuilds above.
+  database.pragma('foreign_keys = OFF')
+  try {
+    const rebuild = database.transaction(() => {
+      database.exec('DROP TABLE IF EXISTS health_checks_new')
+      database.exec(healthChecksTableDDL('health_checks_new'))
+      database.exec(`INSERT INTO health_checks_new (${columns}) SELECT ${columns} FROM health_checks`)
+      database.exec('DROP TABLE health_checks')
+      database.exec('ALTER TABLE health_checks_new RENAME TO health_checks')
+      database.exec('CREATE INDEX IF NOT EXISTS idx_health_checks_service ON health_checks(service_id, checked_at)')
+
+      const violations = database.pragma('foreign_key_check')
+      if (violations.length > 0) {
+        throw new Error(`foreign_key_check reported ${violations.length} violation(s) after rebuild`)
+      }
+    })
+    rebuild()
+  } finally {
+    database.pragma('foreign_keys = ON')
+  }
+
+  logger.log('[db] health_checks CHECK constraint updated')
   return true
 }
 
-try {
-  migrateHealthChecksStatusConstraint(db)
-} catch (err) {
-  console.warn(`[db] health_checks migration note: ${err.message}`)
+/**
+ * Boot-time guard: migrate health_checks if needed, then prove every canonical status is writable.
+ *
+ * Failure is loud. It sets counters.health_schema_invalid=1 (surfaced by the digest) and logs at
+ * error level; the probe re-runs every boot, so a broken schema keeps complaining until it is
+ * fixed. The previous console.warn swallow is gone — a silenced schema failure is exactly how
+ * ~10 endpoints per cycle lost their status writes unnoticed.
+ *
+ * health_schema_invalid means one thing only: the probe returned a non-empty rejected list. A
+ * probe that could not run gets health_schema_probe_error instead. An alarm that fires on a
+ * transient lock is one that gets ignored, which would defeat the point of raising it at all.
+ *
+ * @returns {{migrated: boolean, valid: boolean, indeterminate: boolean, missing: string[], error?: string}}
+ */
+export function runHealthChecksSchemaGuard(database = db, { logger = console, statfsSyncFn = statfsSync } = {}) {
+  try {
+    ensureCountersTable(database)
+  } catch (err) {
+    logger.error(`[db] counters table unavailable: ${err.message}`)
+  }
+
+  let migrated = false
+  let migrationError = null
+  try {
+    migrated = migrateHealthChecksStatusConstraint(database, { statfsSyncFn, logger })
+  } catch (err) {
+    migrationError = err
+    if (err instanceof SchemaProbeUnavailableError) {
+      logger.error(`[db] health_checks schema state could not be determined: ${err.message}`)
+    } else {
+      logger.error(`[db] health_checks status migration FAILED — health writes may be rejected: ${err.message}`)
+    }
+  }
+
+  let missing
+  try {
+    missing = probeHealthCheckStatuses(database)
+  } catch (err) {
+    const detail = migrationError && migrationError !== err
+      ? `${err.message} (after migration failure: ${migrationError.message})`
+      : err.message
+    logger.error(`[db] health_checks schema probe could not run: ${detail}`)
+    setCounter(COUNTER_KEYS.HEALTH_SCHEMA_PROBE_ERROR, detail, database)
+    return { migrated, valid: false, indeterminate: true, missing: [], error: detail }
+  }
+
+  if (missing.length > 0) {
+    logger.error(`[db] health_checks CHECK still rejects: ${missing.join(', ')} — those health writes will fail`)
+    setCounter(COUNTER_KEYS.HEALTH_SCHEMA_INVALID, '1', database)
+    deleteCounter(COUNTER_KEYS.HEALTH_SCHEMA_PROBE_ERROR, database)
+    return { migrated, valid: false, indeterminate: false, missing, error: migrationError?.message }
+  }
+
+  // Determinately writable: clear both flags, including one left by an earlier locked boot.
+  deleteCounter(COUNTER_KEYS.HEALTH_SCHEMA_INVALID, database)
+  deleteCounter(COUNTER_KEYS.HEALTH_SCHEMA_PROBE_ERROR, database)
+  return { migrated, valid: true, indeterminate: false, missing: [] }
 }
+
+runHealthChecksSchemaGuard(db)
 
 // Migration: add domain_verified flag (protects provider edits from poller overwrite)
 try {
@@ -917,15 +1242,92 @@ const logQueryStmt = db.prepare(
   'INSERT INTO query_log (query_text, filters, result_count, response_time_ms, user_agent, degraded_reason) VALUES (@queryText, @filters, @resultCount, @responseTimeMs, @userAgent, @degradedReason)'
 )
 
+/** query_log retention. The 90d window fields are named for it; the lifetime counter outlives it. */
+export const MCP_QUERY_LOG_RETENTION_DAYS = 90
+
+const MCP_USER_AGENT_MARKER = '402index-mcp'
+
+/**
+ * The SQL half of the MCP predicate, shared by every window query.
+ *
+ * User-Agent is fully client-controlled, and the two halves used to disagree: JS `includes` is
+ * case-sensitive while SQL `LIKE` is case-insensitive for ASCII, so `402Index-MCP` landed in
+ * mcp_queries_90d but never in mcp_queries_lifetime — two fields in one payload counting the same
+ * events by different rules. Both halves now lowercase. Interpolates a module constant only.
+ */
+export const MCP_USER_AGENT_SQL = `instr(lower(user_agent), '${MCP_USER_AGENT_MARKER}') > 0`
+
+export function isMcpUserAgent(userAgent) {
+  return typeof userAgent === 'string' && userAgent.toLowerCase().includes(MCP_USER_AGENT_MARKER)
+}
+
+// Throws on failure (unlike incrementCounter) so the enclosing transaction rolls back: the
+// query row and the lifetime counter move together or not at all.
+const bumpMcpLifetimeStmt = db.prepare(`
+  INSERT INTO counters (key, value, updated_at) VALUES (@key, '1', datetime('now'))
+  ON CONFLICT(key) DO UPDATE SET
+    value = CAST(CAST(COALESCE(counters.value, '0') AS INTEGER) + 1 AS TEXT),
+    updated_at = datetime('now')
+`)
+
+const logQueryTxn = db.transaction(params => {
+  logQueryStmt.run(params)
+  if (isMcpUserAgent(params.userAgent)) {
+    bumpMcpLifetimeStmt.run({ key: COUNTER_KEYS.MCP_QUERIES_LIFETIME })
+  }
+})
+
 export function logQuery({ queryText = null, filters = null, resultCount = null, responseTimeMs = null, userAgent = null, degradedReason = null } = {}) {
   try {
-    logQueryStmt.run({ queryText, filters, resultCount, responseTimeMs, userAgent, degradedReason })
+    logQueryTxn({ queryText, filters, resultCount, responseTimeMs, userAgent, degradedReason })
   } catch (err) {
     console.warn(`[db] logQuery failed: ${err.message}`)
   }
 }
 
-export function pruneQueryLog(retentionDays = 90) {
+/**
+ * MCP traffic inside the query_log retention window. These are window aggregates, not totals —
+ * naming them so is the point: reporting them as lifetime counts is what made the digest's MCP
+ * numbers drop whenever the oldest day rolled out.
+ *
+ * @returns {{queries: number, activeDays: number}}
+ */
+export function mcpQueryWindowStats(database = db, retentionDays = MCP_QUERY_LOG_RETENTION_DAYS) {
+  try {
+    const row = database.prepare(`
+      SELECT COUNT(*) AS queries, COUNT(DISTINCT date(timestamp)) AS activeDays
+      FROM query_log
+      WHERE ${MCP_USER_AGENT_SQL}
+        AND timestamp > datetime('now', '-' || @days || ' days')
+    `).get({ days: retentionDays })
+    return { queries: row?.queries ?? 0, activeDays: row?.activeDays ?? 0 }
+  } catch (err) {
+    console.warn(`[db] mcpQueryWindowStats failed: ${err.message}`)
+    return { queries: 0, activeDays: 0 }
+  }
+}
+
+/**
+ * Seed the lifetime MCP counter once, from the current window count — the honest floor. Pre-window
+ * history was deleted by prune and is unrecoverable (daily_snapshots carries no MCP columns), so no
+ * reconstruction is attempted; the seed timestamp is exposed in the digest to mark the discontinuity.
+ *
+ * @returns {boolean} true if this call seeded, false if it was already seeded.
+ */
+export function seedMcpLifetimeCounter(database = db, retentionDays = MCP_QUERY_LOG_RETENTION_DAYS) {
+  ensureCountersTable(database)
+  if (getCounter(COUNTER_KEYS.MCP_COUNTER_SEEDED_AT, database)) return false
+
+  const { queries } = mcpQueryWindowStats(database, retentionDays)
+  setCounter(COUNTER_KEYS.MCP_QUERIES_LIFETIME, String(queries), database)
+  setCounter(COUNTER_KEYS.MCP_COUNTER_SEEDED_AT, new Date().toISOString(), database)
+  console.log(`[db] Seeded ${COUNTER_KEYS.MCP_QUERIES_LIFETIME} from the ${retentionDays}-day window: ${queries}`)
+  return true
+}
+
+seedMcpLifetimeCounter(db)
+
+export function pruneQueryLog(retentionDays = MCP_QUERY_LOG_RETENTION_DAYS) {
   try {
     const result = db.prepare(
       "DELETE FROM query_log WHERE timestamp < datetime('now', '-' || ? || ' days')"
