@@ -106,6 +106,34 @@ npm run dev
 4. Run `npm test` and ensure all tests pass.
 5. Open a PR with a clear title and description. Link related issues.
 
+### What CI checks on a PR
+
+`npm test` passing locally is not enough to merge. Branch protection on `master` requires
+seven status checks to report green:
+
+| Check | What it runs | Run it locally |
+|-------|--------------|----------------|
+| `test (20)`, `test (24)` | The root `node:test` suite on Node 20 and Node 24. | `npm test` |
+| `mcp-server-test (20)` | The `mcp-server/` suite on Node 20. | `cd mcp-server && npm test` — note this builds first and rewrites `mcp-server/dist/`, so commit or discard the result deliberately. |
+| `lint` | eslint on Node 22. Only `no-undef` is enforced; the rest of the recommended set is off. Covers root `src/`, `test/`, and `scripts/` — `mcp-server/` and `public/` are ignored. | `npm run lint` |
+| `e2e` | The Playwright specs in `test/e2e/` against a locally booted server: handler smoke *plus* UI regression (filter-chip overflow, getting-started modal). A UI change can break this even when handlers are fine. | `npm run test:e2e` |
+| `security` | Records an `npm audit` report as a build artifact. **This check does not enforce anything** — the audit step is `continue-on-error: true`, so a vulnerability finding will not turn it red. Only a failed `npm ci` can fail it. | `npm audit --audit-level=moderate` |
+| `scan` | gitleaks secret scan over the full history, using `.gitleaks.toml`. | `gitleaks detect --config .gitleaks.toml` — if a hit is an intentional test fixture, add it to that file's allowlist rather than editing the fixture. |
+
+Three things that regularly confuse contributors:
+
+- **`e2e` and `security` declare `needs: test`.** If either `test` job fails, neither one
+  ever starts, and the PR shows "Expected — waiting for status" on both indefinitely.
+  That is not a stuck check — fix the failing `test` job and they will run.
+- **Branch protection is strict.** Your branch must be up to date with `master` before it
+  can merge, and the `test` job independently fails a PR whose head is not a descendant of
+  `origin/master`. Rebase: `git pull --rebase origin master && git push --force-with-lease`.
+- **Seven required is not everything that runs.** A PR touching `mcp-server/**` also
+  triggers `drift-check`, which is not in the required set but does fail on stale committed
+  build output, version-string drift, or a tarball that diverges from
+  `mcp-server/.tarball-allowlist.txt`. Don't merge over a red `drift-check` just because it
+  isn't required.
+
 ### Commit messages
 
 Conventional commits are preferred (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`), but not strictly enforced.
