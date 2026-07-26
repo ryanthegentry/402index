@@ -101,21 +101,25 @@ describe('seeding', () => {
   })
 })
 
-// Runs last: pruneQueryLog(0) empties query_log for this process.
 describe('prune semantics', () => {
-  it('changes the 90d window but never the lifetime counter', () => {
-    logQuery({ queryText: 'keeper', userAgent: MCP_UA })
-    logQuery({ queryText: 'keeper', userAgent: MCP_UA })
+  it('changes the window fields but never the lifetime counter', () => {
+    // Two MCP queries from an earlier day, inside the 90d window. A 1-day retention sweep stands
+    // in for the 90d boundary moving past them — the exact event behind the digest's drops.
+    const stale = db.prepare("INSERT INTO query_log (timestamp, user_agent) VALUES (datetime('now', '-2 days'), ?)")
+    stale.run(MCP_UA)
+    stale.run(MCP_UA)
+    logQuery({ queryText: 'recent', userAgent: MCP_UA })
 
     const lifetime = dbModule.getCounterInt(LIFETIME_KEY)
-    const windowBefore = dbModule.mcpQueryWindowStats()
-    assert.ok(windowBefore.queries >= 2)
+    const before = dbModule.mcpQueryWindowStats()
+    assert.ok(before.queries >= 3, 'the window sees the stale rows')
+    assert.ok(before.activeDays >= 2)
 
-    pruneQueryLog(0)
+    pruneQueryLog(1)
 
-    const windowAfter = dbModule.mcpQueryWindowStats()
-    assert.equal(windowAfter.queries, 0, 'the window follows retention')
-    assert.equal(windowAfter.activeDays, 0)
+    const after = dbModule.mcpQueryWindowStats()
+    assert.equal(after.queries, before.queries - 2, 'the window loses the pruned rows')
+    assert.equal(after.activeDays, before.activeDays - 1, 'and loses their active day')
     assert.equal(
       dbModule.getCounterInt(LIFETIME_KEY), lifetime,
       'the lifetime counter is not a query over query_log'

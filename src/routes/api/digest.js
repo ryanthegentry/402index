@@ -1,5 +1,11 @@
 import { Router } from 'express'
-import db from '../../db.js'
+import db, {
+  COUNTER_KEYS,
+  MCP_QUERY_LOG_RETENTION_DAYS,
+  getCounter,
+  getCounterInt,
+  mcpQueryWindowStats,
+} from '../../db.js'
 
 const router = Router()
 
@@ -97,10 +103,12 @@ router.get('/digest', (req, res) => {
       "SELECT COUNT(*) as c FROM query_log WHERE timestamp > date('now') AND user_agent LIKE '%402index-mcp%'"
     ).get().c
 
-    const mcpSummary = db.prepare(
-      `SELECT COUNT(*) as total, COUNT(DISTINCT date(timestamp)) as activeDays
-       FROM query_log WHERE user_agent LIKE '%402index-mcp%'`
-    ).get()
+    // MCP: a true lifetime counter, plus window aggregates named for the window they cover.
+    // query_log is pruned at 90 days, so the old "total"/"active_days" fields were rolling
+    // windows mislabeled as lifetime totals — hence their non-monotonic drops.
+    const mcpWindow = mcpQueryWindowStats(db, MCP_QUERY_LOG_RETENTION_DAYS)
+    const mcpLifetime = getCounterInt(COUNTER_KEYS.MCP_QUERIES_LIFETIME)
+    const mcpSeededAt = getCounter(COUNTER_KEYS.MCP_COUNTER_SEEDED_AT)
 
     // ── Search Intelligence ──
     const topSearches = db.prepare(
@@ -166,6 +174,25 @@ router.get('/digest', (req, res) => {
       ORDER BY s.last_checked DESC LIMIT 10
     `).all()
 
+    // ── Health-check integrity ──
+    // A broken status enum silently drops health writes, so it is surfaced here rather than left
+    // in a boot log nobody reads. Absent key = healthy schema.
+    const health = {
+      write_failures_lifetime: getCounterInt(COUNTER_KEYS.HEALTH_WRITE_FAILURES),
+      last_cycle: (() => {
+        const raw = getCounter(COUNTER_KEYS.LAST_HEALTH_CYCLE)
+        if (!raw) return null
+        try {
+          return JSON.parse(raw)
+        } catch {
+          return null
+        }
+      })(),
+    }
+    if (getCounter(COUNTER_KEYS.HEALTH_SCHEMA_INVALID) === '1') {
+      health.health_schema_invalid = true
+    }
+
     res.json({
       generated_at: new Date().toISOString(),
       totals: {
@@ -190,14 +217,21 @@ router.get('/digest', (req, res) => {
         queries_7d: queries7d,
         unique_agents_today: uniqueAgentsToday,
         mcp_queries_today: mcpToday,
-        mcp_queries_total: mcpSummary.total,
-        mcp_active_days: mcpSummary.activeDays,
+        mcp_queries_lifetime: mcpLifetime,
+        mcp_queries_total: mcpLifetime,
+        mcp_counter_seeded_at: mcpSeededAt,
+        mcp_queries_90d: mcpWindow.queries,
+        mcp_active_days_90d: mcpWindow.activeDays,
+        // Deprecated: emits the 90d value for one release so the 5:30am consumer keeps working.
+        mcp_active_days: mcpWindow.activeDays,
+        mcp_active_days_deprecated: true,
       },
       search_intelligence: {
         top_searches_7d: topSearches,
         zero_results_7d: zeroResults,
         top_user_agents_7d: topAgents,
       },
+      health,
       health_changes: {
         newly_degraded_24h: newlyDegraded,
         newly_down_24h: newlyDown,

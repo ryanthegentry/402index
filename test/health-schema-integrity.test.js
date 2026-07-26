@@ -265,8 +265,9 @@ describe('migration rebuild', () => {
     const fixture = createFixtureDb({ columnOrder: 'shuffled' })
     fixture.prepare(`
       INSERT INTO health_checks (service_id, status, http_status, error_message, response_time_ms, checked_at)
-      VALUES ('fixture-svc', 'down', 503, 'HTTP 503', 42, '2026-07-01 12:00:00')
+      VALUES ('fixture-svc', 'down', 503, 'HTTP 503', 42, datetime('now', '-1 hour'))
     `).run()
+    const before = fixture.prepare('SELECT * FROM health_checks').get()
 
     assert.equal(dbModule.migrateHealthChecksStatusConstraint(fixture), true)
 
@@ -275,7 +276,7 @@ describe('migration rebuild', () => {
     assert.equal(row.http_status, 503, 'http_status must land in http_status')
     assert.equal(row.error_message, 'HTTP 503')
     assert.equal(row.response_time_ms, 42)
-    assert.equal(row.checked_at, '2026-07-01 12:00:00')
+    assert.equal(row.checked_at, before.checked_at)
     fixture.close()
   })
 
@@ -396,9 +397,17 @@ describe('counters table', () => {
     fixture.close()
   })
 
-  it('is never pruned', () => {
+  it('carries no retention', () => {
     const source = readFileSync(new URL('../src/db.js', import.meta.url), 'utf8')
-    assert.ok(!/DELETE FROM counters/.test(source), 'counters must carry no retention')
+    // Single-key deletes are key management (clearing health_schema_invalid); an age-based sweep
+    // would make the lifetime counters lie the same way query_log did.
+    assert.ok(
+      !/DELETE FROM counters WHERE[^']*datetime\(/.test(source),
+      'counters must have no age-based delete'
+    )
+    const pruneAll = source.match(/function pruneAll\(\)\s*\{[\s\S]*?\n\}/)
+    assert.ok(pruneAll, 'pruneAll must exist')
+    assert.ok(!/counter/i.test(pruneAll[0]), 'pruneAll must not touch counters')
   })
 
   it('is created by the test helper too', () => {

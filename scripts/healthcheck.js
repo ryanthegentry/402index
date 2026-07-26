@@ -1,8 +1,9 @@
 // Standalone script: npm run healthcheck
-import { runHealthChecks } from '../src/health/checker.js'
+import { runHealthChecks, formatCycleSummary } from '../src/health/checker.js'
 
 async function main() {
-  await runHealthChecks()
+  const result = await runHealthChecks()
+  console.log(`[healthcheck] ${formatCycleSummary(result)}`)
   process.exit(0)
 }
 

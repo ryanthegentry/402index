@@ -173,6 +173,26 @@ describe('reconciliation identity', () => {
     assert.equal(recon.L402.unaccounted, 0)
   })
 
+  it('excludes a row hard-deleted mid-cycle rather than reporting a negative residual', async () => {
+    // purgeSoftDeleted runs hourly, so it overlaps health cycles. A row checked and then deleted
+    // is in no denominator; counting it anyway would make unaccounted negative on a routine purge.
+    const svc = insertTestService({ protocol: 'L402', url: `https://${TEST_PREFIX}-doomed.example.com/api` })
+    globalThis.fetch = async () => {
+      db.prepare('DELETE FROM services WHERE id = ?').run(svc.id)
+      return mockResponse(402, {
+        'www-authenticate': `L402 macaroon="${specCompliantMacaroon}", invoice="${longInvoice}"`,
+      })
+    }
+
+    const result = await runHealthChecks({ concurrency: 1 })
+
+    assert.equal(result.cycle.vanished_mid_cycle, 1, 'the deleted row is reported, not silently dropped')
+    assert.equal(result.cycle.unaccounted, 0)
+    for (const [proto, r] of Object.entries(result.reconciliation)) {
+      assert.equal(r.unaccounted, 0, `${proto} residual must stay 0`)
+    }
+  })
+
   it('does not change which endpoints get probed', async () => {
     const fixture = seedFixture()
     const probedUrls = new Set()
