@@ -2,6 +2,7 @@ import { Router } from 'express'
 import db, {
   COUNTER_KEYS,
   MCP_QUERY_LOG_RETENTION_DAYS,
+  MCP_USER_AGENT_SQL,
   getCounter,
   getCounterInt,
   mcpQueryWindowStats,
@@ -99,8 +100,9 @@ router.get('/digest', (req, res) => {
       "SELECT COUNT(DISTINCT user_agent) as c FROM query_log WHERE timestamp > date('now')"
     ).get().c
 
+    // Same predicate as the lifetime increment and the 90d window — one rule, three fields.
     const mcpToday = db.prepare(
-      "SELECT COUNT(*) as c FROM query_log WHERE timestamp > date('now') AND user_agent LIKE '%402index-mcp%'"
+      `SELECT COUNT(*) as c FROM query_log WHERE timestamp > date('now') AND ${MCP_USER_AGENT_SQL}`
     ).get().c
 
     // MCP: a true lifetime counter, plus window aggregates named for the window they cover.
@@ -192,6 +194,12 @@ router.get('/digest', (req, res) => {
     if (getCounter(COUNTER_KEYS.HEALTH_SCHEMA_INVALID) === '1') {
       health.health_schema_invalid = true
     }
+    // Distinct condition: the boot probe could not reach a verdict (a lock, most often). Surfaced
+    // so it is visible, but never as a broken-enum alarm.
+    const schemaProbeError = getCounter(COUNTER_KEYS.HEALTH_SCHEMA_PROBE_ERROR)
+    if (schemaProbeError) {
+      health.health_schema_probe_error = schemaProbeError
+    }
 
     res.json({
       generated_at: new Date().toISOString(),
@@ -225,6 +233,10 @@ router.get('/digest', (req, res) => {
         // Deprecated: emits the 90d value for one release so the 5:30am consumer keeps working.
         mcp_active_days: mcpWindow.activeDays,
         mcp_active_days_deprecated: true,
+        // The only gate on these counters is a client-controlled User-Agent substring, and the
+        // lifetime total is never pruned — so it is a ceiling, not a measurement. Said here rather
+        // than left for a reader to infer.
+        mcp_counters_ua_attested: true,
       },
       search_intelligence: {
         top_searches_7d: topSearches,

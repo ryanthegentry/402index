@@ -1000,42 +1000,51 @@ export async function checkDiskSpace({ statfsFn = statfs, database = db } = {}) 
   }
 }
 
-// Rows a cycle never probes, counted straight from the table. getServices' exclusions are
-// intentional (#236) and unchanged — reconciliation only has to account for them honestly.
+// Rows a cycle never probes, classified exactly the way getServices selects them. getServices'
+// exclusions are intentional (#236) and unchanged — reconciliation only has to account for them
+// honestly, which means mirroring its predicates rather than approximating them.
 const ACTIVE_PREDICATE = "(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
+const PROBEABLE_PREDICATE = "(probe_status = 'probeable' OR probe_status IS NULL)"
 
 const emptyProbedBreakdown = () => ({ healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 })
 
 /**
- * Which of these service ids still exist. The hourly purge can hard-delete a row after it was
- * checked, and such a row is in no bucket's denominator — counting it anyway would push
- * `unaccounted` negative and turn the one number that must stay 0 into routine noise.
+ * Every services row as it stood when the cycle started.
+ *
+ * Reconciling a cycle-start probe set against end-of-cycle counts is not reconciliation: the
+ * pollers run on the same hourly interval and insert with status defaulting to 'active', so a
+ * multi-minute cycle routinely races inserts, deactivations and purges. Buckets are a partition of
+ * this fixed id set, which is the only thing that can make `unaccounted` reliably 0 — and which
+ * stops a row deactivated after being probed from landing in two buckets at once.
+ *
+ * @returns {{id: string, protocol: string, active: number, unprobeable: number}[]}
  */
-function existingServiceIds(ids, database = db) {
-  const list = [...ids]
-  const found = new Set()
-  const CHUNK = 500
-  for (let i = 0; i < list.length; i += CHUNK) {
-    const chunk = list.slice(i, i + CHUNK)
-    const rows = database.prepare(
-      `SELECT id FROM services WHERE id IN (${chunk.map(() => '?').join(', ')})`
-    ).all(...chunk)
-    for (const row of rows) found.add(row.id)
-  }
-  return found
+export function snapshotServicesForCycle(database = db) {
+  return database.prepare(
+    `SELECT id,
+            COALESCE(protocol, 'unknown') AS protocol,
+            CASE WHEN ${ACTIVE_PREDICATE} THEN 1 ELSE 0 END AS active,
+            CASE WHEN ${PROBEABLE_PREDICATE} THEN 0 ELSE 1 END AS unprobeable
+     FROM services`
+  ).all()
 }
 
 /**
  * Account for every services row carrying each protocol.
  *
- * The denominator is all rows with that protocol — the number the digest calls "1,218". Buckets
- * partition it: probed (by result status, including unknown and error), sibling_updated (deduped
- * but health-updated: checked, never "skipped"), skipped_unprobeable, excluded_inactive, and
- * persist_failed. `unaccounted` is the residual and must be 0.
+ * The denominator is every row with that protocol in the cycle-start snapshot — the number the
+ * digest calls "1,218". Buckets partition it: probed (by result status, including unknown and
+ * error), sibling_updated (deduped but health-updated: checked, never "skipped"),
+ * skipped_unprobeable, excluded_inactive, and persist_failed. `unaccounted` is the residual and
+ * must be 0.
  *
- * @returns {{byProtocol: Object<string, object>, vanished: number}} buckets, plus rows hard-deleted mid-cycle
+ * Rows that appear or disappear while the cycle runs are reported in their own symmetric counters
+ * — added_mid_cycle and vanished_mid_cycle — and never folded into the partition, because neither
+ * one had a full cycle's worth of chances to land in a bucket.
+ *
+ * @returns {{byProtocol: Object<string, object>, vanished: number, added: number}}
  */
-function buildReconciliation({ protocolById, probedById, siblingUpdatedIds, persistFailedIds, database = db }) {
+function buildReconciliation({ snapshot, probedById, siblingUpdatedIds, persistFailedIds, database = db }) {
   const recon = {}
   const bucketFor = protocol => {
     const key = protocol || 'unknown'
@@ -1049,56 +1058,54 @@ function buildReconciliation({ protocolById, probedById, siblingUpdatedIds, pers
         excluded_inactive: 0,
         persist_failed: 0,
         unaccounted: 0,
+        added_mid_cycle: 0,
+        vanished_mid_cycle: 0,
       }
     }
     return recon[key]
   }
 
-  const protocolOf = id => protocolById.get(id) || 'unknown'
+  // Precedence, applied to a fixed id set so no row can be counted twice: what actually happened
+  // to the row outranks what the table says about it now. A row probed at 00:05 and deactivated at
+  // 00:30 was probed — reporting it as excluded_inactive as well is the double-count.
+  const snapshotIds = new Set()
+  for (const row of snapshot) {
+    snapshotIds.add(row.id)
+    const bucket = bucketFor(row.protocol)
+    bucket.denominator++
 
-  for (const row of database.prepare(
-    "SELECT COALESCE(protocol, 'unknown') AS protocol, COUNT(*) AS c FROM services GROUP BY protocol"
-  ).all()) {
-    bucketFor(row.protocol).denominator = row.c
+    if (probedById.has(row.id)) {
+      const status = probedById.get(row.id)
+      bucket.probed[status] = (bucket.probed[status] || 0) + 1
+      bucket.probed_total++
+    } else if (siblingUpdatedIds.has(row.id)) {
+      bucket.sibling_updated++
+    } else if (persistFailedIds.has(row.id)) {
+      bucket.persist_failed++
+    } else if (!row.active) {
+      bucket.excluded_inactive++
+    } else if (row.unprobeable) {
+      bucket.skipped_unprobeable++
+    }
   }
 
-  for (const row of database.prepare(
-    `SELECT COALESCE(protocol, 'unknown') AS protocol, COUNT(*) AS c FROM services
-     WHERE NOT (${ACTIVE_PREDICATE}) GROUP BY protocol`
-  ).all()) {
-    bucketFor(row.protocol).excluded_inactive = row.c
-  }
-
-  for (const row of database.prepare(
-    `SELECT COALESCE(protocol, 'unknown') AS protocol, COUNT(*) AS c FROM services
-     WHERE ${ACTIVE_PREDICATE} AND probe_status = 'unprobeable' GROUP BY protocol`
-  ).all()) {
-    bucketFor(row.protocol).skipped_unprobeable = row.c
-  }
-
-  const live = existingServiceIds(
-    new Set([...probedById.keys(), ...siblingUpdatedIds, ...persistFailedIds]),
-    database
-  )
+  let added = 0
   let vanished = 0
-
-  // Precedence: a row that was probed is reported as probed even if a sibling pass also touched
-  // it, and a row counted here is never double-counted in another bucket.
-  for (const [id, status] of probedById) {
-    if (!live.has(id)) { vanished++; continue }
-    const bucket = bucketFor(protocolOf(id))
-    bucket.probed[status] = (bucket.probed[status] || 0) + 1
-    bucket.probed_total++
+  const endIds = new Set()
+  for (const row of database.prepare(
+    "SELECT id, COALESCE(protocol, 'unknown') AS protocol FROM services"
+  ).all()) {
+    endIds.add(row.id)
+    if (!snapshotIds.has(row.id)) {
+      added++
+      bucketFor(row.protocol).added_mid_cycle++
+    }
   }
-  for (const id of siblingUpdatedIds) {
-    if (probedById.has(id)) continue
-    if (!live.has(id)) { vanished++; continue }
-    bucketFor(protocolOf(id)).sibling_updated++
-  }
-  for (const id of persistFailedIds) {
-    if (probedById.has(id) || siblingUpdatedIds.has(id)) continue
-    if (!live.has(id)) { vanished++; continue }
-    bucketFor(protocolOf(id)).persist_failed++
+  for (const row of snapshot) {
+    if (!endIds.has(row.id)) {
+      vanished++
+      bucketFor(row.protocol).vanished_mid_cycle++
+    }
   }
 
   for (const bucket of Object.values(recon)) {
@@ -1108,7 +1115,7 @@ function buildReconciliation({ protocolById, probedById, siblingUpdatedIds, pers
     )
   }
 
-  return { byProtocol: recon, vanished }
+  return { byProtocol: recon, vanished, added }
 }
 
 /**
@@ -1130,6 +1137,7 @@ export function formatCycleSummary(result) {
     `cycle: healthy=${result?.healthy ?? 0} degraded=${result?.degraded ?? 0} down=${result?.down ?? 0}`,
     `unknown=${result?.unknown ?? 0} error=${result?.error ?? 0}`,
     `persist_failed=${result?.persistFailed ?? 0} unaccounted=${unaccounted}`,
+    `added_mid_cycle=${result?.cycle?.added_mid_cycle ?? 0} vanished_mid_cycle=${result?.cycle?.vanished_mid_cycle ?? 0}`,
     perProtocol,
   ].join(' ').trim()
 }
@@ -1160,6 +1168,10 @@ export async function runHealthChecks({ concurrency = CONCURRENCY } = {}) {
   hostLastProbe.clear()
   checkedThisCycle.clear()
 
+  // Snapshot first, then select: a row inserted between the two calls is reported as
+  // added_mid_cycle rather than becoming an unaccounted residual.
+  const snapshot = snapshotServicesForCycle()
+
   // Shuffle to distribute same-host endpoints across the full check cycle
   const services = shuffleArray(getServices().all())
   console.log(`[health] Checking ${services.length} services...`)
@@ -1171,7 +1183,6 @@ export async function runHealthChecks({ concurrency = CONCURRENCY } = {}) {
   const probedById = new Map()          // service id → result status bucket
   const siblingUpdatedIds = new Set()   // deduped rows whose health was updated by a sibling pass
   const persistFailedIds = new Set()
-  const protocolById = new Map(services.map(s => [s.id, s.protocol || 'unknown']))
   let checked = 0
   const startTime = Date.now()
 
@@ -1195,16 +1206,12 @@ export async function runHealthChecks({ concurrency = CONCURRENCY } = {}) {
 
         for (const sibling of result.value.siblingsUpdated || []) {
           siblingUpdatedIds.add(sibling.id)
-          if (!protocolById.has(sibling.id)) protocolById.set(sibling.id, sibling.protocol || 'unknown')
         }
 
         for (const failure of result.value.persistFailures || []) {
           persistFailures.push(failure)
           persistFailedIds.add(failure.serviceId)
           results.persistFailed++
-          if (!protocolById.has(failure.serviceId)) {
-            protocolById.set(failure.serviceId, failure.protocol || 'unknown')
-          }
         }
 
         if (status === 'skipped') {
@@ -1231,8 +1238,8 @@ export async function runHealthChecks({ concurrency = CONCURRENCY } = {}) {
   }
 
   const durationSec = ((Date.now() - startTime) / 1000).toFixed(1)
-  const { byProtocol: reconciliation, vanished } = buildReconciliation({
-    protocolById, probedById, siblingUpdatedIds, persistFailedIds,
+  const { byProtocol: reconciliation, vanished, added } = buildReconciliation({
+    snapshot, probedById, siblingUpdatedIds, persistFailedIds,
   })
   const unaccounted = Object.values(reconciliation).reduce((sum, r) => sum + r.unaccounted, 0)
 
@@ -1244,12 +1251,17 @@ export async function runHealthChecks({ concurrency = CONCURRENCY } = {}) {
     results: { ...results },
     persist_failed: results.persistFailed,
     unaccounted,
-    // Checked, then hard-deleted before the cycle finished — in no denominator, so in no bucket.
+    // The two directions the table can move under a running cycle. Reported, never folded into the
+    // snapshot's partition — that is what keeps `unaccounted` an integrity signal instead of noise.
     vanished_mid_cycle: vanished,
+    added_mid_cycle: added,
     by_protocol: reconciliation,
   }
-  if (vanished > 0) {
-    console.log(`[health] ${vanished} checked row(s) were deleted mid-cycle and are excluded from reconciliation`)
+  if (vanished > 0 || added > 0) {
+    console.log(
+      `[health] table changed under the cycle: ${added} row(s) added, ${vanished} row(s) deleted — ` +
+      'reported separately, outside the cycle-start denominator'
+    )
   }
 
   // Written from whichever process ran the cycle, so the digest reports the real last cycle.
@@ -1264,7 +1276,8 @@ export async function runHealthChecks({ concurrency = CONCURRENCY } = {}) {
       `(healthy=${r.probed.healthy} degraded=${r.probed.degraded} down=${r.probed.down} ` +
       `unknown=${r.probed.unknown} error=${r.probed.error}) sibling_updated=${r.sibling_updated} ` +
       `skipped_unprobeable=${r.skipped_unprobeable} excluded_inactive=${r.excluded_inactive} ` +
-      `persist_failed=${r.persist_failed} unaccounted=${r.unaccounted}`
+      `persist_failed=${r.persist_failed} unaccounted=${r.unaccounted} ` +
+      `added_mid_cycle=${r.added_mid_cycle} vanished_mid_cycle=${r.vanished_mid_cycle}`
     )
   }
 

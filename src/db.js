@@ -123,6 +123,9 @@ export const COUNTER_KEYS = {
   MCP_COUNTER_SEEDED_AT: 'mcp_counter_seeded_at',
   HEALTH_WRITE_FAILURES: 'health_write_failures_lifetime',
   HEALTH_SCHEMA_INVALID: 'health_schema_invalid',
+  // Set only when the schema state could not be determined (a lock, most often). Kept apart from
+  // HEALTH_SCHEMA_INVALID so a transient failure cannot cry wolf on a healthy schema.
+  HEALTH_SCHEMA_PROBE_ERROR: 'health_schema_probe_error',
   LAST_HEALTH_CYCLE: 'last_health_cycle',
 }
 
@@ -466,16 +469,36 @@ function insertSchemaProbeParent(database) {
 }
 
 /**
- * Which canonical statuses the current health_checks CHECK constraint refuses.
+ * The probe could not reach a verdict — distinct from "the schema rejected a status".
  *
- * Positive insertability probe rather than DDL substring matching: the stored CREATE TABLE text
- * can mention a status without allowing it (a column default, a comment), and only an INSERT
- * proves a write will land. Runs inside BEGIN ... ROLLBACK with a real parent row, so it leaves
- * nothing behind and cannot fail on the services foreign key.
- *
- * @returns {string[]} statuses the constraint rejects (empty when the table is current)
+ * Most often a lock: the probe opens a write transaction at import time, so scripts/healthcheck.js
+ * booting against a mid-write server process can lose the race. That is not evidence of a broken
+ * enum, and flagging it as one would latch a false alarm until the next deploy.
  */
-export function probeHealthCheckStatuses(database = db) {
+export class SchemaProbeUnavailableError extends Error {
+  constructor(message, cause) {
+    super(message)
+    this.name = 'SchemaProbeUnavailableError'
+    this.cause = cause
+    this.code = cause?.code ?? null
+  }
+}
+
+// Lock/contention codes: the probe is worth retrying rather than giving up on.
+const RETRYABLE_PROBE_CODES = new Set([
+  'SQLITE_BUSY', 'SQLITE_BUSY_SNAPSHOT', 'SQLITE_BUSY_TIMEOUT',
+  'SQLITE_LOCKED', 'SQLITE_LOCKED_SHAREDCACHE', 'SQLITE_PROTOCOL',
+])
+
+const PROBE_ATTEMPTS = 3
+const PROBE_RETRY_MS = 50
+
+/** better-sqlite3 is synchronous, so the backoff has to be too. */
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+function probeHealthCheckStatusesOnce(database) {
   const rejected = []
   let began = false
   try {
@@ -495,6 +518,41 @@ export function probeHealthCheckStatuses(database = db) {
     if (began) database.exec('ROLLBACK')
   }
   return rejected
+}
+
+/**
+ * Which canonical statuses the current health_checks CHECK constraint refuses.
+ *
+ * Positive insertability probe rather than DDL substring matching: the stored CREATE TABLE text
+ * can mention a status without allowing it (a column default, a comment), and only an INSERT
+ * proves a write will land. Runs inside BEGIN ... ROLLBACK with a real parent row, so it leaves
+ * nothing behind and cannot fail on the services foreign key.
+ *
+ * Only a CHECK violation is a verdict. Anything else means the probe could not run, is retried
+ * while it looks like contention, and finally surfaces as SchemaProbeUnavailableError — never as
+ * a rejected status.
+ *
+ * @returns {string[]} statuses the constraint rejects (empty when the table is current)
+ * @throws {SchemaProbeUnavailableError} when the probe could not reach a verdict
+ */
+export function probeHealthCheckStatuses(database = db, { attempts = PROBE_ATTEMPTS, retryMs = PROBE_RETRY_MS } = {}) {
+  let lastError
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return probeHealthCheckStatusesOnce(database)
+    } catch (err) {
+      lastError = err
+      if (attempt < attempts && RETRYABLE_PROBE_CODES.has(err.code)) {
+        sleepSync(retryMs * attempt)
+        continue
+      }
+      break
+    }
+  }
+  throw new SchemaProbeUnavailableError(
+    `health_checks status probe could not run: ${lastError?.message ?? 'unknown error'}`,
+    lastError
+  )
 }
 
 /** Bytes currently occupied by health_checks and its index (whole-DB size as a safe upper bound). */
@@ -595,7 +653,11 @@ export function migrateHealthChecksStatusConstraint(database = db, { statfsSyncF
  * fixed. The previous console.warn swallow is gone — a silenced schema failure is exactly how
  * ~10 endpoints per cycle lost their status writes unnoticed.
  *
- * @returns {{migrated: boolean, valid: boolean, missing: string[], error?: string}}
+ * health_schema_invalid means one thing only: the probe returned a non-empty rejected list. A
+ * probe that could not run gets health_schema_probe_error instead. An alarm that fires on a
+ * transient lock is one that gets ignored, which would defeat the point of raising it at all.
+ *
+ * @returns {{migrated: boolean, valid: boolean, indeterminate: boolean, missing: string[], error?: string}}
  */
 export function runHealthChecksSchemaGuard(database = db, { logger = console, statfsSyncFn = statfsSync } = {}) {
   try {
@@ -605,37 +667,41 @@ export function runHealthChecksSchemaGuard(database = db, { logger = console, st
   }
 
   let migrated = false
+  let migrationError = null
   try {
     migrated = migrateHealthChecksStatusConstraint(database, { statfsSyncFn, logger })
   } catch (err) {
-    logger.error(`[db] health_checks status migration FAILED — health writes will be rejected: ${err.message}`)
-    setCounter(COUNTER_KEYS.HEALTH_SCHEMA_INVALID, '1', database)
-    let stillRejected
-    try {
-      stillRejected = probeHealthCheckStatuses(database)
-    } catch {
-      stillRejected = HEALTH_CHECK_STATUSES.slice()
+    migrationError = err
+    if (err instanceof SchemaProbeUnavailableError) {
+      logger.error(`[db] health_checks schema state could not be determined: ${err.message}`)
+    } else {
+      logger.error(`[db] health_checks status migration FAILED — health writes may be rejected: ${err.message}`)
     }
-    return { migrated: false, valid: false, missing: stillRejected, error: err.message }
   }
 
   let missing
   try {
     missing = probeHealthCheckStatuses(database)
   } catch (err) {
-    logger.error(`[db] health_checks schema probe FAILED: ${err.message}`)
-    setCounter(COUNTER_KEYS.HEALTH_SCHEMA_INVALID, '1', database)
-    return { migrated, valid: false, missing: HEALTH_CHECK_STATUSES.slice(), error: err.message }
+    const detail = migrationError && migrationError !== err
+      ? `${err.message} (after migration failure: ${migrationError.message})`
+      : err.message
+    logger.error(`[db] health_checks schema probe could not run: ${detail}`)
+    setCounter(COUNTER_KEYS.HEALTH_SCHEMA_PROBE_ERROR, detail, database)
+    return { migrated, valid: false, indeterminate: true, missing: [], error: detail }
   }
 
   if (missing.length > 0) {
     logger.error(`[db] health_checks CHECK still rejects: ${missing.join(', ')} — those health writes will fail`)
     setCounter(COUNTER_KEYS.HEALTH_SCHEMA_INVALID, '1', database)
-    return { migrated, valid: false, missing }
+    deleteCounter(COUNTER_KEYS.HEALTH_SCHEMA_PROBE_ERROR, database)
+    return { migrated, valid: false, indeterminate: false, missing, error: migrationError?.message }
   }
 
+  // Determinately writable: clear both flags, including one left by an earlier locked boot.
   deleteCounter(COUNTER_KEYS.HEALTH_SCHEMA_INVALID, database)
-  return { migrated, valid: true, missing: [] }
+  deleteCounter(COUNTER_KEYS.HEALTH_SCHEMA_PROBE_ERROR, database)
+  return { migrated, valid: true, indeterminate: false, missing: [] }
 }
 
 runHealthChecksSchemaGuard(db)
@@ -1181,8 +1247,18 @@ export const MCP_QUERY_LOG_RETENTION_DAYS = 90
 
 const MCP_USER_AGENT_MARKER = '402index-mcp'
 
+/**
+ * The SQL half of the MCP predicate, shared by every window query.
+ *
+ * User-Agent is fully client-controlled, and the two halves used to disagree: JS `includes` is
+ * case-sensitive while SQL `LIKE` is case-insensitive for ASCII, so `402Index-MCP` landed in
+ * mcp_queries_90d but never in mcp_queries_lifetime — two fields in one payload counting the same
+ * events by different rules. Both halves now lowercase. Interpolates a module constant only.
+ */
+export const MCP_USER_AGENT_SQL = `instr(lower(user_agent), '${MCP_USER_AGENT_MARKER}') > 0`
+
 export function isMcpUserAgent(userAgent) {
-  return typeof userAgent === 'string' && userAgent.includes(MCP_USER_AGENT_MARKER)
+  return typeof userAgent === 'string' && userAgent.toLowerCase().includes(MCP_USER_AGENT_MARKER)
 }
 
 // Throws on failure (unlike incrementCounter) so the enclosing transaction rolls back: the
@@ -1221,9 +1297,9 @@ export function mcpQueryWindowStats(database = db, retentionDays = MCP_QUERY_LOG
     const row = database.prepare(`
       SELECT COUNT(*) AS queries, COUNT(DISTINCT date(timestamp)) AS activeDays
       FROM query_log
-      WHERE user_agent LIKE '%' || @marker || '%'
+      WHERE ${MCP_USER_AGENT_SQL}
         AND timestamp > datetime('now', '-' || @days || ' days')
-    `).get({ marker: MCP_USER_AGENT_MARKER, days: retentionDays })
+    `).get({ days: retentionDays })
     return { queries: row?.queries ?? 0, activeDays: row?.activeDays ?? 0 }
   } catch (err) {
     console.warn(`[db] mcpQueryWindowStats failed: ${err.message}`)

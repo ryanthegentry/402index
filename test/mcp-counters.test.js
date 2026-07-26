@@ -10,6 +10,7 @@
 
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'fs'
 import Database from 'better-sqlite3'
 import * as dbModule from '../src/db.js'
 
@@ -29,6 +30,62 @@ describe('MCP user-agent classification', () => {
     assert.equal(dbModule.isMcpUserAgent(''), false)
     assert.equal(dbModule.isMcpUserAgent(null), false)
     assert.equal(dbModule.isMcpUserAgent(undefined), false)
+  })
+})
+
+describe('one predicate classifies MCP traffic everywhere', () => {
+  // User-Agent is fully client-controlled. The JS increment used a case-sensitive includes() while
+  // the window queries used SQL LIKE, which is case-insensitive for ASCII — so a client sending
+  // "402Index-MCP" was counted in the 90d window but never in the lifetime counter, and the digest
+  // could report mcp_queries_90d > mcp_queries_lifetime.
+  const MIXED_CASE_UA = '402Index-MCP/9.9.9'
+
+  it('classifies a mixed-case user agent as MCP', () => {
+    assert.equal(dbModule.isMcpUserAgent(MIXED_CASE_UA), true)
+    assert.equal(dbModule.isMcpUserAgent('402INDEX-MCP'), true)
+  })
+
+  it('moves the lifetime and 90-day counters together for a mixed-case agent', () => {
+    const lifetimeBefore = dbModule.getCounterInt(LIFETIME_KEY)
+    const windowBefore = dbModule.mcpQueryWindowStats().queries
+
+    logQuery({ queryText: 'mixed case', userAgent: MIXED_CASE_UA })
+
+    assert.equal(dbModule.getCounterInt(LIFETIME_KEY), lifetimeBefore + 1, 'lifetime counter must see it')
+    assert.equal(dbModule.mcpQueryWindowStats().queries, windowBefore + 1, 'window must see the same event')
+  })
+
+  it('seeds the lifetime floor from the same predicate that increments it', () => {
+    const fixture = new Database(':memory:')
+    dbModule.ensureCountersTable(fixture)
+    fixture.exec(`
+      CREATE TABLE query_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+        query_text TEXT, filters TEXT, result_count INTEGER,
+        response_time_ms INTEGER, user_agent TEXT, degraded_reason TEXT
+      );
+    `)
+    const insert = fixture.prepare('INSERT INTO query_log (user_agent) VALUES (?)')
+    insert.run(MCP_UA)
+    insert.run(MIXED_CASE_UA)
+
+    dbModule.seedMcpLifetimeCounter(fixture)
+    assert.equal(
+      dbModule.getCounterInt(LIFETIME_KEY, fixture), 2,
+      'the seed floor must count exactly what later increments will count'
+    )
+    fixture.close()
+  })
+
+  it('the digest does not hand-roll a second MCP predicate', () => {
+    const source = readFileSync(new URL('../src/routes/api/digest.js', import.meta.url), 'utf8')
+    assert.ok(
+      !/user_agent LIKE/.test(source),
+      'digest MCP counting must use the shared predicate exported by db.js'
+    )
+    assert.match(source, /MCP_USER_AGENT_SQL/)
+    assert.equal(typeof dbModule.MCP_USER_AGENT_SQL, 'string', 'db.js must export the shared SQL predicate')
   })
 })
 

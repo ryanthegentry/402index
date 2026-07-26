@@ -54,6 +54,20 @@ describe('digest traffic: MCP counters', () => {
   it('exposes when the lifetime counter was seeded', () => {
     assert.ok(body.traffic.mcp_counter_seeded_at, 'missing mcp_counter_seeded_at')
   })
+
+  it('labels the MCP counters as user-agent attested', () => {
+    // The only gate on the increment is a client-controlled User-Agent substring, and the counter
+    // is now permanent rather than self-healing as poisoned rows age out. It is a ceiling, not a
+    // measurement — the payload has to say so.
+    assert.equal(body.traffic.mcp_counters_ua_attested, true)
+  })
+
+  it('never reports a window larger than the lifetime counter', () => {
+    assert.ok(
+      body.traffic.mcp_queries_90d <= body.traffic.mcp_queries_lifetime,
+      'the window is a subset of the lifetime total — divergent predicates would break this'
+    )
+  })
 })
 
 describe('digest health section', () => {
@@ -66,6 +80,13 @@ describe('digest health section', () => {
     assert.ok(
       !('health_schema_invalid' in body.health),
       'health_schema_invalid must be absent unless the schema is broken'
+    )
+  })
+
+  it('omits health_schema_probe_error when the probe ran cleanly', () => {
+    assert.ok(
+      !('health_schema_probe_error' in body.health),
+      'an indeterminate probe is a distinct, separately-surfaced condition'
     )
   })
 

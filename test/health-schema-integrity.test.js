@@ -341,6 +341,10 @@ describe('migration failure is loud', () => {
     assert.ok(logger.calls.error.length > 0, 'must log at error level')
     assert.equal(logger.calls.warn.length, 0, 'must not downgrade the failure to a warning')
     assert.equal(dbModule.getCounter('health_schema_invalid', fixture), '1')
+    assert.equal(
+      dbModule.getCounter('health_schema_probe_error', fixture), null,
+      'a genuinely rejected status is a verdict, not an indeterminate probe'
+    )
     // Abort-safe: the original table is intact and still queryable.
     assert.equal(fixture.prepare('SELECT COUNT(*) c FROM health_checks').get().c, 1)
     fixture.close()
@@ -350,17 +354,23 @@ describe('migration failure is loud', () => {
     const fixture = createFixtureDb()
     dbModule.ensureCountersTable(fixture)
     dbModule.setCounter('health_schema_invalid', '1', fixture)
+    dbModule.setCounter('health_schema_probe_error', 'stale lock from a previous boot', fixture)
 
     const result = dbModule.runHealthChecksSchemaGuard(fixture, { logger: captureLogger() })
 
     assert.equal(result.valid, true)
     assert.equal(result.migrated, true)
     assert.equal(dbModule.getCounter('health_schema_invalid', fixture), null, 'key removed when healthy')
+    assert.equal(
+      dbModule.getCounter('health_schema_probe_error', fixture), null,
+      'a determinate healthy probe clears the indeterminate flag too'
+    )
     fixture.close()
   })
 
   it('the live boot left no invalid-schema flag', () => {
     assert.equal(dbModule.getCounter('health_schema_invalid'), null)
+    assert.equal(dbModule.getCounter('health_schema_probe_error'), null)
   })
 
   it('src/db.js no longer swallows the migration failure in a console.warn', () => {
@@ -369,6 +379,83 @@ describe('migration failure is loud', () => {
       !/health_checks migration note/.test(source),
       'the console.warn swallow path must be deleted, not reworded'
     )
+  })
+})
+
+describe('a probe that could not run is not a broken schema', () => {
+  const CURRENT_STATUS_CHECK = HEALTH_CHECK_STATUSES.map(s => `'${s}'`).join(', ')
+
+  /**
+   * A DB whose write transactions raise SQLITE_BUSY for the first `failures` attempts.
+   *
+   * Real cause: the probe opens a write transaction at src/db.js import time, so
+   * scripts/healthcheck.js booting while the server process is mid-write can lose the lock race.
+   * That says nothing about the status enum.
+   */
+  function busyDb(realDb, failures) {
+    let seen = 0
+    return new Proxy(realDb, {
+      get(target, prop) {
+        if (prop === 'exec') {
+          return sql => {
+            if (/^\s*BEGIN/i.test(sql) && seen++ < failures) {
+              const err = new Error('database is locked')
+              err.code = 'SQLITE_BUSY'
+              throw err
+            }
+            return target.exec(sql)
+          }
+        }
+        const value = Reflect.get(target, prop, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+  }
+
+  it('retries a transient lock instead of returning a verdict', () => {
+    const fixture = createFixtureDb({ statusCheck: CURRENT_STATUS_CHECK })
+    assert.deepEqual(
+      dbModule.probeHealthCheckStatuses(busyDb(fixture, 2), { retryMs: 1 }), [],
+      'a lock that clears on retry must probe clean'
+    )
+    fixture.close()
+  })
+
+  it('reports an unavailable probe under its own key, never as health_schema_invalid', () => {
+    const fixture = createFixtureDb({ statusCheck: CURRENT_STATUS_CHECK })
+    dbModule.ensureCountersTable(fixture)
+    const logger = captureLogger()
+
+    const result = dbModule.runHealthChecksSchemaGuard(busyDb(fixture, Infinity), { logger })
+
+    assert.equal(result.valid, false)
+    assert.equal(result.indeterminate, true, 'the guard must say it could not tell')
+    assert.deepEqual(result.missing, [], 'no status was actually rejected')
+    assert.equal(
+      dbModule.getCounter('health_schema_invalid', fixture), null,
+      'a locked DB must not latch a schema alarm that survives until the next deploy'
+    )
+    assert.ok(
+      dbModule.getCounter('health_schema_probe_error', fixture),
+      'the indeterminate outcome gets its own durable key'
+    )
+    assert.ok(logger.calls.error.length > 0, 'still loud — just not the wrong alarm')
+    assert.equal(logger.calls.warn.length, 0, 'and never downgraded to a warning')
+    fixture.close()
+  })
+
+  it('a locked probe leaves the schema flag exactly as it found it', () => {
+    const fixture = createFixtureDb({ statusCheck: CURRENT_STATUS_CHECK })
+    dbModule.ensureCountersTable(fixture)
+
+    dbModule.runHealthChecksSchemaGuard(busyDb(fixture, Infinity), { logger: captureLogger() })
+    assert.equal(dbModule.getCounter('health_schema_invalid', fixture), null)
+
+    // ...and the next boot, with the lock gone, resolves it determinately.
+    const result = dbModule.runHealthChecksSchemaGuard(fixture, { logger: captureLogger() })
+    assert.equal(result.valid, true)
+    assert.equal(dbModule.getCounter('health_schema_probe_error', fixture), null, 'cleared once determinable')
+    fixture.close()
   })
 })
 
@@ -405,6 +492,11 @@ describe('counters table', () => {
       !/DELETE FROM counters WHERE[^']*datetime\(/.test(source),
       'counters must have no age-based delete'
     )
+    // Stronger than the datetime() check above, which a JS-computed cutoff would slip past:
+    // every delete against counters must be scoped to a single key.
+    for (const stmt of source.match(/DELETE FROM counters[^`'"]*/g) || []) {
+      assert.match(stmt.trim(), /^DELETE FROM counters WHERE key = \?$/, `counters delete must be key-scoped: ${stmt}`)
+    }
     const pruneAll = source.match(/function pruneAll\(\)\s*\{[\s\S]*?\n\}/)
     assert.ok(pruneAll, 'pruneAll must exist')
     assert.ok(!/counter/i.test(pruneAll[0]), 'pruneAll must not touch counters')

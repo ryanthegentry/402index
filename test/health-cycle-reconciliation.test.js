@@ -193,6 +193,59 @@ describe('reconciliation identity', () => {
     }
   })
 
+  it('does not fold a service inserted mid-cycle into the denominator', async () => {
+    // The Bazaar/l402directory/MPP pollers share the health cycle's hourly interval and insert
+    // with services.status defaulting to 'active', so a cycle over ~1,200 endpoints routinely
+    // overlaps an insert. Counting the newcomer in an end-of-cycle denominator makes unaccounted
+    // non-zero on ordinary operation — the very number that exists to prove the buckets add up.
+    insertTestService({ protocol: 'L402', url: `https://${TEST_PREFIX}-incumbent.example.com/api` })
+    let inserted = false
+    globalThis.fetch = async () => {
+      if (!inserted) {
+        inserted = true
+        insertTestService({ protocol: 'L402', url: `https://${TEST_PREFIX}-newcomer.example.com/api` })
+      }
+      return mockResponse(402, {
+        'www-authenticate': `L402 macaroon="${specCompliantMacaroon}", invoice="${longInvoice}"`,
+      })
+    }
+
+    const result = await runHealthChecks({ concurrency: 1 })
+    const r = result.reconciliation.L402
+
+    assert.equal(r.denominator, 1, 'the denominator is the cycle-start snapshot, not an end-of-cycle count')
+    assert.equal(r.probed_total, 1)
+    assert.equal(r.unaccounted, 0, 'a mid-cycle insert must not show up as a residual')
+    assert.equal(result.cycle.added_mid_cycle, 1, 'the newcomer is reported, not silently absorbed')
+    assert.equal(r.added_mid_cycle, 1, 'and attributed to its protocol')
+  })
+
+  it('keeps a row deactivated mid-cycle in exactly one bucket', async () => {
+    // A row probed at cycle start and deactivated before cycle end used to land in BOTH probed and
+    // excluded_inactive, so the buckets were not a partition and unaccounted went negative.
+    const svc = insertTestService({ protocol: 'L402', url: `https://${TEST_PREFIX}-demoted.example.com/api` })
+    globalThis.fetch = async () => {
+      db.prepare("UPDATE services SET status = 'pending' WHERE id = ?").run(svc.id)
+      return mockResponse(402, {
+        'www-authenticate': `L402 macaroon="${specCompliantMacaroon}", invoice="${longInvoice}"`,
+      })
+    }
+
+    const r = (await runHealthChecks({ concurrency: 1 })).reconciliation.L402
+
+    assert.equal(r.denominator, 1)
+    assert.equal(r.probed_total, 1, 'it was probed — that is the bucket it belongs in')
+    assert.equal(r.excluded_inactive, 0, 'and it must not also be counted as excluded')
+    assert.equal(r.unaccounted, 0, 'buckets are a partition, so the residual cannot go negative')
+  })
+
+  it('reports both mid-cycle directions in the shared summary', async () => {
+    insertTestService({ protocol: 'L402', url: `https://${TEST_PREFIX}-summary.example.com/api` })
+    const summary = checker.formatCycleSummary(await runHealthChecks({ concurrency: 1 }))
+    assert.match(summary, /added_mid_cycle=0/, 'the insert direction is reported')
+    assert.match(summary, /vanished_mid_cycle=0/, 'symmetrically with the delete direction')
+  })
+
   it('does not change which endpoints get probed', async () => {
     const fixture = seedFixture()
     const probedUrls = new Set()
