@@ -117,7 +117,7 @@ seven status checks to report green:
 | `mcp-server-test (20)` | The `mcp-server/` suite on Node 20. | `cd mcp-server && npm test` — note this builds first and rewrites `mcp-server/dist/`, so commit or discard the result deliberately. |
 | `lint` | eslint on Node 22. Only `no-undef` is enforced; the rest of the recommended set is off. Covers root `src/`, `test/`, and `scripts/` — `mcp-server/` and `public/` are ignored. | `npm run lint` |
 | `e2e` | The Playwright specs in `test/e2e/` against a locally booted server: handler smoke *plus* UI regression (filter-chip overflow, getting-started modal). A UI change can break this even when handlers are fine. | Once: `npx playwright install --with-deps chromium`. Then `npm run test:e2e` — **read the caveat below before you run it.** |
-| `security` | Records an `npm audit` report as a build artifact. **This check does not enforce anything** — the audit step is `continue-on-error: true`, so a vulnerability finding will not turn it red. Only a failed `npm ci` can fail it. | `npm audit --audit-level=moderate` |
+| `security` | Records an `npm audit` report as a build artifact. **This check does not enforce anything** — the audit step is `continue-on-error: true`, so a vulnerability finding will not turn it red. Only an infrastructure failure — a broken `npm ci`, or a failed checkout/setup/artifact-upload step — can fail it. | `npm audit --audit-level=moderate` |
 | `scan` | gitleaks secret scan, using `.gitleaks.toml`. On a PR it scans the commits in that PR, not the whole history. | `gitleaks detect --config .gitleaks.toml --log-opts="origin/master..HEAD"` — the `--log-opts` matters: without it gitleaks walks your entire history and reports pre-existing hits that CI never gates on. See the allowlist note below before suppressing anything. |
 
 **Before you run `e2e` locally.** It is not inert the way `npm test` is. `npm test` pins
@@ -126,10 +126,13 @@ working `data/` database and starts the background scheduler, which immediately 
 third-party aggregator from your IP address and, shortly after, health-checks every service
 endpoint stored in that database (pruning old `health_checks` rows as it goes). Prefix the
 run to keep it off your dev data — `DB_PATH=:memory: npm run test:e2e` — which is what CI
-effectively does; the specs don't need seeded rows. Note that the outbound polling happens
-either way. One more trap: Playwright reuses whatever is already listening on port 3402
-rather than starting your working tree, so kill any stray dev server first or you may get a
-green run against stale code.
+effectively does; the specs don't need seeded rows. Note that `:memory:` only protects your
+data, not your network: the scheduler still starts, still polls the aggregators, and still
+health-checks the `listings/*.yaml` endpoints, which it loads into whichever database is
+open. The outbound traffic happens either way — it is just a handful of listing URLs instead
+of your whole dev database. One more trap: Playwright reuses whatever is already listening
+on port 3402 rather than starting your working tree, so kill any stray dev server first or
+you may get a green run against stale code.
 
 **Before you add a gitleaks allowlist entry.** Allowlist only values that are genuinely
 intentional fixtures or documented placeholders. A real credential that leaks must be
