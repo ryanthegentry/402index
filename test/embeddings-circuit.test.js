@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 const originalFetch = globalThis.fetch
 
-let db, getCircuitState, resetCircuit, embedQueryForRead
+let db, getCircuitState, resetCircuit, embedQueryForRead, resetQueryEmbeddingCache
 let startServer, stopServer, API
 
 // Helper: make a successful OpenAI embedding response
@@ -46,6 +46,7 @@ describe('Group C — circuit breaker (#150)', () => {
     getCircuitState = embeddings.getCircuitState
     resetCircuit = embeddings.resetCircuit
     embedQueryForRead = embeddings.embedQueryForRead
+    resetQueryEmbeddingCache = embeddings.resetQueryEmbeddingCache
 
     const srv = await import('./helpers/server.js')
     startServer = srv.startServer
@@ -63,6 +64,9 @@ describe('Group C — circuit breaker (#150)', () => {
     globalThis.fetch = originalFetch
     // Reset circuit between tests
     if (resetCircuit) resetCircuit()
+    // Reset the query embedding cache too — a hit skips callOpenAI entirely, which
+    // would hide the failures these tests inject.
+    if (resetQueryEmbeddingCache) resetQueryEmbeddingCache()
   })
 
   // Helper: trigger N consecutive failures via the production read path

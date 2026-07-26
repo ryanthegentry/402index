@@ -1,8 +1,8 @@
 import { Router } from 'express'
-import db from '../../db.js'
+import db, { getVecIndexStats } from '../../db.js'
 import { extractHostname } from '../../services/url-normalize.js'
 import { getSnapshots } from '../../services/daily-snapshot.js'
-import { getQueueDepth, getCircuitState } from '../../services/embeddings.js'
+import { getQueueDepth, getCircuitState, getQueryEmbeddingCacheStats } from '../../services/embeddings.js'
 
 const router = Router()
 
@@ -99,6 +99,18 @@ router.get('/health', (req, res) => {
           embedding_circuit_failures: cs.failures,
           embedding_circuit_opened_at: cs.openedAt ? new Date(cs.openedAt).toISOString() : null,
           embedding_half_open_trial: cs.halfOpenTrialInFlight,
+        }
+      })(),
+      // Index coverage, so a backfill can be confirmed from outside the container.
+      // vec_indexed well below vec_embeddings means semantic search is running blind.
+      ...(() => {
+        const vs = getVecIndexStats()
+        const qc = getQueryEmbeddingCacheStats()
+        return {
+          vec_available: vs.available,
+          vec_embeddings: vs.embeddings,
+          vec_indexed: vs.indexed,
+          query_embedding_cache: { size: qc.size, hits: qc.hits, misses: qc.misses },
         }
       })(),
     })
