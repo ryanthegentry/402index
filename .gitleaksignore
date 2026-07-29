@@ -5,3 +5,8 @@ bad2d83025422d305329b55ed1b3ce12663cfb0a:test/verify-hash.test.js:generic-api-ke
 49d7b2956f4b62c2742ee8582887707ad6baa61e:test/nostr.test.js:generic-api-key:47
 9a9922813a99697207fe77036ec859c4981087ac:test/l402-verify.test.js:jwt:89
 f2a040e64d6482a6643975f761d22fc8460e525e:reports/l402-discovery-2026-03-05.json:generic-api-key:1142
+# 2026-07-30 multirail fixtures: an L402 token from an UNPAID challenge (no secret
+# value — unusable without the paid invoice's preimage; anyone gets one free from
+# the endpoint). Neutralized in the following commit; this fingerprint covers the
+# original capture in branch history.
+594424e642a94f74e9bf799d99c5146b237abb69:router/test/fixtures/direct-l402-token.json:generic-api-key:13

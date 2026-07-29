@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fx402 = JSON.parse(readFileSync(join(__dirname, '..', 'fixtures', 'l402space-402.json'), 'utf8'));
+const fxDirect = JSON.parse(readFileSync(join(__dirname, '..', 'fixtures', 'direct-l402-token.json'), 'utf8'));
 const fxCandidates = JSON.parse(readFileSync(join(__dirname, '..', 'fixtures', 'live-candidates.json'), 'utf8'));
 
 export const UPSTREAM_TEXT = 'pong from the paid upstream';
@@ -20,6 +21,23 @@ export function routingFetch(behavior = {}) {
     if (u.includes('/api/v1/services')) {
       const page = new URL(u).searchParams.get('offset') === '0' ? fxCandidates.page0 : fxCandidates.page1;
       return new Response(JSON.stringify(page), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    // direct hits on the upstream candidates themselves (multirail route)
+    if (/llm402\.ai|lightningfaucet\.com/.test(u) && !u.startsWith('https://l402.space/')) {
+      const auth = init.headers?.Authorization ?? init.headers?.authorization;
+      if (!auth) {
+        if (behavior.directQuoteStatus) {
+          return new Response('direct quote refused', { status: behavior.directQuoteStatus });
+        }
+        return new Response(JSON.stringify(fxDirect.body), {
+          status: 402,
+          headers: { 'www-authenticate': fxDirect.wwwAuthenticate, 'content-type': 'application/json' }
+        });
+      }
+      if (behavior.redeemStatus === 500) return new Response('upstream exploded', { status: 500 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: UPSTREAM_TEXT } }] }), {
+        status: 200, headers: { 'content-type': 'application/json' }
+      });
     }
     if (u.startsWith('https://l402.space/l402/')) {
       const auth = init.headers?.Authorization ?? init.headers?.authorization;
@@ -86,6 +104,9 @@ export async function startInvokeRouter(overrides = {}) {
   // the corrected caps are 2000/20000 and tests pin them explicitly.
   process.env.ROUTER_MAX_SATS_PER_JOB = '2000';
   process.env.ROUTER_MAX_TOTAL_SATS = '20000';
+  // Legacy tests keep the PoC's gateway-only behavior; multirail tests pass
+  // routeOrder explicitly to get the direct-first default.
+  process.env.ROUTER_ROUTE_ORDER = overrides.routeOrder ?? 'l402space';
   const { createRouterApp } = await import('../../dist/index.js');
   const { loadConfig } = await import('../../dist/config.js');
   const billing = overrides.billing ?? fakeBilling();
@@ -96,7 +117,8 @@ export async function startInvokeRouter(overrides = {}) {
     adapter: overrides.adapter,
     btcUsd: async () => 50000,
     redeemTimeoutMs: overrides.redeemTimeoutMs,
-    checkoutUrlFactory: overrides.checkoutUrlFactory
+    checkoutUrlFactory: overrides.checkoutUrlFactory,
+    registrationStripeImpl: overrides.registrationStripeImpl
   });
   // the wire-test principal has a card on file; cold-start tests use other principals
   routerDb.prepare('INSERT INTO cards (principal, payment_method) VALUES (?, ?)').run('wire-test-agent', 'pm_card_visa');
@@ -117,6 +139,32 @@ export async function startInvokeRouter(overrides = {}) {
 }
 
 let rpcId = 0;
+
+// Like callInvoke but with a caller-chosen principal (clientInfo name).
+export async function callInvokeAs(baseUrl, principal, args, extra = {}) {
+  rpcId += 1;
+  const params = {
+    name: 'invoke',
+    arguments: args,
+    _meta: {
+      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+      'io.modelcontextprotocol/clientCapabilities': { elicitation: { form: {}, url: {} } },
+      'io.modelcontextprotocol/clientInfo': { name: principal, version: '1.0.0' }
+    },
+    ...extra
+  };
+  const res = await fetch(`${baseUrl}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      'mcp-method': 'tools/call',
+      'mcp-name': 'invoke'
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: rpcId, method: 'tools/call', params })
+  });
+  return res.json();
+}
 
 // Speaks the PRD section 7 wire shapes verbatim.
 export async function callInvoke(baseUrl, args, { inputResponses, requestState } = {}) {

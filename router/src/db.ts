@@ -4,6 +4,65 @@ import { join } from 'node:path';
 
 // The router's own SQLite state: nonce single-use, spend ledger, degraded candidates.
 // Separate file from the 402index catalog DB, which the router only reads.
+
+// The loss-ledger columns, added idempotently over any existing spend_ledger.
+// `sats` stays the wallet-outflow column the spend cap sums; everything else
+// is bookkeeping.
+const LEDGER_COLUMNS: [string, string][] = [
+  ['service_id', 'TEXT'],
+  ['rail', 'TEXT'],
+  ['network', 'TEXT'],
+  ['route', 'TEXT'],
+  ['adapter', 'TEXT'],
+  ['quoted_sats', 'INTEGER'],
+  ['settled_sats', 'INTEGER'],
+  ['fee_sats', 'INTEGER'],
+  ['charged_usd', 'REAL'],
+  ['btc_usd', 'REAL'],
+  ['payment_intent', 'TEXT'],
+  ['job_nonce', 'TEXT'],
+  ['delivered', 'INTEGER'],
+  ['loss_sats', 'INTEGER NOT NULL DEFAULT 0'],
+  ['failure_reason', 'TEXT'],
+  ['latency_ms', 'INTEGER'],
+  ['stage_timings', 'TEXT'],
+  ['settled_at', 'TEXT'],
+  ['resolved_at', 'TEXT']
+];
+
+function migrateSpendLedger(db: Database.Database): void {
+  const existing = new Set(
+    (db.prepare('PRAGMA table_info(spend_ledger)').all() as { name: string }[]).map((c) => c.name)
+  );
+  for (const [name, type] of LEDGER_COLUMNS) {
+    if (!existing.has(name)) {
+      db.exec(`ALTER TABLE spend_ledger ADD COLUMN ${name} ${type}`);
+    }
+  }
+}
+
+// pending_jobs grew route/rail material in the multirail build; same
+// idempotent treatment. `token` holds the credential (macaroon or token) and
+// `invoice` holds the raw payment material — names kept for continuity.
+const PENDING_JOB_COLUMNS: [string, string][] = [
+  ['route', 'TEXT'],
+  ['rail', 'TEXT'],
+  ['network', 'TEXT'],
+  ['btc_usd', 'REAL'],
+  ['stage_timings', 'TEXT']
+];
+
+function migratePendingJobs(db: Database.Database): void {
+  const existing = new Set(
+    (db.prepare('PRAGMA table_info(pending_jobs)').all() as { name: string }[]).map((c) => c.name)
+  );
+  for (const [name, type] of PENDING_JOB_COLUMNS) {
+    if (!existing.has(name)) {
+      db.exec(`ALTER TABLE pending_jobs ADD COLUMN ${name} ${type}`);
+    }
+  }
+}
+
 export function openRouterDb(dataDir: string): Database.Database {
   mkdirSync(dataDir, { recursive: true });
   const db = new Database(join(dataDir, 'router.db'));
@@ -39,6 +98,15 @@ export function openRouterDb(dataDir: string): Database.Database {
       candidates_considered INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS mandates (
+      principal TEXT PRIMARY KEY,
+      budget_usd REAL NOT NULL,
+      spent_usd REAL NOT NULL DEFAULT 0,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+  migrateSpendLedger(db);
+  migratePendingJobs(db);
   return db;
 }

@@ -11,6 +11,7 @@ export interface RouterConfig {
   golemCliDir: string;
   stateTtlSeconds: number;
   provenFallbacks: string[];
+  routeOrder: string[];
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
@@ -28,6 +29,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
     maxTotalSats: Number(env.ROUTER_MAX_TOTAL_SATS || 20000),
     golemCliDir: env.GOLEM_CLI_DIR || join(process.env.HOME || '', 'workspace', 'projects', 'golem'),
     stateTtlSeconds: Number(env.ROUTER_STATE_TTL_SECONDS || 90),
-    provenFallbacks: (env.ROUTER_PROVEN_FALLBACKS || '').split(',').map((s) => s.trim()).filter(Boolean)
+    provenFallbacks: (env.ROUTER_PROVEN_FALLBACKS || '').split(',').map((s) => s.trim()).filter(Boolean),
+    routeOrder: (env.ROUTER_ROUTE_ORDER || 'direct-l402,l402space').split(',').map((s) => s.trim()).filter(Boolean)
   };
 }

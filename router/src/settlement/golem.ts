@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import type { Settlement, SettlementAdapter } from './index.js';
+import type { PaymentRequest, Settlement, SettlementAdapter } from './index.js';
 import { SettlementError, decodeInvoice } from './index.js';
 
 // Pays a bolt11 invoice by spawning the local Golem CLI (Ark → Boltz →
@@ -61,7 +61,12 @@ function defaultSpawn(golemCliDir: string) {
 }
 
 function readPreimage(swapsDbPath: string, invoice: string): { preimage: string; expectedAmount: number } | null {
-  const db = new Database(swapsDbPath, { readonly: true });
+  let db: Database.Database;
+  try {
+    db = new Database(swapsDbPath, { readonly: true });
+  } catch {
+    return null; // unreadable swaps db reads as "no proof", never as success
+  }
   try {
     const rows = db
       .prepare("SELECT data FROM boltz_swaps WHERE type = 'submarine' ORDER BY created_at DESC LIMIT 20")
@@ -87,39 +92,50 @@ export function createGolemSettlement(opts: GolemSettlementOptions): SettlementA
     opts.swapsDbPath ?? join(process.env.HOME || '', '.golem', 'data', 'boltz-swaps.db');
   const spawnImpl = opts.spawnImpl ?? defaultSpawn(opts.golemCliDir);
 
+  async function payBolt11(invoice: string, payOpts: { maxSats: number }): Promise<Settlement> {
+    const { amountSats, paymentHash } = decodeInvoice(invoice);
+    if (amountSats < BOLTZ_MIN_SATS) {
+      throw new SettlementError('BELOW_MIN', `invoice of ${amountSats} sats is under the Boltz floor of ${BOLTZ_MIN_SATS}`);
+    }
+    if (amountSats > payOpts.maxSats) {
+      throw new SettlementError('OVER_MAX', `invoice of ${amountSats} sats exceeds maxSats ${payOpts.maxSats}`);
+    }
+
+    const started = Date.now();
+    const result = await spawnImpl(invoice, payOpts.maxSats);
+    if (result.exitCode !== 0 || !/Payment sent!/.test(result.stdout)) {
+      const errLine = /^Error:.*$/m.exec(result.stdout)?.[0] ?? result.stdout.slice(-300);
+      throw new SettlementError('PAY_FAILED', `golem pay failed: ${errLine}`);
+    }
+
+    const swap = readPreimage(swapsDbPath, invoice);
+    if (!swap || createHash('sha256').update(Buffer.from(swap.preimage, 'hex')).digest('hex') !== paymentHash) {
+      throw new SettlementError(
+        'PREIMAGE_UNAVAILABLE',
+        swap ? 'swaps-db preimage does not hash to the invoice payment hash' : 'no swap record found for the paid invoice'
+      );
+    }
+
+    return {
+      proof: swap.preimage,
+      proofKind: 'preimage',
+      preimage: swap.preimage,
+      paidSats: amountSats,
+      paidAmount: String(amountSats),
+      feeSats: swap.expectedAmount ? swap.expectedAmount - amountSats : 0,
+      durationMs: Date.now() - started
+    };
+  }
+
   return {
     name: 'golem',
+    rails: ['l402'],
+    networks: ['lightning'],
     minSats: BOLTZ_MIN_SATS,
-    async payInvoice(invoice: string, payOpts: { maxSats: number }): Promise<Settlement> {
-      const { amountSats, paymentHash } = decodeInvoice(invoice);
-      if (amountSats < BOLTZ_MIN_SATS) {
-        throw new SettlementError('BELOW_MIN', `invoice of ${amountSats} sats is under the Boltz floor of ${BOLTZ_MIN_SATS}`);
-      }
-      if (amountSats > payOpts.maxSats) {
-        throw new SettlementError('OVER_MAX', `invoice of ${amountSats} sats exceeds maxSats ${payOpts.maxSats}`);
-      }
-
-      const started = Date.now();
-      const result = await spawnImpl(invoice, payOpts.maxSats);
-      if (result.exitCode !== 0 || !/Payment sent!/.test(result.stdout)) {
-        const errLine = /^Error:.*$/m.exec(result.stdout)?.[0] ?? result.stdout.slice(-300);
-        throw new SettlementError('PAY_FAILED', `golem pay failed: ${errLine}`);
-      }
-
-      const swap = readPreimage(swapsDbPath, invoice);
-      if (!swap || createHash('sha256').update(Buffer.from(swap.preimage, 'hex')).digest('hex') !== paymentHash) {
-        throw new SettlementError(
-          'PREIMAGE_UNAVAILABLE',
-          swap ? 'swaps-db preimage does not hash to the invoice payment hash' : 'no swap record found for the paid invoice'
-        );
-      }
-
-      return {
-        preimage: swap.preimage,
-        paidSats: amountSats,
-        feeSats: swap.expectedAmount ? swap.expectedAmount - amountSats : 0,
-        durationMs: Date.now() - started
-      };
-    }
+    movesRealFunds: true,
+    canSettle: (req: PaymentRequest) =>
+      req.rail === 'l402' && req.network === 'lightning' && req.amountSats !== null,
+    pay: (req: PaymentRequest, payOpts: { maxSats: number }) => payBolt11(req.raw, payOpts),
+    payInvoice: payBolt11
   };
 }
