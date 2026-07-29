@@ -94,6 +94,9 @@ test('T10a: config refuses a non-loopback bind without auth required', async () 
   const local = loadConfig(MIN_ENV);
   assert.equal(local.authMode, 'off');
   assert.equal(local.bindHost, '127.0.0.1');
+  // Railway hands the listen port over as PORT; ROUTER_PORT still wins locally
+  assert.equal(loadConfig({ ...MIN_ENV, PORT: '8080' }).port, 8080);
+  assert.equal(loadConfig({ ...MIN_ENV, PORT: '8080', ROUTER_PORT: '4402' }).port, 4402);
 });
 
 test('T10b: unauthenticated and garbage-token requests to /mcp get HTTP 401 and never reach billing', async (t) => {

@@ -58,7 +58,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
     throw new Error('SETTLEMENT_ADAPTER=golem-http requires GOLEM_HTTP_URL and GOLEM_HTTP_API_KEY');
   }
   return {
-    port: Number(env.ROUTER_PORT || 4402),
+    port: Number(env.ROUTER_PORT || env.PORT || 4402),
     dataDir: env.ROUTER_DATA_DIR || join(import.meta.dirname, '..', 'data'),
     stateKeyHex,
     stripeSecretKey: env.STRIPE_SECRET_KEY || '',
