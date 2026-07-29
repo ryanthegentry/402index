@@ -3,7 +3,20 @@
 One lesson per entry, summary line first. Sessions 2026-07-28/29 (PoC) and
 2026-07-29/30 (multirail + TTFP).
 
-## CORRECTION: llm402.ai's 502s are the PROVIDER's fault, not the gateway's
+## llm402.ai fails PER ENDPOINT, not per provider and not per route
+
+Final shape after three paid tests. `claude-fable-5` DELIVERS over direct
+L402 — 344 sats, 17.8s, real completion returned. `claude-opus-4.7-fast`
+502s after payment on BOTH routes (gateway 1,205 sats, direct 1,024).
+`claude-fable-5:batch` 502'd via gateway at 402 sats. So llm402.ai's L402
+rail, macaroon minting and preimage verification all work; specific
+model endpoints take valid payment and then fail to deliver. Degrade per
+ENDPOINT, never per host — the family-wide exclusion was blinding us to a
+provider that mostly works. Provider evidence for a bug report: payment hash
+e99b94a921a4f5905cc6c116ddf54514b56f9288b5e9d0094bcebe256d92f85e paid 1,026
+sats to claude-opus-4.7-fast and got a 502.
+
+## CORRECTION: the 502s are provider-side, not the gateway's fault
 
 The 2026-07-29 direct-route test overturns the entry below it. Pinned to
 direct-only (no gateway rescue), the router paid 1,024 real sats straight to
@@ -47,6 +60,15 @@ The gateway 502s degraded lightningfaucet in degraded_candidates even though
 the direct route delivers to it flawlessly. One shared row blinds the router to
 the working route; next iteration should key degradation on (service, route).
 Tonight the row was deleted by hand after each gateway failure.
+
+## Our own index API 502s under health-sweep load, and the router treats it as fatal
+
+An invoke died with "live index API returned 502" before any payment — that
+was 402index.io, not an upstream. Immediately after, the same query returned
+200 in 5.8s cold then 0.3s warm, so it is an edge timeout while the health
+checker sweeps 86k services. Two consequences: the router should retry a
+failed candidate fetch rather than abandoning the job, and the production
+slow-query work (the 5.9s vec scan) has a second symptom now.
 
 ## demo.sh must source ~/.402index-router.env — long shells carry stale exports
 
