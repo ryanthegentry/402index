@@ -17,7 +17,13 @@ auto-deploys on push. Two CLI traps that each cost a deploy: bare
 `railway up` uploads the LINKED PROJECT ROOT regardless of cwd — the first
 router deploy shipped the main app's Procfile and served the 402index 404
 page from the router domain — and the PATH argument rejects `.` and
-relative paths with `prefix not found`; only `railway up "$PWD"` works.
+relative paths with `prefix not found` — and even `railway up "$PWD"` keeps
+the path PREFIX inside the tarball (Railpack saw `./router/` at root), so
+the only working shape is linking the subdirectory itself (`railway link`
++ `railway service link router` run IN router/) and uploading bare. Last
+trap: a domain created before the first deployment has no target port, so
+the healthcheck probes nothing and fails while the app runs fine on the
+injected PORT — `railway domain update <id> --port 8080` fixes it.
 
 ## The SDK validates outputSchema on SUCCESS results only
 
