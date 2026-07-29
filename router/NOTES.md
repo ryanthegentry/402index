@@ -1,6 +1,34 @@
 # Router PoC — working notes
 
-One lesson per entry, summary line first. Session 2026-07-28/29.
+One lesson per entry, summary line first. Sessions 2026-07-28/29 (PoC) and
+2026-07-29/30 (multirail + TTFP).
+
+## Challenge shapes drift within a day — capture fixtures at build time, expect decay
+
+governance.taskhawktech.com served both-present L402 (macaroon= AND token=) when
+the multirail PRD probed it; 24 hours later it serves an MPP `Payment` scheme.
+The both-present fixture is now a composite of two real captures, and the MPP
+header became a negative fixture. Related: parsebit double-sends the challenge
+as BOTH `LSAT` and `L402` headers — fetch() comma-joins multi-value headers, so
+the parser must survive a joined header, not just a clean one. And
+lightningfaucet's catalog URL (llm-prompt) 301s to the real endpoint
+(llm_prompt) — the direct route must quote AND redeem at the post-redirect URL.
+
+## The mock adapter is registry-reachable only when pinned
+
+First registry cut let sub-floor and x402 requests silently fall through to the
+mock (canSettle everything, minSats 0) — a real job would have "settled"
+synthetically. Rule: the mock registers with onlyWhenPinned and is selectable
+solely via SETTLEMENT_ADAPTER=mock; the x402 stub IS selectable because its job
+is to throw RAIL_UNAVAILABLE naming what a payer needs. Real-money accounting
+keys off movesRealFunds now, never off adapter names.
+
+## stage_timings is one JSON column, not eight INTEGER columns
+
+Deviation from the multirail PRD's columns-only schema: TTFP stage
+instrumentation (candidates/quote/authorize/consent-wait/settle/redeem/capture)
+lands in a single stage_timings TEXT column as JSON, queryable via
+json_extract. One write path for the loss ledger and the TTFP KPI.
 
 ## Product constraint: card-in agentic payments have a hard ~$0.50 floor per job
 

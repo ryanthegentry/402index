@@ -276,8 +276,9 @@ async function handleRetry(
     const detail = err instanceof SettlementError ? `${err.code}: ${err.message}` : (err as Error).message;
     return errResult(`SETTLEMENT_FAILED (${detail}) — hold voided, you were charged $0.`);
   }
-  // the ledger tracks real sats; synthetic mock settlements stay out of it
-  if (deps.adapter.name !== 'mock') {
+  // the ledger tracks real sats; synthetic settlements are marked by the
+  // adapter's capability flag, never by its name
+  if (deps.adapter.movesRealFunds) {
     deps.guards.recordSpend(settlement.paidSats + settlement.feeSats, payload.upstream);
   }
 
