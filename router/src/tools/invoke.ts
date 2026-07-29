@@ -9,6 +9,7 @@ import { GuardError, type createGuards } from '../guards.js';
 import { SettlementError, type AdapterRegistry, type PaymentRequest, type Settlement } from '../settlement/index.js';
 import type { Route, RouteQuote } from '../routes/index.js';
 import type { Ledger } from '../ledger.js';
+import type { Credentials } from '../credentials.js';
 import type { Registration } from '../registration.js';
 
 // The MRTR state machine, multirail edition. Cold call: pick a candidate from
@@ -37,6 +38,7 @@ export interface InvokeDeps {
   registry: AdapterRegistry;
   routes: Route[];
   ledger: Ledger;
+  credentials: Credentials;
   fetchImpl: typeof fetch;
   btcUsd: () => Promise<number>;
   redeemTimeoutMs?: number;
@@ -475,6 +477,21 @@ async function executeJob(deps: InvokeDeps, m: JobMaterial, opts: { principal: s
     });
   }
 
+  // The credential is ours the moment the sats leave — persist it BEFORE
+  // redeeming, so a failed delivery can never destroy an asset we bought.
+  const credentialId = deps.credentials.record({
+    ledgerId,
+    serviceId: m.serviceId,
+    upstream: m.upstream,
+    route: m.route,
+    redeemUrl: m.redeemUrl,
+    httpMethod: m.httpMethod,
+    body: m.body,
+    credential: m.credential,
+    proof: settlement.proof,
+    settledSats: settlement.paidSats + settlement.feeSats
+  });
+
   const route = deps.routes.find((r) => r.name === m.route) ?? deps.routes[0];
   let upstreamRes: Response | undefined;
   let failure: string | undefined;
@@ -504,8 +521,10 @@ async function executeJob(deps: InvokeDeps, m: JobMaterial, opts: { principal: s
         stageTimings: m.stageTimings
       });
     }
+    deps.credentials.recordAttempt(credentialId, failure ?? 'unknown');
     return errResult(
-      `UPSTREAM_FAILED (${failure}) — card hold ${m.paymentIntentId} was voided and you were charged $0. The candidate was marked degraded.`
+      `UPSTREAM_FAILED (${failure}) — card hold ${m.paymentIntentId} was voided and you were charged $0. ` +
+        `The candidate was marked degraded; the paid credential is retained for retry.`
     );
   }
 
@@ -529,6 +548,7 @@ async function executeJob(deps: InvokeDeps, m: JobMaterial, opts: { principal: s
       stageTimings: m.stageTimings
     });
   }
+  deps.credentials.markRedeemed(credentialId);
 
   return {
     content: [{ type: 'text' as const, text }],

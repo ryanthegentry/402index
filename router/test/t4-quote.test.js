@@ -38,8 +38,13 @@ test('T4a: fetchCandidates filters floor, budget, lnget, degraded; ranks by scor
   const urls = picks.map((p) => p.url);
   assert.ok(urls.includes('https://llm402.ai/v1/chat/completions/claude-fable-5%3Abatch'), `batch target in ${JSON.stringify(urls)}`);
   assert.ok(urls.includes('https://llm402.ai/v1/chat/completions/gpt-5.2-pro'), 'gpt-5.2-pro in picks');
-  assert.ok(!urls.some((u) => u.endsWith('/claude-fable-5')), '177 sats is under the Boltz floor');
-  assert.ok(!urls.some((u) => u.includes('DeepSeek-V3')), '21 sats is under the floor');
+  // BEHAVIOR-CHANGE 2026-07-29: an under-floor CATALOG price no longer excludes
+  // a candidate — catalog prices proved anti-correlated with live quotes — it
+  // only ranks it after same-score peers. The floor is enforced on the firm quote.
+  const plain = urls.findIndex((u) => u.endsWith('/claude-fable-5'));
+  const batch = urls.findIndex((u) => u.includes('claude-fable-5%3Abatch'));
+  assert.ok(plain !== -1, 'under-floor catalog price is quoted, not dropped');
+  assert.ok(batch !== -1 && batch < plain, 'catalog-clearing peer tried first');
   assert.ok(!urls.some((u) => u.includes('veo-2.0')), '6696 sats ≈ $3.35 is over the $1 budget');
   assert.ok(!urls.some((u) => u.includes('lightningenable')), 'lnget_compatible=0 excluded');
   assert.ok(calls[0].includes('protocol=L402') && calls[0].includes('health=healthy') && calls[0].includes('offset=0'),
@@ -126,4 +131,25 @@ test('T4h: provenFallbacks bypass only the lnget filter and rank last', async ()
   const urls = withFallback.map((p) => p.url);
   assert.ok(urls.includes('https://lightningfaucet.com/api/l402/llm-prompt'), `fallback included in ${JSON.stringify(urls)}`);
   assert.equal(urls[urls.length - 1], 'https://lightningfaucet.com/api/l402/llm-prompt', 'fallback ranks last');
+});
+
+test('T4i: a candidate under the catalog floor is still quoted, ranked after same-score peers', async () => {
+  const routerDb = freshRouterDb();
+  // claude-fable-5 advertises 177 sats but quotes 343 live; :batch advertises
+  // 357 and quotes 172. The catalog price is a hint, not a gate — the floor is
+  // enforced authoritatively against the firm quote.
+  const picks = await fetchCandidates(routerDb, {
+    capability: 'llm-completion claude-fable',
+    maxPriceUsd: 1.0,
+    minSats: 333,
+    btcUsd: 64120,
+    fetchImpl: candidatesFetch()
+  });
+  const urls = picks.map((p) => p.url);
+  const batch = urls.indexOf('https://llm402.ai/v1/chat/completions/claude-fable-5%3Abatch');
+  const plain = urls.indexOf('https://llm402.ai/v1/chat/completions/claude-fable-5');
+  assert.ok(plain !== -1, `under-floor catalog price must not exclude the candidate: ${JSON.stringify(urls)}`);
+  assert.ok(batch !== -1 && batch < plain, 'the one whose catalog price clears the floor is tried first');
+  const deepseek = urls.indexOf('https://llm402.ai/v1/chat/completions/DeepSeek-V3');
+  assert.ok(deepseek === -1 || deepseek > plain, 'lower-scoring cheap noise still ranks below capability matches');
 });

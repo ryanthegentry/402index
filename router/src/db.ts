@@ -98,6 +98,25 @@ export function openRouterDb(dataDir: string): Database.Database {
       candidates_considered INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS paid_credentials (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ledger_id INTEGER,
+      service_id TEXT,
+      upstream TEXT NOT NULL,
+      route TEXT NOT NULL,
+      redeem_url TEXT NOT NULL,
+      http_method TEXT NOT NULL,
+      body TEXT,
+      credential TEXT NOT NULL,
+      proof TEXT NOT NULL,
+      settled_sats INTEGER NOT NULL,
+      redeemed INTEGER NOT NULL DEFAULT 0,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      paid_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_attempt_at TEXT,
+      redeemed_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS mandates (
       principal TEXT PRIMARY KEY,
       budget_usd REAL NOT NULL,

@@ -7,6 +7,7 @@ import { loadConfig, type RouterConfig } from './config.js';
 import { openRouterDb } from './db.js';
 import { createGuards } from './guards.js';
 import { createLedger } from './ledger.js';
+import { createCredentials } from './credentials.js';
 import { createBilling } from './billing/stripe.js';
 import {
   buildRegistry,
@@ -73,6 +74,7 @@ export function createRouterApp(
     routerDb,
     guards: createGuards(routerDb, { maxSatsPerJob: config.maxSatsPerJob, maxTotalSats: config.maxTotalSats }),
     ledger: createLedger(routerDb),
+    credentials: createCredentials(routerDb),
     billing:
       overrides.billing ??
       (config.stripeSecretKey

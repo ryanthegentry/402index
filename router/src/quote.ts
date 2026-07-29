@@ -32,6 +32,11 @@ export interface Candidate {
   httpMethod: string;
   score: number;
   fallback: boolean;
+  // the catalog price is below the settlement floor. Not an exclusion: catalog
+  // prices are stale probe-time snapshots and are anti-correlated with the live
+  // quote on some providers (llm402.ai advertises 357 and quotes 172; advertises
+  // 177 and quotes 343). The floor is enforced against the firm quote instead.
+  belowCatalogFloor: boolean;
 }
 
 interface LiveServiceRow {
@@ -88,7 +93,6 @@ export async function fetchCandidates(
     if (!row.url) continue;
     const isFallback = fallbacks.has(row.url);
     if (row.lnget_compatible !== 1 && !isFallback) continue;
-    if (priceSats < opts.minSats) continue;
     if ((priceSats / 1e8) * opts.btcUsd > opts.maxPriceUsd) continue;
     if (degraded.has(row.id)) continue;
     const haystack = [row.name, row.description, row.category, row.capabilities, row.url]
@@ -105,13 +109,15 @@ export async function fetchCandidates(
       latencyMs: row.latency_p50_ms ?? null,
       httpMethod: row.http_method ?? 'GET',
       score,
-      fallback: isFallback
+      fallback: isFallback,
+      belowCatalogFloor: priceSats < opts.minSats
     });
   }
   candidates.sort(
     (a, b) =>
       Number(a.fallback) - Number(b.fallback) ||
       b.score - a.score ||
+      Number(a.belowCatalogFloor) - Number(b.belowCatalogFloor) ||
       (a.latencyMs ?? 99999) - (b.latencyMs ?? 99999)
   );
   return candidates;
