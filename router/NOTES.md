@@ -3,6 +3,30 @@
 One lesson per entry, summary line first. Sessions 2026-07-28/29 (PoC) and
 2026-07-29/30 (multirail + TTFP).
 
+## The gateway's paid delivery leg fails across providers while quoting normally
+
+Two consecutive l402.space redemptions to lightningfaucet 502'd tonight AFTER
+settlement (1,162 sats absorbed), while the DIRECT route to the same host
+delivered 2/2 — at 500 sats vs the gateway's 580, and in 1-2s vs last night's
+39s. Combined with llm402.ai's gateway-leg 502s last night: the failure lives
+in l402.space's upstream-settlement leg, not in the providers. The ledger now
+shows it with real money: direct 2 jobs 0 lost; gateway 7 jobs 5 lost. This is
+simultaneously the strongest argument for the direct route and the dataset the
+business sells.
+
+## Degradation is per-service but failures are per-route — a design gap
+
+The gateway 502s degraded lightningfaucet in degraded_candidates even though
+the direct route delivers to it flawlessly. One shared row blinds the router to
+the working route; next iteration should key degradation on (service, route).
+Tonight the row was deleted by hand after each gateway failure.
+
+## demo.sh must source ~/.402index-router.env — long shells carry stale exports
+
+The demo inherited ROUTER_MAX_SATS_PER_JOB=200 from a shell exported before
+Ryan's edit and hit JOB_CAP. The env file is the operational source of truth;
+demo.sh now sources it with set -a before applying defaults.
+
 ## Challenge shapes drift within a day — capture fixtures at build time, expect decay
 
 governance.taskhawktech.com served both-present L402 (macaroon= AND token=) when
