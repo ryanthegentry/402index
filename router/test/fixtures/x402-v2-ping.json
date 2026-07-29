@@ -1,0 +1,41 @@
+{
+  "_source": "captured live 2026-07-30 from l402.space/x402/ping (free unauthenticated GET)",
+  "status": 402,
+  "paymentRequiredHeader": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9sNDAyLnNwYWNlL3g0MDIvcGluZyIsImRlc2NyaXB0aW9uIjoiUGFpZCBwaW5nIOKAlCB0ZXN0IHRoYXQgeW91ciB4NDAyIHdhbGxldCBjYW4gcGF5IHRoaXMgZ2F0ZXdheSIsInNlcnZpY2VOYW1lIjoiVW5pdmVyc2FsIDQwMiBHYXRld2F5In0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYXNzZXQiOiIweDgzMzU4OWZDRDZlRGI2RTA4ZjRjN0MzMkQ0ZjcxYjU0YmRBMDI5MTMiLCJhbW91bnQiOiIxMDAwMCIsInBheVRvIjoiMHg4NUJkQjc4QWQ0QzM5NTY1Rjc2N2RhNjczM2EwNzFGODZCQUVEYjZiIiwibWF4VGltZW91dFNlY29uZHMiOjYwMCwiZXh0cmEiOnsibmFtZSI6IlVTRCBDb2luIiwidmVyc2lvbiI6IjIiLCJyZWNlaXB0SWQiOiJwaW5nLWNhNjYwYWVhY2EyM2RiMmMifX0seyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzb2xhbmE6NWV5a3Q0VXNGdjhQOE5KZFRSRXBZMXZ6cUtxWkt2ZHAiLCJhc3NldCI6IkVQakZXZGQ1QXVmcVNTcWVNMnFOMXh6eWJhcEM4RzR3RUdHa1p3eVREdDF2IiwiYW1vdW50IjoiMTAwMDAiLCJwYXlUbyI6IkJvNHBCcEZLOXE4OTdzSDQ5eWdpUXo1SFl5d1VmVnBKTXFQM3Zqd2lKbnY2IiwibWF4VGltZW91dFNlY29uZHMiOjYwMCwiZXh0cmEiOnsiZmVlUGF5ZXIiOiJCRks5VExDM2VkYjEzSzZ2NFl5SDNEd1BiNURTVXBrV3ZiN1hucUNMOWI0RiIsInJlY2VpcHRJZCI6InBpbmctY2E2NjBhZWFjYTIzZGIyYyJ9fV0sImVycm9yIjoiUGF5bWVudCByZXF1aXJlZCJ9",
+  "decodedForReference": {
+    "x402Version": 2,
+    "resource": {
+      "url": "https://l402.space/x402/ping",
+      "description": "Paid ping \u2014 test that your x402 wallet can pay this gateway",
+      "serviceName": "Universal 402 Gateway"
+    },
+    "accepts": [
+      {
+        "scheme": "exact",
+        "network": "eip155:8453",
+        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "amount": "10000",
+        "payTo": "0x85BdB78Ad4C39565F767da6733a071F86BAEDb6b",
+        "maxTimeoutSeconds": 600,
+        "extra": {
+          "name": "USD Coin",
+          "version": "2",
+          "receiptId": "ping-ca660aeaca23db2c"
+        }
+      },
+      {
+        "scheme": "exact",
+        "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "amount": "10000",
+        "payTo": "Bo4pBpFK9q897sH49ygiQz5HYywUfVpJMqP3vjwiJnv6",
+        "maxTimeoutSeconds": 600,
+        "extra": {
+          "feePayer": "BFK9TLC3edb13K6v4YyH3DwPb5DSUpkWvb7XnqCL9b4F",
+          "receiptId": "ping-ca660aeaca23db2c"
+        }
+      }
+    ],
+    "error": "Payment required"
+  }
+}

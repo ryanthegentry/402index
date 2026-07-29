@@ -1,0 +1,92 @@
+{
+  "_source": "captured live 2026-07-30, governance.taskhawktech.com root \u2014 MPP `Payment` scheme. NEGATIVE fixture. The PRD-era both-present L402 header is gone (challenge drift within 24h)",
+  "status": 402,
+  "wwwAuthenticate": "Payment id=\"mpp_117903d24cbc\", realm=\"governance.taskhawktech.com\", method=\"stripe\", intent=\"charge\", request=\"eyJhbW91bnQiOiI1MCIsImN1cnJlbmN5IjoidXNkIiwiZGVzY3JpcHRpb24iOiJBY3Rpb24gdmVyaWZpY2F0aW9uICAtICBzaWduZWQgQUxMT1cvQ09OU1RSQUlOL0RFTlkiLCJtZXRob2REZXRhaWxzIjp7Im5ldHdvcmtJZCI6InByb2ZpbGVfNjFVTXZ4bUQ4VFAxTjJkMDlBNlVNdnhsRW5TUUFCbTZHVjY2VmMzYnNBbkkiLCJwYXltZW50TWV0aG9kVHlwZXMiOlsiY2FyZCIsImxpbmsiXX19\", expires=\"2026-07-29T05:51:53Z\"",
+  "body": {
+    "type": "https://paymentauth.org/problems/payment-required",
+    "title": "Payment Required",
+    "status": 402,
+    "detail": "Payment is required.",
+    "challengeId": "mpp_117903d24cbc",
+    "x402Version": 2,
+    "service": "kevros-governance-api",
+    "description": "Runtime enforcement for AI agents. Protocol 427 or API-key gated paid execution with x402 (USDC), Lightning (L402), or Stripe (MPP) settlement candidates.",
+    "discovery": "https://governance.taskhawktech.com/.well-known/x402",
+    "agent_card": "https://governance.taskhawktech.com/.well-known/agent.json",
+    "delegation_authority": "https://governance.taskhawktech.com/.well-known/delegation-authority",
+    "delegation_issuer_keys": "https://governance.taskhawktech.com/.well-known/delegation-issuer-keys",
+    "signup": "https://governance.taskhawktech.com/signup",
+    "protocols": [
+      "x402",
+      "l402",
+      "mpp"
+    ],
+    "status_layers": {
+      "endpoint_health": "public route responds",
+      "rail_discovery": "well-known docs or /payment/* describe configured rail candidates",
+      "authority_required": "governed/high-authority execution requires API key or Delegation proof; self-serve priced endpoints may use a verified rail payment credential",
+      "authority_verified": "nonce-bound Delegation proof or bounded self-serve rail credential accepted",
+      "payment_challenge": "selected rail returns protocol-specific payment requirements",
+      "payment_receipt": "rail-specific receipt or preimage is required for paid execution",
+      "execution_evidence": "Kevros evidence binds the authorized action to its outcome"
+    },
+    "access_flow": {
+      "version": "kevros-delegation-payment-flow-v1",
+      "profile": "kevros-delegation-payment-flow-v1",
+      "compatibility_profile": "kevros-agent-payment-flow-v1",
+      "fail_closed": true,
+      "delegation_first": false,
+      "self_serve_rail_first": true,
+      "governed_authority_first": true,
+      "immediate_key_path": {
+        "signup_url": "https://governance.taskhawktech.com/signup",
+        "auth_header": "X-API-Key"
+      },
+      "discovery": {
+        "agent_authority_url": "https://governance.taskhawktech.com/.well-known/agent-authority",
+        "payment_discovery_url": "https://governance.taskhawktech.com/payment/discovery",
+        "payment_health_url": "https://governance.taskhawktech.com/payment/health",
+        "delegation_authority_url": "https://governance.taskhawktech.com/.well-known/delegation-authority",
+        "delegation_issuer_keys_url": "https://governance.taskhawktech.com/.well-known/delegation-issuer-keys",
+        "x402_url": "https://governance.taskhawktech.com/.well-known/x402",
+        "l402_url": "https://governance.taskhawktech.com/.well-known/l402",
+        "mpp_url": "https://governance.taskhawktech.com/.well-known/mpp"
+      },
+      "paid_execution": {
+        "accepted_execution_credentials": [
+          "rail-payment-credential",
+          "X-API-Key",
+          "Delegation-Proof"
+        ],
+        "self_serve_unpaid_status": 402,
+        "governed_unauthenticated_statuses": [
+          401,
+          403
+        ],
+        "self_serve_scope": "priced public endpoints only",
+        "rail_payment_authorizes_execution": true,
+        "delegation_scheme": "Delegation",
+        "delegation_proof_carriage": [
+          "Authorization: Delegation <base64url-bounded-authority-token>",
+          "Delegation-Proof: :<base64-cose>:",
+          "JSON body {\"delegation_proof\": \"<base64url-token>\"}",
+          "Content-Type: application/delegation-proof+cose"
+        ],
+        "delegation_version_header": "Delegation-Version"
+      },
+      "after_authority_or_payment_verification": {
+        "candidate_rails": [
+          "x402",
+          "l402",
+          "mpp",
+          "stripe-stablecoin"
+        ],
+        "authority_receipt_required": true,
+        "payment_receipt_required": true,
+        "execution_evidence_required": true
+      }
+    },
+    "health_url": "https://governance.taskhawktech.com/payment/health",
+    "docs_url": "https://governance.taskhawktech.com/api"
+  }
+}

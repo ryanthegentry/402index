@@ -1,0 +1,6 @@
+{
+  "_source": "captured live 2026-07-30, parsebit-lnd.fly.dev/review/url. Server double-sends the challenge as BOTH `LSAT` and `L402` headers; fetch() would comma-join them. This fixture is the LSAT line; credential truncated, invoice real",
+  "status": 402,
+  "wwwAuthenticate": "LSAT macaroon=\"AgEEbHNhdAJCAACMSvhWLR8PTRUNCATEDFAKE=\", invoice=\"lnbc20u1p4xny4ppp53390s43dru8s4elq4kszku3n9cqvlmsqhl9z3qud7v86kr0a789qdq8fs6rqvscqzzsxqyz5vqsp55mlt4aweukqdchr7un4xqyfm3vq0wdacps0gqcjsqfd52skdxzss9qxpqysgqk9t8x5rmr80328et350gtsd3ytlv37g2r66qvpsyqng9ssm8x9rjemuksk2x8f0cfuqha830lgsdhqcprwyjevqtm963a3kvy3gjkkcqk05dpp\"",
+  "body": "payment required\n"
+}
