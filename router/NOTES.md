@@ -25,6 +25,25 @@ filter on price_sats and convert yourself. Router filter: price_sats >= 333 AND
 lnget_compatible == 1 (standard L402 challenge shape), prefer low latency_p50_ms.
 A timeout is a stale candidate, not a bug — move on; three dead in a row, stop.
 
+## Catalog prices are static probe prices — the dynamic quote can undercut the floor
+
+llm402.ai's catalog row says 357 sats, but the gateway prices the actual request:
+our small chat request quoted 103 sats — under the Boltz floor — and the first
+happy-path run discovered it only after consent, settling nothing but voiding a
+hold it never needed to open. Fix that stuck: check quote.amountSats against
+adapter.minSats at quote time and skip the candidate. Job sizing (max_tokens)
+is what pushes an LLM request into the settleable band (~100 sats/1000 tokens
+fable-tier, ~4x premium).
+
+## llm402.ai quotes fine but delivery 502s through l402.space — family-level failure
+
+Three different llm402.ai endpoints (fable-batch, opus-4.7-fast, and the
+non-batch quote leg) failed on the paid leg tonight while quoting normally.
+Cost: 403 + 1,532 sats absorbed (holds voided both times — the guarantee ran
+for real). Per the 3-dead rule the whole family went into degraded_candidates
+and the proven fallback (lightningfaucet.com, lnget=0, via ROUTER_PROVEN_FALLBACKS)
+carried the demo. Check whether llm402.ai↔l402.space recovers before trusting it.
+
 ## Golem CLI never exits on its own — parse stdout, then kill the child
 
 `node dist/cli/index.js balance` printed complete output then sat past 120s (open
