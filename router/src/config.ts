@@ -17,6 +17,15 @@ export interface RouterConfig {
   // server→client elicitation and handler re-entry — the same handler code
   // serving both eras. Every deployed client today is 2025-era.
   legacyMode: 'reject' | 'stateless';
+  // 'required' rejects any /mcp request without a valid bearer token and is
+  // mandatory for any non-loopback bind — the settlement path must never sit
+  // on an open port unauthenticated.
+  authMode: 'required' | 'off';
+  bindHost: string;
+  // per-principal cap defaults; a token row may override per token. Defaults
+  // equal the global caps, so nothing changes until a deployment sets them.
+  principalMaxSatsPerJob: number;
+  principalMaxTotalSats: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
@@ -24,18 +33,32 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
   if (!/^[0-9a-fA-F]{64}$/.test(stateKeyHex)) {
     throw new Error('ROUTER_STATE_KEY must be 64 hex chars (openssl rand -hex 32)');
   }
+  const authMode = env.ROUTER_AUTH_MODE === 'required' ? 'required' : 'off';
+  const bindHost = env.ROUTER_BIND_HOST || '127.0.0.1';
+  if (authMode !== 'required' && !['127.0.0.1', 'localhost', '::1'].includes(bindHost)) {
+    throw new Error(
+      `ROUTER_BIND_HOST=${bindHost} is non-loopback but ROUTER_AUTH_MODE is not 'required' — ` +
+        'refusing to expose the settlement path on an open port without bearer auth'
+    );
+  }
+  const maxSatsPerJob = Number(env.ROUTER_MAX_SATS_PER_JOB || 2000);
+  const maxTotalSats = Number(env.ROUTER_MAX_TOTAL_SATS || 20000);
   return {
     port: Number(env.ROUTER_PORT || 4402),
     dataDir: env.ROUTER_DATA_DIR || join(import.meta.dirname, '..', 'data'),
     stateKeyHex,
     stripeSecretKey: env.STRIPE_SECRET_KEY || '',
     settlementAdapter: env.SETTLEMENT_ADAPTER === 'mock' ? 'mock' : 'golem',
-    maxSatsPerJob: Number(env.ROUTER_MAX_SATS_PER_JOB || 2000),
-    maxTotalSats: Number(env.ROUTER_MAX_TOTAL_SATS || 20000),
+    maxSatsPerJob,
+    maxTotalSats,
     golemCliDir: env.GOLEM_CLI_DIR || join(process.env.HOME || '', 'workspace', 'projects', 'golem'),
     stateTtlSeconds: Number(env.ROUTER_STATE_TTL_SECONDS || 90),
     provenFallbacks: (env.ROUTER_PROVEN_FALLBACKS || '').split(',').map((s) => s.trim()).filter(Boolean),
     routeOrder: (env.ROUTER_ROUTE_ORDER || 'direct-l402,l402space').split(',').map((s) => s.trim()).filter(Boolean),
-    legacyMode: env.ROUTER_LEGACY_MODE === 'stateless' ? 'stateless' : 'reject'
+    legacyMode: env.ROUTER_LEGACY_MODE === 'stateless' ? 'stateless' : 'reject',
+    authMode,
+    bindHost,
+    principalMaxSatsPerJob: Number(env.ROUTER_PRINCIPAL_MAX_SATS_PER_JOB || maxSatsPerJob),
+    principalMaxTotalSats: Number(env.ROUTER_PRINCIPAL_MAX_TOTAL_SATS || maxTotalSats)
   };
 }

@@ -13,6 +13,7 @@ function fresh() {
 }
 
 const REC = {
+  principal: null,
   serviceId: 'svc-1',
   upstream: 'https://example.com/api',
   rail: 'l402',

@@ -9,6 +9,7 @@ import { join } from 'node:path';
 // `sats` stays the wallet-outflow column the spend cap sums; everything else
 // is bookkeeping.
 const LEDGER_COLUMNS: [string, string][] = [
+  ['principal', 'TEXT'],
   ['service_id', 'TEXT'],
   ['rail', 'TEXT'],
   ['network', 'TEXT'],
@@ -116,6 +117,14 @@ export function openRouterDb(dataDir: string): Database.Database {
       paid_at TEXT NOT NULL DEFAULT (datetime('now')),
       last_attempt_at TEXT,
       redeemed_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS tokens (
+      token_hash TEXT PRIMARY KEY,
+      principal TEXT NOT NULL,
+      max_sats_per_job INTEGER,
+      max_total_sats INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      revoked_at TEXT
     );
     CREATE TABLE IF NOT EXISTS mandates (
       principal TEXT PRIMARY KEY,

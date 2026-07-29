@@ -19,6 +19,7 @@ import { buildRoutes } from './routes/index.js';
 import { btcUsdRate } from './btcprice.js';
 import { createRegistration, type Registration } from './registration.js';
 import { registerInvokeTool, type InvokeDeps } from './tools/invoke.js';
+import { authContext, resolveToken } from './auth.js';
 
 export interface RouterOverrides {
   billing?: InvokeDeps['billing'];
@@ -109,7 +110,20 @@ export function createRouterApp(
   const app = createMcpExpressApp();
   const nodeHandler = toNodeHandler(handler);
   // express.json() has already drained the stream; hand the parsed body over explicitly.
-  app.all('/mcp', (req, res) => nodeHandler(req, res, req.body));
+  // With auth required, the bearer token names the principal (D3) and the
+  // AsyncLocalStorage context carries it into the tool handler.
+  app.all('/mcp', (req, res) => {
+    if (config.authMode === 'required') {
+      const auth = resolveToken(routerDb, req.headers.authorization);
+      if (!auth) {
+        res.status(401).json({ error: 'unauthorized: a valid bearer token is required' });
+        return;
+      }
+      authContext.run(auth, () => nodeHandler(req, res, req.body));
+      return;
+    }
+    nodeHandler(req, res, req.body);
+  });
   return {
     app,
     routerDb,
@@ -124,10 +138,10 @@ const isMain = process.argv[1] && import.meta.filename === process.argv[1];
 if (isMain) {
   const config = loadConfig();
   const { app } = createRouterApp(config);
-  app.listen(config.port, '127.0.0.1', () => {
+  app.listen(config.port, config.bindHost, () => {
     console.log(
-      `402index router listening on http://127.0.0.1:${config.port}/mcp ` +
-        `(settlement: ${config.settlementAdapter}, routes: ${config.routeOrder.join(' → ')})`
+      `402index router listening on http://${config.bindHost}:${config.port}/mcp ` +
+        `(settlement: ${config.settlementAdapter}, routes: ${config.routeOrder.join(' → ')}, auth: ${config.authMode})`
     );
   });
 }

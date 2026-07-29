@@ -8,6 +8,7 @@ import type { Database } from 'better-sqlite3';
 // absorbed when a paid job did not deliver.
 
 export interface SettlementRecord {
+  principal: string | null;
   serviceId: string;
   upstream: string;
   rail: string;
@@ -40,11 +41,11 @@ export interface LedgerSummary {
 export function createLedger(db: Database) {
   const insert = db.prepare(`
     INSERT INTO spend_ledger
-      (sats, upstream, service_id, rail, network, route, adapter,
+      (sats, upstream, principal, service_id, rail, network, route, adapter,
        quoted_sats, settled_sats, fee_sats, charged_usd, btc_usd,
        payment_intent, job_nonce, delivered, loss_sats, settled_at)
     VALUES
-      (@sats, @upstream, @serviceId, @rail, @network, @route, @adapter,
+      (@sats, @upstream, @principal, @serviceId, @rail, @network, @route, @adapter,
        @quotedSats, @settledSats, @feeSats, @chargedUsd, @btcUsd,
        @paymentIntent, @jobNonce, NULL, 0, datetime('now'))
   `);
