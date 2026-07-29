@@ -1,0 +1,12 @@
+{
+  "_source": "captured live from l402.space 2026-07-28, lightningfaucet.com llm-prompt wrap (invoice long spent)",
+  "status": 402,
+  "wwwAuthenticate": "L402 version=\"0\" token=\"eyJ1cmwiOiJodHRwczovL2xpZ2h0bmluZ2ZhdWNldC5jb20vYXBpL2w0MDIvbGxtLXByb21wdD9wcm9tcHQ9UmVwbHkrd2l0aCtleGFjdGx5Oitwb25nK2Zyb20rNDAyaW5kZXgrcm91dGVyK1BvQyIsIm1ldGhvZCI6IkdFVCIsInJhaWwiOiJsNDAyIiwibmV0d29yayI6ImxpZ2h0bmluZyIsIm1heFNhdHMiOjUwMCwiY2FsbGVyVXNkIjowLjM3MDEzNDAxNDAzOTU2NjAzLCJwYXltZW50SGFzaCI6IjBiZTAwOGMxZjExZjg5N2UzNzFlOWYxODU1OWZiM2JkYjE1NjVkYWM5NzBkZTA0NmY4ZmJmMzlkYjFlNzg2NTUifQ.9a77111708dc2efcd14e541944fdeef904491204869832388745685528e8e2bc\", invoice=\"lnbc5800n1p4xjatdd9lds6rqv3wwdcxzcm9yr3gdy3qdp68gurn8ghj7mrfva58gmnfdenkvct4vdjhgtnrdakj7ctsdyhkcdpsxghkcmrd94c8ymmdwp6r7urjdakhqapa2fjhqmre9dmkjarg9djhsctrw3k8jw3twphkueetveex7mftxscry6twv3jhs2mjda6hgetj9dgx7scnp4qwpn62g900yjkkkaafl2ttjyanmc78m7gzr3v338fda3h7errc5h7pp5p0sq3s03r7yhudc7nuv9t8anhkc4vhdvjux7q3hcl0eemv08se2ssp5tvc49uh2nnechgxpw6dhfak6jdxhrm09w44x3eu8hh58wcgk3j4s9qyysgqcqzp2xqyz5vqms3q9ff9z09rfjq5k9mw5yg6mh6xy6tvfje2435wkk7e2p8hpgh86tuadk80wz06cc0ts0efc7h80mtkalf7vs4m42vcpzn6k4s7gqspzsuyn5\"",
+  "body": {
+    "error": "Payment required",
+    "amountSats": 580,
+    "rail": "l402",
+    "network": "lightning",
+    "upstream": "https://lightningfaucet.com/api/l402/llm-prompt?prompt=Reply+with+exactly:+pong+from+402index+router+PoC"
+  }
+}
