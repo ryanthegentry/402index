@@ -136,3 +136,13 @@ wants `macaroon=`. Golem is out of scope to change. Workaround that is also the 
 architecture: the router fetches/parses the 402 itself (it must anyway, to quote), then
 uses `golem pay <bolt11>` purely as "pay invoice, return preimage". Deviation from PRD
 T6 ("spawns golem pay-l402") recorded in the journal.
+
+## Truncating header credentials is not enough — 402 bodies duplicate them
+
+gitleaks failed PR #317's scan on the direct-l402-token fixture: lightningfaucet's
+402 BODY carries token and macaroon fields holding the same credential the header
+does, and only the header had been faked. Fixture rule now: truncate every
+credential-shaped value wherever it appears (header params AND body fields), keep
+invoices/payment hashes (public), and .gitleaksignore the historical fingerprint
+with a written justification when the value was never a live secret (an unpaid
+challenge's token is unusable without its invoice's preimage).
