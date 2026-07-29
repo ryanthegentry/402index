@@ -59,6 +59,25 @@ const invokeArgs = z.object({
 });
 type InvokeArgs = z.infer<typeof invokeArgs>;
 
+// The receipt is the product's trust surface and it ships on three surfaces
+// (D4): structuredContent against this schema, one authored content line the
+// model reads on every era, and _meta for harnesses. SEP-2106's TextContent
+// auto-append fires only for non-object structuredContent, so the text line
+// is authored deliberately. The SDK owns the era projection — nothing here
+// branches on protocol revision.
+const receiptSchema = z.object({
+  upstream: z.string(),
+  rail: z.string(),
+  route: z.string(),
+  paid_sats: z.number(),
+  charged_usd: z.number(),
+  payment_intent: z.string(),
+  latency_ms: z.number(),
+  candidates_considered: z.number(),
+  mandated: z.boolean(),
+  stage_timings: z.record(z.string(), z.number())
+});
+
 interface JobMaterial {
   serviceId: string;
   upstream: string;
@@ -124,7 +143,8 @@ export function registerInvokeTool(server: McpServer, deps: InvokeDeps): void {
         'Acquire a capability by outcome: 402index finds a paid endpoint, quotes a firm USD price, ' +
         'asks your consent (or spends under a standing budget you granted), then pays the provider ' +
         'on its own rail and returns the result. You are charged only when the result is delivered.',
-      inputSchema: invokeArgs
+      inputSchema: invokeArgs,
+      outputSchema: receiptSchema
     },
     async (args: InvokeArgs, ctx: unknown) => {
       const mcpReq = (ctx as { mcpReq?: McpReqSurface }).mcpReq ?? {};
@@ -572,21 +592,28 @@ async function executeJob(
   }
   deps.credentials.markRedeemed(credentialId);
 
+  const receipt = {
+    upstream: m.upstream,
+    rail: m.rail,
+    route: m.route,
+    paid_sats: settlement.paidSats,
+    charged_usd: m.chargedUsd,
+    payment_intent: m.paymentIntentId,
+    latency_ms: Date.now() - started,
+    candidates_considered: m.candidatesConsidered,
+    mandated: opts.mandated,
+    stage_timings: m.stageTimings
+  };
+  const receiptLine =
+    `Receipt: charged $${m.chargedUsd.toFixed(2)} for ${settlement.paidSats} sats to ` +
+    `${new URL(m.upstream).host} via ${m.route}` +
+    `${opts.mandated ? ' under your standing budget' : ''} — delivered in ${(receipt.latency_ms / 1000).toFixed(1)}s.`;
   return {
-    content: [{ type: 'text' as const, text }],
-    _meta: {
-      'io.402index/receipt': {
-        upstream: m.upstream,
-        rail: m.rail,
-        route: m.route,
-        paid_sats: settlement.paidSats,
-        charged_usd: m.chargedUsd,
-        payment_intent: m.paymentIntentId,
-        latency_ms: Date.now() - started,
-        candidates_considered: m.candidatesConsidered,
-        mandated: opts.mandated,
-        stage_timings: m.stageTimings
-      }
-    }
+    content: [
+      { type: 'text' as const, text },
+      { type: 'text' as const, text: receiptLine }
+    ],
+    structuredContent: receipt,
+    _meta: { 'io.402index/receipt': receipt }
   };
 }
