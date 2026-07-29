@@ -118,7 +118,8 @@ export async function startInvokeRouter(overrides = {}) {
     btcUsd: async () => 50000,
     redeemTimeoutMs: overrides.redeemTimeoutMs,
     checkoutUrlFactory: overrides.checkoutUrlFactory,
-    registrationStripeImpl: overrides.registrationStripeImpl
+    registrationStripeImpl: overrides.registrationStripeImpl,
+    setupStripeImpl: overrides.setupStripeImpl
   });
   // the wire-test principal has a card on file; cold-start tests use other principals
   routerDb.prepare('INSERT INTO cards (principal, payment_method) VALUES (?, ?)').run('wire-test-agent', 'pm_card_visa');

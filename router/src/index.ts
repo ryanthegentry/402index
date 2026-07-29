@@ -1,7 +1,7 @@
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { createMcpExpressApp } from '@modelcontextprotocol/express';
 import { toNodeHandler } from '@modelcontextprotocol/node';
-import type { Express } from 'express';
+import express, { type Express, type Request } from 'express';
 import type { Database } from 'better-sqlite3';
 import { loadConfig, type RouterConfig } from './config.js';
 import { openRouterDb } from './db.js';
@@ -21,6 +21,7 @@ import { createRegistration, type Registration } from './registration.js';
 import { registerInvokeTool, type InvokeDeps } from './tools/invoke.js';
 import { authContext, resolveToken } from './auth.js';
 import { startRecoverySchedule } from './recovery.js';
+import { createSetup, type SetupSurface } from './setup.js';
 
 export interface RouterOverrides {
   billing?: InvokeDeps['billing'];
@@ -33,6 +34,7 @@ export interface RouterOverrides {
   registration?: Registration;
   registrationStripeImpl?: Parameters<typeof createRegistration>[1]['stripeImpl'];
   checkoutUrlFactory?: (principal: string) => Promise<string>; // legacy test seam
+  setupStripeImpl?: Parameters<typeof createSetup>[1]['stripeImpl'];
 }
 
 function registryFor(config: RouterConfig, overrides: RouterOverrides): AdapterRegistry {
@@ -136,6 +138,43 @@ export function createRouterApp(
       return;
     }
     nodeHandler(req, res, req.body);
+  });
+
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', uptime: process.uptime() });
+  });
+
+  // The setup surface is the only human-interactive page (D2/D9) and it is
+  // deliberately unauthenticated — it is where tokens come from.
+  const setup: SetupSurface | null = overrides.setupStripeImpl
+    ? createSetup(routerDb, { stripeImpl: overrides.setupStripeImpl, publicUrl: config.publicUrl })
+    : config.stripeSecretKey
+      ? createSetup(routerDb, { stripeSecretKey: config.stripeSecretKey, publicUrl: config.publicUrl })
+      : null;
+  const reqBase = (req: Request) => `${req.protocol}://${req.get('host')}`;
+  const UNAVAILABLE = 'setup unavailable: STRIPE_SECRET_KEY is not configured';
+  app.get('/setup', (req, res) => {
+    if (!setup) return void res.status(503).send(UNAVAILABLE);
+    res.type('html').send(setup.page(reqBase(req)));
+  });
+  app.post('/setup/session', express.urlencoded({ extended: false }), async (req, res) => {
+    if (!setup) return void res.status(503).send(UNAVAILABLE);
+    try {
+      const { url } = await setup.createSession((req.body ?? {}) as Record<string, unknown>, reqBase(req));
+      res.redirect(303, url);
+    } catch (err) {
+      res.status(502).send(`setup failed: ${(err as Error).message}`);
+    }
+  });
+  app.get('/setup/complete', async (req, res) => {
+    if (!setup) return void res.status(503).send(UNAVAILABLE);
+    const sessionId = String(req.query.session_id ?? '');
+    if (!sessionId) return res.status(400).send('missing session_id');
+    try {
+      res.type('html').send(await setup.complete(sessionId, reqBase(req)));
+    } catch (err) {
+      res.status(502).send(`setup failed: ${(err as Error).message}`);
+    }
   });
   return {
     app,

@@ -30,6 +30,9 @@ export interface RouterConfig {
   principalMaxTotalSats: number;
   // minutes between scheduled credential-recovery passes; 0 disables
   retryIntervalMinutes: number;
+  // public base URL of this deployment (setup redirects + mcp add snippet);
+  // empty falls back to the requesting host
+  publicUrl: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
@@ -73,6 +76,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
     bindHost,
     principalMaxSatsPerJob: Number(env.ROUTER_PRINCIPAL_MAX_SATS_PER_JOB || maxSatsPerJob),
     principalMaxTotalSats: Number(env.ROUTER_PRINCIPAL_MAX_TOTAL_SATS || maxTotalSats),
-    retryIntervalMinutes: Number(env.ROUTER_RETRY_INTERVAL_MINUTES || 0)
+    retryIntervalMinutes: Number(env.ROUTER_RETRY_INTERVAL_MINUTES || 0),
+    publicUrl: env.ROUTER_PUBLIC_URL || ''
   };
 }
