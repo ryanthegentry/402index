@@ -1,5 +1,5 @@
 {
-  "_source": "captured live 2026-07-30, lightningfaucet.com/api/l402/llm_prompt (post-redirect; catalog says llm-prompt); credential truncated, invoice real",
+  "_source": "captured live 2026-07-30, lightningfaucet.com/api/l402/llm_prompt (post-redirect; catalog says llm-prompt); credential truncated, invoice real; body token/macaroon truncated too (they duplicate the header credential)",
   "status": 402,
   "wwwAuthenticate": "L402 version=\"0\", token=\"eyJpZGVudGlmaWVyIjoiZGRjTRUNCATEDFAKE=\", invoice=\"lnbc5u1p4xny44pp54uft2uthpwa78exyvstewynvsxs9lwmx4gcu2ugy2ht7taus6tfqdpaf35kw6r5de5kueeqgesh2cm9wssycnzdypg8ymmdwp6zq2p4xqczqumpw3ejjcqzysxqzjcsp529v2qv5ka7r4mm03g9xhca843ddfrj3jexx9s8lvcma65zejcl8q9qxpqysgq8ymhs29fvf542d533pjk0agjv6rnyqtfn89jl3khs24gjwvydsa8865dc485n944grquakes8h72z6u4gna72yrpr2mjnu8trw9f7ygqedkjqk\"",
   "body": {
@@ -10,8 +10,8 @@
     "description": "Lightning Faucet LLM Prompt (500 sats)",
     "service": "llm_prompt",
     "invoice": "lnbc5u1p4xny44pp54uft2uthpwa78exyvstewynvsxs9lwmx4gcu2ugy2ht7taus6tfqdpaf35kw6r5de5kueeqgesh2cm9wssycnzdypg8ymmdwp6zq2p4xqczqumpw3ejjcqzysxqzjcsp529v2qv5ka7r4mm03g9xhca843ddfrj3jexx9s8lvcma65zejcl8q9qxpqysgq8ymhs29fvf542d533pjk0agjv6rnyqtfn89jl3khs24gjwvydsa8865dc485n944grquakes8h72z6u4gna72yrpr2mjnu8trw9f7ygqedkjqk",
-    "token": "eyJpZGVudGlmaWVyIjoiZGRjNWMwNTNiOTRjMDEyYjQyYzc5Yzk5YzJjM2Y0NDUiLCJsb2NhdGlvbiI6ImxpZ2h0bmluZ2ZhdWNldC5jb20iLCJjYXZlYXRzIjpbeyJ0eXBlIjoicGF5bWVudF9oYXNoIiwidmFsdWUiOiJhZjEyYjU3MTc3MGJiYmUzZTRjNDY0MTc5NzEyNmM4MWEwNWZiYjY2YWEzMWM1NzEwNDU1ZDdlNWY3OTBkMmQyIn0seyJ0eXBlIjoiZXhwaXJ5IiwidmFsdWUiOjE3ODUzMDQzMzN9LHsidHlwZSI6InNlcnZpY2UiLCJ2YWx1ZSI6ImxsbV9wcm9tcHQifSx7InR5cGUiOiJjYXBhYmlsaXRpZXMiLCJ2YWx1ZSI6WyJzdGFuZGFyZCJdfV0sInNpZ25hdHVyZSI6IjIyNjYzNDUxODE0NzViMzk3MGY2ZmE1MzIwMWRiMTE5ZDgzZGJkNDc0MGI5ZDY3M2MyYTNiY2JmYzRiZDE0ZTQifQ==",
-    "macaroon": "eyJpZGVudGlmaWVyIjoiZGRjNWMwNTNiOTRjMDEyYjQyYzc5Yzk5YzJjM2Y0NDUiLCJsb2NhdGlvbiI6ImxpZ2h0bmluZ2ZhdWNldC5jb20iLCJjYXZlYXRzIjpbeyJ0eXBlIjoicGF5bWVudF9oYXNoIiwidmFsdWUiOiJhZjEyYjU3MTc3MGJiYmUzZTRjNDY0MTc5NzEyNmM4MWEwNWZiYjY2YWEzMWM1NzEwNDU1ZDdlNWY3OTBkMmQyIn0seyJ0eXBlIjoiZXhwaXJ5IiwidmFsdWUiOjE3ODUzMDQzMzN9LHsidHlwZSI6InNlcnZpY2UiLCJ2YWx1ZSI6ImxsbV9wcm9tcHQifSx7InR5cGUiOiJjYXBhYmlsaXRpZXMiLCJ2YWx1ZSI6WyJzdGFuZGFyZCJdfV0sInNpZ25hdHVyZSI6IjIyNjYzNDUxODE0NzViMzk3MGY2ZmE1MzIwMWRiMTE5ZDgzZGJkNDc0MGI5ZDY3M2MyYTNiY2JmYzRiZDE0ZTQifQ==",
+    "token": "eyJpZGVudGlmaWVyIjoiZGRjTRUNCATEDFAKE=",
+    "macaroon": "eyJpZGVudGlmaWVyIjoiZGRjTRUNCATEDFAKE=",
     "payment_hash": "af12b571770bbbe3e4c4641797126c81a05fbb66aa31c5710455d7e5f790d2d2",
     "payment_url": "https://lightningfaucet.com/pay/gCFD9uDx",
     "expires_at": "2026-07-28T22:52:13-07:00",
