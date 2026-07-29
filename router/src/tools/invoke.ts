@@ -9,6 +9,7 @@ import { GuardError, type createGuards } from '../guards.js';
 import { SettlementError, type AdapterRegistry, type PaymentRequest, type Settlement } from '../settlement/index.js';
 import type { Route, RouteQuote } from '../routes/index.js';
 import type { Ledger } from '../ledger.js';
+import type { Registration } from '../registration.js';
 
 // The MRTR state machine, multirail edition. Cold call: pick a candidate from
 // the live index, quote it over the configured routes (direct first — cheaper,
@@ -39,7 +40,7 @@ export interface InvokeDeps {
   fetchImpl: typeof fetch;
   btcUsd: () => Promise<number>;
   redeemTimeoutMs?: number;
-  checkoutUrlFactory?: (principal: string) => Promise<string>;
+  registration?: Registration;
 }
 
 interface McpReqSurface {
@@ -222,25 +223,34 @@ async function prepareJob(
 
 async function handleColdCall(deps: InvokeDeps, args: InvokeArgs, principal: string, argsDigest: string) {
   console.log(`[invoke] cold call from "${principal}": ${args.capability} (max $${args.max_price_usd})`);
-  const card = deps.routerDb
-    .prepare('SELECT payment_method FROM cards WHERE principal = ?')
-    .get(principal) as { payment_method: string } | undefined;
+  const cardStmt = deps.routerDb.prepare('SELECT payment_method FROM cards WHERE principal = ?');
+  let card = cardStmt.get(principal) as { payment_method: string } | undefined;
+  if (!card && deps.registration) {
+    // the agent may be retrying after the human finished the hosted Checkout
+    try {
+      if (await deps.registration.completeIfRegistered(principal)) {
+        card = cardStmt.get(principal) as { payment_method: string } | undefined;
+      }
+    } catch (err) {
+      return errResult(`REGISTRATION_CHECK_FAILED: ${(err as Error).message}`);
+    }
+  }
   if (!card) {
-    const factory =
-      deps.checkoutUrlFactory ??
-      (async () => {
-        throw new Error('cold-start registration URL unavailable: no Checkout factory configured');
-      });
+    if (!deps.registration) {
+      return errResult('REGISTRATION_UNAVAILABLE: no card on file and no registration flow configured');
+    }
     let url: string;
     try {
-      url = await factory(principal);
+      url = await deps.registration.checkoutUrlFor(principal);
     } catch (err) {
       return errResult(`REGISTRATION_UNAVAILABLE: ${(err as Error).message}`);
     }
     return inputRequired({
       inputRequests: {
         register: inputRequired.elicitUrl({
-          message: 'No card on file for this agent. Register a card to pay for capabilities, then retry.',
+          message:
+            'No card on file for this agent. Register a card once at this Stripe Checkout page, then retry — ' +
+            'future invocations can run with zero interruptions under a standing budget.',
           url
         })
       }

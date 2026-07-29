@@ -117,7 +117,8 @@ export async function startInvokeRouter(overrides = {}) {
     adapter: overrides.adapter,
     btcUsd: async () => 50000,
     redeemTimeoutMs: overrides.redeemTimeoutMs,
-    checkoutUrlFactory: overrides.checkoutUrlFactory
+    checkoutUrlFactory: overrides.checkoutUrlFactory,
+    registrationStripeImpl: overrides.registrationStripeImpl
   });
   // the wire-test principal has a card on file; cold-start tests use other principals
   routerDb.prepare('INSERT INTO cards (principal, payment_method) VALUES (?, ?)').run('wire-test-agent', 'pm_card_visa');
@@ -138,6 +139,32 @@ export async function startInvokeRouter(overrides = {}) {
 }
 
 let rpcId = 0;
+
+// Like callInvoke but with a caller-chosen principal (clientInfo name).
+export async function callInvokeAs(baseUrl, principal, args, extra = {}) {
+  rpcId += 1;
+  const params = {
+    name: 'invoke',
+    arguments: args,
+    _meta: {
+      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+      'io.modelcontextprotocol/clientCapabilities': { elicitation: { form: {}, url: {} } },
+      'io.modelcontextprotocol/clientInfo': { name: principal, version: '1.0.0' }
+    },
+    ...extra
+  };
+  const res = await fetch(`${baseUrl}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      'mcp-method': 'tools/call',
+      'mcp-name': 'invoke'
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: rpcId, method: 'tools/call', params })
+  });
+  return res.json();
+}
 
 // Speaks the PRD section 7 wire shapes verbatim.
 export async function callInvoke(baseUrl, args, { inputResponses, requestState } = {}) {

@@ -16,6 +16,7 @@ import {
 } from './settlement/index.js';
 import { buildRoutes } from './routes/index.js';
 import { btcUsdRate } from './btcprice.js';
+import { createRegistration, type Registration } from './registration.js';
 import { registerInvokeTool, type InvokeDeps } from './tools/invoke.js';
 
 export interface RouterOverrides {
@@ -26,7 +27,9 @@ export interface RouterOverrides {
   fetchImpl?: typeof fetch;
   btcUsd?: () => Promise<number>;
   redeemTimeoutMs?: number;
-  checkoutUrlFactory?: InvokeDeps['checkoutUrlFactory'];
+  registration?: Registration;
+  registrationStripeImpl?: Parameters<typeof createRegistration>[1]['stripeImpl'];
+  checkoutUrlFactory?: (principal: string) => Promise<string>; // legacy test seam
 }
 
 function registryFor(config: RouterConfig, overrides: RouterOverrides): AdapterRegistry {
@@ -86,7 +89,19 @@ export function createRouterApp(
     fetchImpl: overrides.fetchImpl ?? fetch,
     btcUsd: overrides.btcUsd ?? (() => btcUsdRate()),
     redeemTimeoutMs: overrides.redeemTimeoutMs,
-    checkoutUrlFactory: overrides.checkoutUrlFactory
+    registration:
+      overrides.registration ??
+      (overrides.checkoutUrlFactory
+        ? {
+            checkoutUrlFor: overrides.checkoutUrlFactory,
+            completeIfRegistered: async () => false,
+            abandon: async () => {}
+          }
+        : overrides.registrationStripeImpl
+          ? createRegistration(routerDb, { stripeImpl: overrides.registrationStripeImpl })
+          : config.stripeSecretKey
+            ? createRegistration(routerDb, { stripeSecretKey: config.stripeSecretKey })
+            : undefined)
   };
   const handler = createMcpHandler(() => buildServer(deps), { legacy: 'reject' });
   const app = createMcpExpressApp();
