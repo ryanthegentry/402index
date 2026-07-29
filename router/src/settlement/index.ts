@@ -1,5 +1,6 @@
 import { decode as decodeBolt11 } from 'light-bolt11-decoder';
 import { createGolemSettlement } from './golem.js';
+import { createGolemHttpSettlement } from './golem-http.js';
 import { createMockSettlement } from './mock.js';
 import { createX402Stub } from './x402.js';
 
@@ -113,11 +114,24 @@ export function createAdapterRegistry(opts: { pinned?: string } = {}): AdapterRe
   };
 }
 
-export function buildRegistry(config: { settlementAdapter: string; golemCliDir: string }): AdapterRegistry {
+export function buildRegistry(config: {
+  settlementAdapter: string;
+  golemCliDir: string;
+  golemHttpUrl?: string;
+  golemHttpApiKey?: string;
+}): AdapterRegistry {
   const registry = createAdapterRegistry({
-    pinned: config.settlementAdapter === 'mock' ? 'mock' : undefined
+    pinned:
+      config.settlementAdapter === 'mock' || config.settlementAdapter === 'golem-http'
+        ? config.settlementAdapter
+        : undefined
   });
   registry.register(createGolemSettlement({ golemCliDir: config.golemCliDir }));
+  if (config.golemHttpUrl && config.golemHttpApiKey) {
+    registry.register(
+      createGolemHttpSettlement({ baseUrl: config.golemHttpUrl, apiKey: config.golemHttpApiKey })
+    );
+  }
   // the mock is a test double: reachable only by explicit pin, never by fallback
   registry.register(createMockSettlement(), { onlyWhenPinned: true });
   registry.register(createX402Stub());

@@ -5,7 +5,9 @@ export interface RouterConfig {
   dataDir: string;
   stateKeyHex: string;
   stripeSecretKey: string;
-  settlementAdapter: 'golem' | 'mock';
+  settlementAdapter: 'golem' | 'mock' | 'golem-http';
+  golemHttpUrl: string;
+  golemHttpApiKey: string;
   maxSatsPerJob: number;
   maxTotalSats: number;
   golemCliDir: string;
@@ -45,12 +47,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
   }
   const maxSatsPerJob = Number(env.ROUTER_MAX_SATS_PER_JOB || 2000);
   const maxTotalSats = Number(env.ROUTER_MAX_TOTAL_SATS || 20000);
+  const settlementAdapter =
+    env.SETTLEMENT_ADAPTER === 'mock' ? 'mock' : env.SETTLEMENT_ADAPTER === 'golem-http' ? 'golem-http' : 'golem';
+  const golemHttpUrl = env.GOLEM_HTTP_URL || '';
+  const golemHttpApiKey = env.GOLEM_HTTP_API_KEY || '';
+  if (settlementAdapter === 'golem-http' && (!golemHttpUrl || !golemHttpApiKey)) {
+    throw new Error('SETTLEMENT_ADAPTER=golem-http requires GOLEM_HTTP_URL and GOLEM_HTTP_API_KEY');
+  }
   return {
     port: Number(env.ROUTER_PORT || 4402),
     dataDir: env.ROUTER_DATA_DIR || join(import.meta.dirname, '..', 'data'),
     stateKeyHex,
     stripeSecretKey: env.STRIPE_SECRET_KEY || '',
-    settlementAdapter: env.SETTLEMENT_ADAPTER === 'mock' ? 'mock' : 'golem',
+    settlementAdapter,
+    golemHttpUrl,
+    golemHttpApiKey,
     maxSatsPerJob,
     maxTotalSats,
     golemCliDir: env.GOLEM_CLI_DIR || join(process.env.HOME || '', 'workspace', 'projects', 'golem'),
