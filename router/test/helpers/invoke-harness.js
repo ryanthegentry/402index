@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fx402 = JSON.parse(readFileSync(join(__dirname, '..', 'fixtures', 'l402space-402.json'), 'utf8'));
+const fxDirect = JSON.parse(readFileSync(join(__dirname, '..', 'fixtures', 'direct-l402-token.json'), 'utf8'));
 const fxCandidates = JSON.parse(readFileSync(join(__dirname, '..', 'fixtures', 'live-candidates.json'), 'utf8'));
 
 export const UPSTREAM_TEXT = 'pong from the paid upstream';
@@ -20,6 +21,23 @@ export function routingFetch(behavior = {}) {
     if (u.includes('/api/v1/services')) {
       const page = new URL(u).searchParams.get('offset') === '0' ? fxCandidates.page0 : fxCandidates.page1;
       return new Response(JSON.stringify(page), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    // direct hits on the upstream candidates themselves (multirail route)
+    if (/llm402\.ai|lightningfaucet\.com/.test(u) && !u.startsWith('https://l402.space/')) {
+      const auth = init.headers?.Authorization ?? init.headers?.authorization;
+      if (!auth) {
+        if (behavior.directQuoteStatus) {
+          return new Response('direct quote refused', { status: behavior.directQuoteStatus });
+        }
+        return new Response(JSON.stringify(fxDirect.body), {
+          status: 402,
+          headers: { 'www-authenticate': fxDirect.wwwAuthenticate, 'content-type': 'application/json' }
+        });
+      }
+      if (behavior.redeemStatus === 500) return new Response('upstream exploded', { status: 500 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: UPSTREAM_TEXT } }] }), {
+        status: 200, headers: { 'content-type': 'application/json' }
+      });
     }
     if (u.startsWith('https://l402.space/l402/')) {
       const auth = init.headers?.Authorization ?? init.headers?.authorization;
@@ -86,6 +104,9 @@ export async function startInvokeRouter(overrides = {}) {
   // the corrected caps are 2000/20000 and tests pin them explicitly.
   process.env.ROUTER_MAX_SATS_PER_JOB = '2000';
   process.env.ROUTER_MAX_TOTAL_SATS = '20000';
+  // Legacy tests keep the PoC's gateway-only behavior; multirail tests pass
+  // routeOrder explicitly to get the direct-first default.
+  process.env.ROUTER_ROUTE_ORDER = overrides.routeOrder ?? 'l402space';
   const { createRouterApp } = await import('../../dist/index.js');
   const { loadConfig } = await import('../../dist/config.js');
   const billing = overrides.billing ?? fakeBilling();

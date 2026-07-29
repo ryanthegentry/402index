@@ -41,6 +41,28 @@ function migrateSpendLedger(db: Database.Database): void {
   }
 }
 
+// pending_jobs grew route/rail material in the multirail build; same
+// idempotent treatment. `token` holds the credential (macaroon or token) and
+// `invoice` holds the raw payment material — names kept for continuity.
+const PENDING_JOB_COLUMNS: [string, string][] = [
+  ['route', 'TEXT'],
+  ['rail', 'TEXT'],
+  ['network', 'TEXT'],
+  ['btc_usd', 'REAL'],
+  ['stage_timings', 'TEXT']
+];
+
+function migratePendingJobs(db: Database.Database): void {
+  const existing = new Set(
+    (db.prepare('PRAGMA table_info(pending_jobs)').all() as { name: string }[]).map((c) => c.name)
+  );
+  for (const [name, type] of PENDING_JOB_COLUMNS) {
+    if (!existing.has(name)) {
+      db.exec(`ALTER TABLE pending_jobs ADD COLUMN ${name} ${type}`);
+    }
+  }
+}
+
 export function openRouterDb(dataDir: string): Database.Database {
   mkdirSync(dataDir, { recursive: true });
   const db = new Database(join(dataDir, 'router.db'));
@@ -76,7 +98,15 @@ export function openRouterDb(dataDir: string): Database.Database {
       candidates_considered INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS mandates (
+      principal TEXT PRIMARY KEY,
+      budget_usd REAL NOT NULL,
+      spent_usd REAL NOT NULL DEFAULT 0,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   migrateSpendLedger(db);
+  migratePendingJobs(db);
   return db;
 }
