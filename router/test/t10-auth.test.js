@@ -190,10 +190,14 @@ test('T10i: a host allow-list refuses requests for unlisted hosts before auth ru
   t.after(r.close);
   const { issueToken } = await import('../dist/auth.js');
   const token = issueToken(r.routerDb, 'alice');
-  // the harness calls via 127.0.0.1:<port>, which is not on the list
+  // the harness calls via 127.0.0.1:<port>, which is not on the list. The
+  // check is the SDK's app-wide host validation (403), configured from
+  // ROUTER_ALLOWED_HOSTS — it covers /mcp, /health, and /setup alike.
   const res = await callAuthed(r.baseUrl, ARGS, { token });
-  assert.equal(res.status, 421, JSON.stringify(res.body).slice(0, 200));
-  // and an unset list (default) keeps serving — covered by every other test here
+  assert.equal(res.status, 403, JSON.stringify(res.body).slice(0, 200));
+  const health = await fetch(`${r.baseUrl}/health`);
+  assert.equal(health.status, 403, 'app-wide, not just /mcp');
+  // an unset list (default) keeps serving on localhost — every other test here
 });
 
 test('T10h: a mandated settlement records the token principal on the ledger row', async (t) => {

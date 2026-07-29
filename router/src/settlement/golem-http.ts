@@ -45,7 +45,15 @@ export function createGolemHttpSettlement(opts: GolemHttpOptions): SettlementAda
       throw new SettlementError('PAY_FAILED', `pay-invoice unreachable: ${(err as Error).message}`);
     }
 
-    let body: { preimage?: string; amountSats?: number; txid?: string; error?: string; code?: string; paid?: boolean } = {};
+    let body: {
+      preimage?: string;
+      amountSats?: number;
+      debitedSats?: number;
+      txid?: string;
+      error?: string;
+      code?: string;
+      paid?: boolean;
+    } = {};
     try {
       body = (await res.json()) as typeof body;
     } catch {
@@ -70,16 +78,17 @@ export function createGolemHttpSettlement(opts: GolemHttpOptions): SettlementAda
       throw new SettlementError('PREIMAGE_UNAVAILABLE', 'wire preimage does not hash to the invoice payment hash');
     }
 
-    // amountSats on the wire is what the wallet actually paid (swap fee
-    // included); the ledger's `sats` column must equal wallet outflow.
-    const wireAmount = body.amountSats ?? amountSats;
+    // debitedSats on the wire is what actually left the wallet (swap fee
+    // included, bounded pre-spend by the payer route); the ledger's `sats`
+    // column must equal wallet outflow.
+    const debited = body.debitedSats ?? body.amountSats ?? amountSats;
     return {
       proof: preimage,
       proofKind: 'preimage',
       preimage,
       paidSats: amountSats,
       paidAmount: String(amountSats),
-      feeSats: Math.max(0, wireAmount - amountSats),
+      feeSats: Math.max(0, debited - amountSats),
       durationMs: Date.now() - started
     };
   }

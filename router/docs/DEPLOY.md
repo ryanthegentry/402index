@@ -9,7 +9,11 @@ set to `router/`.
 
 - **Source:** this repo, root directory `router/`
 - **Branch:** whatever Ryan points it at (`master` after merge)
-- **Healthcheck:** `/health` (configured in `railway.json`)
+- **Healthcheck:** none in `railway.json`. The SDK's app-wide host validation
+  answers only for Hosts on `ROUTER_ALLOWED_HOSTS`, and Railway's internal
+  prober does not present the public hostname — a platform healthcheck would
+  fail while the app serves fine. Verify `/health` through the public domain
+  after deploying instead.
 - **Volume:** mount a volume at `/data` — the SQLite state (tokens, mandates,
   ledger, credentials) must survive deploys
 

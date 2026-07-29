@@ -27,8 +27,10 @@ function wireFetch(handler) {
 
 test('T14a: a settled payment returns a verified Settlement with wallet-outflow fee accounting', async () => {
   const { createGolemHttpSettlement } = await import('../dist/settlement/golem-http.js');
+  // the payer route's success shape after its red-team round: amountSats is
+  // the invoice face value, debitedSats is what actually left the wallet
   const fetchImpl = wireFetch(async () =>
-    new Response(JSON.stringify({ preimage: fx.preimage580, amountSats: 581, txid: 'ark-tx-1', durationMs: 8000 }), {
+    new Response(JSON.stringify({ preimage: fx.preimage580, amountSats: 580, debitedSats: 581, txid: 'ark-tx-1', durationMs: 8000 }), {
       status: 200,
       headers: { 'content-type': 'application/json' }
     })
@@ -45,7 +47,7 @@ test('T14a: a settled payment returns a verified Settlement with wallet-outflow 
   assert.equal(settlement.proofKind, 'preimage');
   assert.equal(settlement.proof, fx.preimage580);
   assert.equal(settlement.paidSats, 580, 'invoice amount');
-  assert.equal(settlement.feeSats, 1, 'wire amount minus invoice amount — the swap fee the wallet actually paid');
+  assert.equal(settlement.feeSats, 1, 'debitedSats minus invoice amount — the swap fee the wallet actually paid');
   assert.equal(adapter.name, 'golem-http');
   assert.equal(adapter.movesRealFunds, true);
   assert.equal(adapter.minSats, 333, 'same Boltz floor as the CLI transport');

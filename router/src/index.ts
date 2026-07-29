@@ -122,19 +122,20 @@ export function createRouterApp(
         })
       : null;
   const handler = createMcpHandler(() => buildServer(deps), { legacy: config.legacyMode });
-  const app = createMcpExpressApp();
+  // The SDK's app-wide host validation is the DNS-rebinding/allow-list layer:
+  // localhost-only by default (its own default), the ROUTER_ALLOWED_HOSTS
+  // hostnames when configured. It covers /health and /setup as well as /mcp —
+  // which is also why the Railway healthchecker cannot probe this app unless
+  // its Host header is on the list (DEPLOY.md).
+  const app = createMcpExpressApp({
+    host: config.bindHost,
+    ...(config.allowedHosts.length > 0 ? { allowedHosts: config.allowedHosts } : {})
+  });
   const nodeHandler = toNodeHandler(handler);
   // express.json() has already drained the stream; hand the parsed body over explicitly.
   // With auth required, the bearer token names the principal (D3) and the
   // AsyncLocalStorage context carries it into the tool handler.
   app.all('/mcp', (req, res) => {
-    if (config.allowedHosts.length > 0) {
-      const host = (req.get('host') ?? '').toLowerCase();
-      if (!config.allowedHosts.some((h) => h.toLowerCase() === host)) {
-        res.status(421).json({ error: `host "${host}" is not served here` });
-        return;
-      }
-    }
     if (config.authMode === 'required') {
       const auth = resolveToken(routerDb, req.headers.authorization);
       if (!auth) {

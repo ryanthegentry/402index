@@ -9,4 +9,6 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 ENV NODE_ENV=production
+# Railway routes and healthchecks the exposed port; keep in sync with PORT
+EXPOSE 8080
 CMD ["node", "dist/index.js"]
