@@ -22,7 +22,7 @@ Names only; values live in Railway. Nothing here may appear in a transcript.
 | `ROUTER_STATE_KEY` | 64 hex chars, freshly generated for prod | requestState AES key — do NOT reuse the dev key |
 | `STRIPE_SECRET_KEY` | `rk_test_…` restricted TEST key | D10: test mode only; the fintech-legal gate governs live keys |
 | `ROUTER_DATA_DIR` | `/data` | on the volume |
-| `ROUTER_BIND_HOST` | `0.0.0.0` | config refuses this unless auth is required |
+| `ROUTER_BIND_HOST` | `::` | Railway healthchecks/edge reach containers over IPv6 — `0.0.0.0` never becomes healthy; config refuses any non-loopback bind unless auth is required |
 | `ROUTER_AUTH_MODE` | `required` | reject unauthenticated /mcp (PRD constraint) |
 | `ROUTER_LEGACY_MODE` | `stateless` | serve today's 2025-era clients (D1) |
 | `SETTLEMENT_ADAPTER` | `golem-http` | settle over Golem's Railway server (D6/D7) |
