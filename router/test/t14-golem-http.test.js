@@ -89,16 +89,21 @@ test('T14d: server-side refusals surface their code; a paid mismatch is PREIMAGE
     (err) => err instanceof SettlementError && err.code === 'PAY_FAILED' && /DAILY_CAP/.test(err.message)
   );
 
-  const mismatch = createGolemHttpSettlement({
-    ...OPTS,
-    fetchImpl: wireFetch(async () =>
-      new Response(JSON.stringify({ error: 'preimage does not match payment hash', code: 'PREIMAGE_MISMATCH', paid: true }), { status: 502 }))
-  });
-  await assert.rejects(
-    () => mismatch.payInvoice(fx.paidInvoice580, { maxSats: 2000 }),
-    (err) => err instanceof SettlementError && err.code === 'PREIMAGE_UNAVAILABLE',
-    'money may have left — the error class the ledger treats as an outflow with no proof'
-  );
+  // ANY refusal carrying paid:true means sats may have left — regardless of
+  // its code (PREIMAGE_MISMATCH, PAY_TIMEOUT, PAY_AMBIGUOUS, or codes the
+  // payer route grows later). Never a clean refusal.
+  for (const [code, status] of [['PREIMAGE_MISMATCH', 502], ['PAY_TIMEOUT', 504], ['PAY_AMBIGUOUS', 502]]) {
+    const paidErr = createGolemHttpSettlement({
+      ...OPTS,
+      fetchImpl: wireFetch(async () =>
+        new Response(JSON.stringify({ error: 'funds state unknown', code, paid: true }), { status }))
+    });
+    await assert.rejects(
+      () => paidErr.payInvoice(fx.paidInvoice580, { maxSats: 2000 }),
+      (err) => err instanceof SettlementError && err.code === 'PREIMAGE_UNAVAILABLE',
+      `paid:true with ${code} is an outflow with no proof`
+    );
+  }
 });
 
 test('T14e: a wire preimage that does not hash to the payment hash is refused locally', async () => {

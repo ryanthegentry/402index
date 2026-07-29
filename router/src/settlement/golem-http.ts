@@ -53,11 +53,14 @@ export function createGolemHttpSettlement(opts: GolemHttpOptions): SettlementAda
     }
 
     if (!res.ok) {
-      // PREIMAGE_MISMATCH with paid:true means sats may have left the wallet
-      // with no usable proof — the error class the ledger treats as an
-      // outflow, never as a clean refusal.
-      if (body.code === 'PREIMAGE_MISMATCH' && body.paid) {
-        throw new SettlementError('PREIMAGE_UNAVAILABLE', `pay-invoice paid but returned no usable proof: ${body.error}`);
+      // paid:true on ANY refusal — mismatch, timeout, ambiguous — means sats
+      // may have left the wallet with no usable proof: the error class the
+      // ledger treats as an outflow, never as a clean refusal.
+      if (body.paid) {
+        throw new SettlementError(
+          'PREIMAGE_UNAVAILABLE',
+          `pay-invoice reports funds may have moved without proof (${body.code ?? 'no code'}): ${body.error ?? 'no detail'}`
+        );
       }
       throw new SettlementError('PAY_FAILED', `pay-invoice returned ${res.status} (${body.code ?? 'no code'}): ${body.error ?? 'no detail'}`);
     }

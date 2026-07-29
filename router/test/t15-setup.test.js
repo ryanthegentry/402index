@@ -73,6 +73,26 @@ test('T15b: POST /setup/session redirects to Stripe Checkout with the budget in 
   assert.match(created.success_url, /\/setup\/complete\?session_id=\{CHECKOUT_SESSION_ID\}/);
 });
 
+test('T15b2: hostile form input clamps to sane budget bounds', async (t) => {
+  const stripe = fakeSetupStripe();
+  const r = await startInvokeRouter({ setupStripeImpl: stripe });
+  t.after(r.close);
+  for (const body of ['budget_usd=-5&budget_days=99999', 'budget_usd=NaN&budget_days=zero', 'budget_usd=1e12']) {
+    await fetch(`${r.baseUrl}/setup/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+      redirect: 'manual'
+    });
+  }
+  for (const created of stripe.calls.create) {
+    const usd = Number(created.metadata.budget_usd);
+    const days = Number(created.metadata.budget_days);
+    assert.ok(usd >= 1 && usd <= 500, `budget clamped, got ${usd}`);
+    assert.ok(days >= 1 && days <= 90, `days clamped, got ${days}`);
+  }
+});
+
 test('T15c: a completed session issues card + mandate + token, shown once with the mcp add line', async (t) => {
   const stripe = fakeSetupStripe();
   const r = await startInvokeRouter({ setupStripeImpl: stripe });

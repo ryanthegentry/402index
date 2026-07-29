@@ -34,6 +34,7 @@ Names only; values live in Railway. Nothing here may appear in a transcript.
 | `ROUTER_PRINCIPAL_MAX_TOTAL_SATS` | `6000` | one token cannot spend the whole global cap |
 | `ROUTER_RETRY_INTERVAL_MINUTES` | `30` | scheduled credential recovery (Group E) |
 | `ROUTER_PUBLIC_URL` | the service's public URL | setup redirects + mcp add snippet |
+| `ROUTER_ALLOWED_HOSTS` | the service's public hostname | /mcp answers only for this Host header (421 otherwise); empty disables the check |
 
 `PORT` is injected by Railway; the router honors it when `ROUTER_PORT` is
 unset.

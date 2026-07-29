@@ -66,6 +66,21 @@ test('T11b: tools/list declares the receipt outputSchema', async (t) => {
   assert.ok(tool.outputSchema.properties.charged_usd, 'schema names charged_usd');
 });
 
+test('T11d: the same mandated flow completes under legacy reject — no per-era branching', async (t) => {
+  process.env.ROUTER_LEGACY_MODE = 'reject'; // pin explicitly; this is the 2026-only mode
+  const r = await startInvokeRouter();
+  t.after(async () => {
+    delete process.env.ROUTER_LEGACY_MODE;
+    await r.close();
+  });
+  const { loadConfig } = await import('../dist/config.js');
+  assert.equal(loadConfig({ ROUTER_STATE_KEY: 'ab'.repeat(32) }).legacyMode, 'reject', 'reject is also the default');
+  seedMandate(r.routerDb, 'wire-test-agent');
+  const res = await callInvoke(r.baseUrl, ARGS); // 2026-era wire shape
+  assert.ok(!res.result.isError, JSON.stringify(res.result).slice(0, 300));
+  assert.equal(res.result.structuredContent.paid_sats, 580, 'same handler, same receipt as the stateless era');
+});
+
 test('T11c: a 2025-era client sees the receipt line in content', async (t) => {
   process.env.ROUTER_LEGACY_MODE = 'stateless';
   const r = await startInvokeRouter();
