@@ -33,6 +33,8 @@ export interface RouterConfig {
   // public base URL of this deployment (setup redirects + mcp add snippet);
   // empty falls back to the requesting host
   publicUrl: string;
+  // Host-header allow-list for /mcp; empty allows any host
+  allowedHosts: string[];
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
@@ -77,6 +79,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
     principalMaxSatsPerJob: Number(env.ROUTER_PRINCIPAL_MAX_SATS_PER_JOB || maxSatsPerJob),
     principalMaxTotalSats: Number(env.ROUTER_PRINCIPAL_MAX_TOTAL_SATS || maxTotalSats),
     retryIntervalMinutes: Number(env.ROUTER_RETRY_INTERVAL_MINUTES || 0),
-    publicUrl: env.ROUTER_PUBLIC_URL || ''
+    publicUrl: env.ROUTER_PUBLIC_URL || '',
+    allowedHosts: (env.ROUTER_ALLOWED_HOSTS || '').split(',').map((s) => s.trim()).filter(Boolean)
   };
 }

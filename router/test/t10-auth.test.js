@@ -185,6 +185,17 @@ test('T10g: the per-principal total cap counts only that principal\'s ledger row
   assert.equal(bobRes.body.result.resultType, 'input_required', JSON.stringify(bobRes.body).slice(0, 300));
 });
 
+test('T10i: a host allow-list refuses requests for unlisted hosts before auth runs', async (t) => {
+  const r = await startAuthRouter({ ROUTER_ALLOWED_HOSTS: 'router.402index.io' });
+  t.after(r.close);
+  const { issueToken } = await import('../dist/auth.js');
+  const token = issueToken(r.routerDb, 'alice');
+  // the harness calls via 127.0.0.1:<port>, which is not on the list
+  const res = await callAuthed(r.baseUrl, ARGS, { token });
+  assert.equal(res.status, 421, JSON.stringify(res.body).slice(0, 200));
+  // and an unset list (default) keeps serving — covered by every other test here
+});
+
 test('T10h: a mandated settlement records the token principal on the ledger row', async (t) => {
   const r = await startAuthRouter({}, { adapter: settledOk });
   t.after(r.close);

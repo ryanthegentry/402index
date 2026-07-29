@@ -1,7 +1,58 @@
 # Router PoC — working notes
 
-One lesson per entry, summary line first. Sessions 2026-07-28/29 (PoC) and
-2026-07-29/30 (multirail + TTFP).
+One lesson per entry, summary line first. Sessions 2026-07-28/29 (PoC),
+2026-07-29/30 (multirail + TTFP), and 2026-07-29 (hosted router build).
+
+## golem and herald are SERVICES inside the 402index Railway project
+
+`railway list` shows one project and misleads; `railway service list` inside
+the linked project shows 402index, golem, herald, router. Consequence that
+matters: cross-service variable references work, so the router's
+GOLEM_HTTP_API_KEY is set as the literal string `${{golem.GOLEM_API_KEY}}`
+and the real key never exists outside Railway. Do not copy keys out of
+~/.golem/.env for this — that file is the ATLAS wallet's key and nothing
+guarantees it matches the Railway service. Also: `railway up` direct upload (.railwayignore controls the tarball)
+sidesteps the dashboard-only root-directory setting, and nothing
+auto-deploys on push. Two CLI traps that each cost a deploy: bare
+`railway up` uploads the LINKED PROJECT ROOT regardless of cwd — the first
+router deploy shipped the main app's Procfile and served the 402index 404
+page from the router domain — and the PATH argument rejects `.` and
+relative paths with `prefix not found`; only `railway up "$PWD"` works.
+
+## The SDK validates outputSchema on SUCCESS results only
+
+Verified in @modelcontextprotocol/server dist: validateToolOutput returns
+early for input_required and isError results. So the invoke tool can declare
+an outputSchema for the receipt while its error paths and elicitations keep
+returning plain content — no schema gymnastics on failures. Corollary from
+the receipt build: SEP-2106 auto-append fires only for non-object
+structuredContent, so an object receipt NEEDS its authored text line or a
+legacy client sees no receipt at all.
+
+## The setup page must live on the router service, not the main app
+
+The PRD sketch said "served by the main 402index app", but tokens, cards,
+and mandates live in the router's SQLite file and SQLite has one writer on
+one volume. Serving setup from the main app would need either a second
+writer or an internal API. The router serves /setup itself; the main site
+links to it. Recorded as a deliberate deviation in the Group C commit.
+
+## A 2025-era client can never be identified without bearer auth
+
+Stateless legacy requests carry no clientInfo envelope at all, so every
+legacy caller is 'unknown-client' — meaning mandates and cards could never
+be per-agent on the legacy path. ROUTER_AUTH_MODE=required is therefore not
+just security, it is what makes legacy-era mandated flow POSSIBLE: the
+token names the principal, and t11c proves a 2025 wire call completes the
+mandated path and can read its receipt line.
+
+## Railway wallet check before hosted settlement work
+
+/l402/status on golem-production read spendableSats 34882,
+pendingRecovery 0, nearestExpiryHours 716.9 (≈2026-08-28) on 2026-07-29 —
+sweep completed, hosted settlement viable. Re-check this single public
+endpoint at session start; if the balance has moved to pendingRecovery the
+payer route settles nothing and the plan changes.
 
 ## Railway Golem and Atlas Golem differ in exposed routes, not capability
 

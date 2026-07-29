@@ -128,6 +128,13 @@ export function createRouterApp(
   // With auth required, the bearer token names the principal (D3) and the
   // AsyncLocalStorage context carries it into the tool handler.
   app.all('/mcp', (req, res) => {
+    if (config.allowedHosts.length > 0) {
+      const host = (req.get('host') ?? '').toLowerCase();
+      if (!config.allowedHosts.some((h) => h.toLowerCase() === host)) {
+        res.status(421).json({ error: `host "${host}" is not served here` });
+        return;
+      }
+    }
     if (config.authMode === 'required') {
       const auth = resolveToken(routerDb, req.headers.authorization);
       if (!auth) {
