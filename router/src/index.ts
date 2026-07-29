@@ -105,7 +105,7 @@ export function createRouterApp(
             ? createRegistration(routerDb, { stripeSecretKey: config.stripeSecretKey })
             : undefined)
   };
-  const handler = createMcpHandler(() => buildServer(deps), { legacy: 'reject' });
+  const handler = createMcpHandler(() => buildServer(deps), { legacy: config.legacyMode });
   const app = createMcpExpressApp();
   const nodeHandler = toNodeHandler(handler);
   // express.json() has already drained the stream; hand the parsed body over explicitly.

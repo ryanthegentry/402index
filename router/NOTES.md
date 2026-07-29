@@ -3,6 +3,40 @@
 One lesson per entry, summary line first. Sessions 2026-07-28/29 (PoC) and
 2026-07-29/30 (multirail + TTFP).
 
+## Today's Claude Code CAN pay through the router — but only the mandated path
+
+Legacy-shim spike, 2026-07-29. Setting `legacy: 'stateless'` (env
+ROUTER_LEGACY_MODE) makes the router accept a 2025-era handshake, and real
+Claude Code 2.1.220 then completed a full paid invoke end to end: quote →
+card hold → settle → redeem → capture, mandate debited $0.50, credential
+retained and marked redeemed. No protocol code was written; it is one config
+value.
+
+What does NOT work on that path, and why: stateless legacy serving is
+per-REQUEST, so it can never carry a server→client request. The SDK's legacy
+shim fulfils `input_required` by sending a real `elicitation/create`, so the
+consent and registration rounds fail with "per-request legacy serving cannot
+receive server-to-client requests". Making those work needs a SESSIONFUL
+legacy transport wired in user land behind `isLegacyRequest` — that is a real
+integration, and it IS the work that Claude Code shipping 2026-07-28 would
+obsolete. Do not build it.
+
+Two consequences that outlive the protocol question:
+- **Identity must come from auth, not the protocol.** On a 2025-era stateless
+  connection there is no per-request `_meta` envelope, so `principalOf` sees
+  no clientInfo and every caller is `unknown-client`. Anything internet-facing
+  needs bearer auth to name the principal anyway; the protocol was never going
+  to be the identity source.
+- **The receipt does not reach a 2025-era client.** `_meta` on the tool result
+  did not surface to Claude Code — it reported the upstream body and correctly
+  complained it could not see what it had been charged. If the receipt is the
+  product's trust surface, it belongs in the result CONTENT for legacy clients,
+  not only in `_meta`.
+
+Product read: consent and registration are one-time, out-of-band setup (a URL
+a human visits); the per-call path is mandated and needs no interactivity.
+That ordering works on every client that exists today.
+
 ## llm402.ai fails PER ENDPOINT, not per provider and not per route
 
 Final shape after three paid tests. `claude-fable-5` DELIVERS over direct
