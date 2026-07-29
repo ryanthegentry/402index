@@ -26,6 +26,8 @@ export interface RouterConfig {
   // equal the global caps, so nothing changes until a deployment sets them.
   principalMaxSatsPerJob: number;
   principalMaxTotalSats: number;
+  // minutes between scheduled credential-recovery passes; 0 disables
+  retryIntervalMinutes: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
@@ -59,6 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
     authMode,
     bindHost,
     principalMaxSatsPerJob: Number(env.ROUTER_PRINCIPAL_MAX_SATS_PER_JOB || maxSatsPerJob),
-    principalMaxTotalSats: Number(env.ROUTER_PRINCIPAL_MAX_TOTAL_SATS || maxTotalSats)
+    principalMaxTotalSats: Number(env.ROUTER_PRINCIPAL_MAX_TOTAL_SATS || maxTotalSats),
+    retryIntervalMinutes: Number(env.ROUTER_RETRY_INTERVAL_MINUTES || 0)
   };
 }

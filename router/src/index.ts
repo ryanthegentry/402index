@@ -20,6 +20,7 @@ import { btcUsdRate } from './btcprice.js';
 import { createRegistration, type Registration } from './registration.js';
 import { registerInvokeTool, type InvokeDeps } from './tools/invoke.js';
 import { authContext, resolveToken } from './auth.js';
+import { startRecoverySchedule } from './recovery.js';
 
 export interface RouterOverrides {
   billing?: InvokeDeps['billing'];
@@ -106,6 +107,18 @@ export function createRouterApp(
             ? createRegistration(routerDb, { stripeSecretKey: config.stripeSecretKey })
             : undefined)
   };
+  const recovery =
+    config.retryIntervalMinutes > 0
+      ? startRecoverySchedule({
+          db: routerDb,
+          ledger: deps.ledger,
+          creds: deps.credentials,
+          routes: deps.routes,
+          fetchImpl: deps.fetchImpl,
+          intervalMs: config.retryIntervalMinutes * 60_000,
+          timeoutMs: deps.redeemTimeoutMs
+        })
+      : null;
   const handler = createMcpHandler(() => buildServer(deps), { legacy: config.legacyMode });
   const app = createMcpExpressApp();
   const nodeHandler = toNodeHandler(handler);
@@ -128,6 +141,7 @@ export function createRouterApp(
     app,
     routerDb,
     shutdown: async () => {
+      recovery?.stop();
       await handler.close();
       routerDb.close();
     }
