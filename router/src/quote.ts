@@ -32,6 +32,9 @@ export interface Candidate {
   httpMethod: string;
   score: number;
   fallback: boolean;
+  // routes this service is currently degraded on; the route ladder skips
+  // them. A '*' row (v1 migration shape) drops the candidate entirely.
+  degradedRoutes: string[];
   // the catalog price is below the settlement floor. Not an exclusion: catalog
   // prices are stale probe-time snapshots and are anti-correlated with the live
   // quote on some providers (llm402.ai advertises 357 and quotes 172; advertises
@@ -64,6 +67,9 @@ export async function fetchCandidates(
     // URLs proven to deliver end-to-end by hand; they bypass ONLY the
     // lnget_compatible filter and rank after every compatible candidate.
     provenFallbacks?: string[];
+    // the configured route names; a candidate degraded on all of them (or on
+    // '*') is dropped here instead of wasting a dead-candidate slot.
+    routeNames?: string[];
   }
 ): Promise<Candidate[]> {
   const fetchImpl = opts.fetchImpl ?? fetch;
@@ -80,10 +86,13 @@ export async function fetchCandidates(
     if (pageRows.length < PAGE_SIZE) break;
   }
 
-  const degraded = new Set(
-    (routerDb.prepare('SELECT service_id FROM degraded_candidates').all() as { service_id: string }[])
-      .map((r) => r.service_id)
-  );
+  const degradedBy = new Map<string, Set<string>>();
+  for (const r of routerDb.prepare('SELECT service_id, route FROM degraded_candidates').all() as {
+    service_id: string;
+    route: string;
+  }[]) {
+    (degradedBy.get(r.service_id) ?? degradedBy.set(r.service_id, new Set()).get(r.service_id)!).add(r.route);
+  }
 
   const terms = opts.capability.toLowerCase().split(/[-_\s]+/).filter(Boolean);
   const candidates: Candidate[] = [];
@@ -94,7 +103,16 @@ export async function fetchCandidates(
     const isFallback = fallbacks.has(row.url);
     if (row.lnget_compatible !== 1 && !isFallback) continue;
     if ((priceSats / 1e8) * opts.btcUsd > opts.maxPriceUsd) continue;
-    if (degraded.has(row.id)) continue;
+    const degradedRoutes = degradedBy.get(row.id);
+    if (degradedRoutes?.has('*')) continue;
+    if (
+      degradedRoutes &&
+      opts.routeNames &&
+      opts.routeNames.length > 0 &&
+      opts.routeNames.every((name) => degradedRoutes.has(name))
+    ) {
+      continue;
+    }
     const haystack = [row.name, row.description, row.category, row.capabilities, row.url]
       .filter(Boolean)
       .join(' ')
@@ -110,6 +128,7 @@ export async function fetchCandidates(
       httpMethod: row.http_method ?? 'GET',
       score,
       fallback: isFallback,
+      degradedRoutes: degradedRoutes ? [...degradedRoutes] : [],
       belowCatalogFloor: priceSats < opts.minSats
     });
   }

@@ -53,6 +53,29 @@ const PENDING_JOB_COLUMNS: [string, string][] = [
   ['stage_timings', 'TEXT']
 ];
 
+// Degradation moved from a service-keyed to a (service_id, route)-keyed table
+// (D5): failures are per endpoint AND per route, and one shared row blinded
+// the router to a working direct route. SQLite cannot alter a primary key, so
+// v1 tables are rebuilt; v1 rows become route='*' — they blocked every route
+// before, and they keep doing exactly that.
+function migrateDegradedCandidates(db: Database.Database): void {
+  const cols = db.prepare('PRAGMA table_info(degraded_candidates)').all() as { name: string }[];
+  if (cols.length === 0 || cols.some((c) => c.name === 'route')) return;
+  db.exec(`
+    ALTER TABLE degraded_candidates RENAME TO degraded_candidates_v1;
+    CREATE TABLE degraded_candidates (
+      service_id TEXT NOT NULL,
+      route TEXT NOT NULL DEFAULT '*',
+      reason TEXT,
+      degraded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (service_id, route)
+    );
+    INSERT INTO degraded_candidates (service_id, route, reason, degraded_at)
+      SELECT service_id, '*', reason, degraded_at FROM degraded_candidates_v1;
+    DROP TABLE degraded_candidates_v1;
+  `);
+}
+
 function migratePendingJobs(db: Database.Database): void {
   const existing = new Set(
     (db.prepare('PRAGMA table_info(pending_jobs)').all() as { name: string }[]).map((c) => c.name)
@@ -80,9 +103,11 @@ export function openRouterDb(dataDir: string): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS degraded_candidates (
-      service_id TEXT PRIMARY KEY,
+      service_id TEXT NOT NULL,
+      route TEXT NOT NULL DEFAULT '*',
       reason TEXT,
-      degraded_at TEXT NOT NULL DEFAULT (datetime('now'))
+      degraded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (service_id, route)
     );
     CREATE TABLE IF NOT EXISTS cards (
       principal TEXT PRIMARY KEY,
@@ -136,5 +161,6 @@ export function openRouterDb(dataDir: string): Database.Database {
   `);
   migrateSpendLedger(db);
   migratePendingJobs(db);
+  migrateDegradedCandidates(db);
   return db;
 }

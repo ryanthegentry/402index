@@ -184,7 +184,8 @@ async function prepareJob(
     minSats: realFloors.length > 0 ? Math.min(...realFloors) : 0,
     btcUsd,
     fetchImpl: deps.fetchImpl,
-    provenFallbacks: deps.config.provenFallbacks
+    provenFallbacks: deps.config.provenFallbacks,
+    routeNames: deps.routes.map((r) => r.name)
   });
   stages.candidates_ms = Date.now() - t;
   if (candidates.length === 0) {
@@ -194,7 +195,9 @@ async function prepareJob(
   const failures: string[] = [];
   for (const candidate of candidates.slice(0, MAX_DEAD_CANDIDATES)) {
     const upstream = buildUpstreamRequest(candidate, args.input);
-    for (const route of deps.routes.filter((r) => r.supports(candidate))) {
+    for (const route of deps.routes.filter(
+      (r) => r.supports(candidate) && !candidate.degradedRoutes.includes(r.name)
+    )) {
       let quote: RouteQuote;
       t = Date.now();
       try {
@@ -553,8 +556,8 @@ async function executeJob(
   if (failure || !upstreamRes) {
     await deps.billing.void(m.paymentIntentId);
     deps.routerDb
-      .prepare('INSERT OR REPLACE INTO degraded_candidates (service_id, reason) VALUES (?, ?)')
-      .run(m.serviceId, failure ?? 'unknown');
+      .prepare('INSERT OR REPLACE INTO degraded_candidates (service_id, route, reason) VALUES (?, ?, ?)')
+      .run(m.serviceId, m.route, failure ?? 'unknown');
     if (ledgerId !== null) {
       deps.ledger.recordDelivery(ledgerId, {
         delivered: false,
