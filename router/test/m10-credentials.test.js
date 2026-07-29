@@ -64,6 +64,7 @@ test('M10c: a failed delivery keeps the credential and records the attempt', () 
 test('M10d: retryUnredeemed recovers the value and repairs the ledger row', async () => {
   const { db, ledger, creds } = fresh();
   const ledgerId = ledger.recordSettlement({
+    principal: null,
     serviceId: 'svc-1', upstream: REC.upstream, rail: 'l402', network: 'lightning',
     route: 'direct-l402', adapter: 'golem', quotedSats: 1024, settledSats: 1024,
     feeSats: 2, chargedUsd: 0.66, btcUsd: 64000, paymentIntent: 'pi_x', jobNonce: null
@@ -91,6 +92,7 @@ test('M10d: retryUnredeemed recovers the value and repairs the ledger row', asyn
 test('M10e: a still-failing retry leaves the loss booked and counts the attempt', async () => {
   const { db, ledger, creds } = fresh();
   const ledgerId = ledger.recordSettlement({
+    principal: null,
     serviceId: 'svc-1', upstream: REC.upstream, rail: 'l402', network: 'lightning',
     route: 'direct-l402', adapter: 'golem', quotedSats: 1024, settledSats: 1024,
     feeSats: 2, chargedUsd: 0.66, btcUsd: 64000, paymentIntent: 'pi_x', jobNonce: null

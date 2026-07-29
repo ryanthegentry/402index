@@ -5,7 +5,8 @@ import type { Database } from 'better-sqlite3';
 import type { RouterConfig } from '../config.js';
 import { canonicalArgsDigest, mintState, verifyState, StateError, type StatePayload } from '../state.js';
 import { fetchCandidates, type Candidate } from '../quote.js';
-import { GuardError, type createGuards } from '../guards.js';
+import { GuardError, type createGuards, type PrincipalLimits } from '../guards.js';
+import { authContext } from '../auth.js';
 import { SettlementError, type AdapterRegistry, type PaymentRequest, type Settlement } from '../settlement/index.js';
 import type { Route, RouteQuote } from '../routes/index.js';
 import type { Ledger } from '../ledger.js';
@@ -58,6 +59,25 @@ const invokeArgs = z.object({
 });
 type InvokeArgs = z.infer<typeof invokeArgs>;
 
+// The receipt is the product's trust surface and it ships on three surfaces
+// (D4): structuredContent against this schema, one authored content line the
+// model reads on every era, and _meta for harnesses. SEP-2106's TextContent
+// auto-append fires only for non-object structuredContent, so the text line
+// is authored deliberately. The SDK owns the era projection — nothing here
+// branches on protocol revision.
+const receiptSchema = z.object({
+  upstream: z.string(),
+  rail: z.string(),
+  route: z.string(),
+  paid_sats: z.number(),
+  charged_usd: z.number(),
+  payment_intent: z.string(),
+  latency_ms: z.number(),
+  candidates_considered: z.number(),
+  mandated: z.boolean(),
+  stage_timings: z.record(z.string(), z.number())
+});
+
 interface JobMaterial {
   serviceId: string;
   upstream: string;
@@ -81,6 +101,9 @@ function errResult(text: string) {
   return { content: [{ type: 'text' as const, text }], isError: true };
 }
 
+// clientInfo-derived identity is a dev-mode convenience only. It is
+// self-asserted, so it never names a principal when auth is required (D3) —
+// there the bearer token decides and this function is not consulted.
 function principalOf(mcpReq: McpReqSurface): string {
   const env = mcpReq.envelope ?? {};
   const info = (env['io.modelcontextprotocol/clientInfo'] ?? env['clientInfo']) as
@@ -120,17 +143,24 @@ export function registerInvokeTool(server: McpServer, deps: InvokeDeps): void {
         'Acquire a capability by outcome: 402index finds a paid endpoint, quotes a firm USD price, ' +
         'asks your consent (or spends under a standing budget you granted), then pays the provider ' +
         'on its own rail and returns the result. You are charged only when the result is delivered.',
-      inputSchema: invokeArgs
+      inputSchema: invokeArgs,
+      outputSchema: receiptSchema
     },
     async (args: InvokeArgs, ctx: unknown) => {
       const mcpReq = (ctx as { mcpReq?: McpReqSurface }).mcpReq ?? {};
-      const principal = principalOf(mcpReq);
+      const auth = authContext.getStore();
+      const principal = auth?.principal ?? principalOf(mcpReq);
+      const limits: PrincipalLimits = {
+        principal,
+        maxSatsPerJob: auth?.maxSatsPerJob ?? deps.config.principalMaxSatsPerJob,
+        maxTotalSats: auth?.maxTotalSats ?? deps.config.principalMaxTotalSats
+      };
       const argsDigest = canonicalArgsDigest(args);
       const rawState = mcpReq.requestState?.<string>();
       if (typeof rawState === 'string') {
-        return handleRetry(deps, mcpReq, args, principal, argsDigest, rawState);
+        return handleRetry(deps, mcpReq, args, principal, limits, argsDigest, rawState);
       }
-      return handleColdCall(deps, args, principal, argsDigest);
+      return handleColdCall(deps, args, principal, limits, argsDigest);
     }
   );
 }
@@ -141,7 +171,7 @@ export function registerInvokeTool(server: McpServer, deps: InvokeDeps): void {
 async function prepareJob(
   deps: InvokeDeps,
   args: InvokeArgs,
-  principal: string,
+  limits: PrincipalLimits,
   card: { payment_method: string }
 ): Promise<{ ok: true; material: Omit<JobMaterial, 'paymentIntentId' | 'chargedUsd'> & { quoteUsd: number; chargedUsd: number } } | { ok: false; error: string }> {
   const stages: Record<string, number> = {};
@@ -154,7 +184,8 @@ async function prepareJob(
     minSats: realFloors.length > 0 ? Math.min(...realFloors) : 0,
     btcUsd,
     fetchImpl: deps.fetchImpl,
-    provenFallbacks: deps.config.provenFallbacks
+    provenFallbacks: deps.config.provenFallbacks,
+    routeNames: deps.routes.map((r) => r.name)
   });
   stages.candidates_ms = Date.now() - t;
   if (candidates.length === 0) {
@@ -164,7 +195,9 @@ async function prepareJob(
   const failures: string[] = [];
   for (const candidate of candidates.slice(0, MAX_DEAD_CANDIDATES)) {
     const upstream = buildUpstreamRequest(candidate, args.input);
-    for (const route of deps.routes.filter((r) => r.supports(candidate))) {
+    for (const route of deps.routes.filter(
+      (r) => r.supports(candidate) && !candidate.degradedRoutes.includes(r.name)
+    )) {
       let quote: RouteQuote;
       t = Date.now();
       try {
@@ -192,7 +225,7 @@ async function prepareJob(
         continue;
       }
       try {
-        deps.guards.checkJob(pr.amountSats ?? 0);
+        deps.guards.checkJob(pr.amountSats ?? 0, limits);
       } catch (err) {
         if (err instanceof GuardError) return { ok: false, error: `${err.code}: ${err.message}` };
         throw err;
@@ -223,7 +256,13 @@ async function prepareJob(
   return { ok: false, error: `ALL_CANDIDATES_FAILED after ${failures.length}: ${failures.join(' | ')}` };
 }
 
-async function handleColdCall(deps: InvokeDeps, args: InvokeArgs, principal: string, argsDigest: string) {
+async function handleColdCall(
+  deps: InvokeDeps,
+  args: InvokeArgs,
+  principal: string,
+  limits: PrincipalLimits,
+  argsDigest: string
+) {
   console.log(`[invoke] cold call from "${principal}": ${args.capability} (max $${args.max_price_usd})`);
   const cardStmt = deps.routerDb.prepare('SELECT payment_method FROM cards WHERE principal = ?');
   let card = cardStmt.get(principal) as { payment_method: string } | undefined;
@@ -259,7 +298,7 @@ async function handleColdCall(deps: InvokeDeps, args: InvokeArgs, principal: str
     });
   }
 
-  const prepared = await prepareJob(deps, args, principal, card);
+  const prepared = await prepareJob(deps, args, limits, card);
   if (!prepared.ok) return errResult(prepared.error);
   const m = prepared.material;
 
@@ -271,7 +310,7 @@ async function handleColdCall(deps: InvokeDeps, args: InvokeArgs, principal: str
   // in THIS round trip. No interruption — this is the TTFP kill shot.
   const mandate = getMandate(deps.routerDb, principal);
   if (mandate && mandate.budgetUsd - mandate.spentUsd >= m.chargedUsd) {
-    return executeJob(deps, { ...m, paymentIntentId: auth.paymentIntentId }, { principal, mandated: true });
+    return executeJob(deps, { ...m, paymentIntentId: auth.paymentIntentId }, { principal, limits, mandated: true });
   }
 
   m.stageTimings.consent_start = Date.now(); // epoch marker; replaced by consent_wait_ms on retry
@@ -330,6 +369,7 @@ async function handleRetry(
   mcpReq: McpReqSurface,
   args: InvokeArgs,
   principal: string,
+  limits: PrincipalLimits,
   argsDigest: string,
   rawState: string
 ) {
@@ -411,15 +451,19 @@ async function handleRetry(
       paymentIntentId: payload.paymentIntentId,
       stageTimings: stages
     },
-    { principal, mandated: false }
+    { principal, limits, mandated: false }
   );
 }
 
 // Settlement → redemption → capture, with the two-phase ledger write and the
 // guarantee: any failure past this point voids the hold and the agent pays $0.
-async function executeJob(deps: InvokeDeps, m: JobMaterial, opts: { principal: string; mandated: boolean }) {
+async function executeJob(
+  deps: InvokeDeps,
+  m: JobMaterial,
+  opts: { principal: string; limits: PrincipalLimits; mandated: boolean }
+) {
   try {
-    deps.guards.checkJob(m.quotedSats);
+    deps.guards.checkJob(m.quotedSats, opts.limits);
   } catch (err) {
     if (err instanceof GuardError) {
       await deps.billing.void(m.paymentIntentId);
@@ -461,6 +505,7 @@ async function executeJob(deps: InvokeDeps, m: JobMaterial, opts: { principal: s
   let ledgerId: number | null = null;
   if (adapter.movesRealFunds) {
     ledgerId = deps.ledger.recordSettlement({
+      principal: opts.principal,
       serviceId: m.serviceId,
       upstream: m.upstream,
       rail: m.rail,
@@ -511,8 +556,8 @@ async function executeJob(deps: InvokeDeps, m: JobMaterial, opts: { principal: s
   if (failure || !upstreamRes) {
     await deps.billing.void(m.paymentIntentId);
     deps.routerDb
-      .prepare('INSERT OR REPLACE INTO degraded_candidates (service_id, reason) VALUES (?, ?)')
-      .run(m.serviceId, failure ?? 'unknown');
+      .prepare('INSERT OR REPLACE INTO degraded_candidates (service_id, route, reason) VALUES (?, ?, ?)')
+      .run(m.serviceId, m.route, failure ?? 'unknown');
     if (ledgerId !== null) {
       deps.ledger.recordDelivery(ledgerId, {
         delivered: false,
@@ -550,21 +595,28 @@ async function executeJob(deps: InvokeDeps, m: JobMaterial, opts: { principal: s
   }
   deps.credentials.markRedeemed(credentialId);
 
+  const receipt = {
+    upstream: m.upstream,
+    rail: m.rail,
+    route: m.route,
+    paid_sats: settlement.paidSats,
+    charged_usd: m.chargedUsd,
+    payment_intent: m.paymentIntentId,
+    latency_ms: Date.now() - started,
+    candidates_considered: m.candidatesConsidered,
+    mandated: opts.mandated,
+    stage_timings: m.stageTimings
+  };
+  const receiptLine =
+    `Receipt: charged $${m.chargedUsd.toFixed(2)} for ${settlement.paidSats} sats to ` +
+    `${new URL(m.upstream).host} via ${m.route}` +
+    `${opts.mandated ? ' under your standing budget' : ''} — delivered in ${(receipt.latency_ms / 1000).toFixed(1)}s.`;
   return {
-    content: [{ type: 'text' as const, text }],
-    _meta: {
-      'io.402index/receipt': {
-        upstream: m.upstream,
-        rail: m.rail,
-        route: m.route,
-        paid_sats: settlement.paidSats,
-        charged_usd: m.chargedUsd,
-        payment_intent: m.paymentIntentId,
-        latency_ms: Date.now() - started,
-        candidates_considered: m.candidatesConsidered,
-        mandated: opts.mandated,
-        stage_timings: m.stageTimings
-      }
-    }
+    content: [
+      { type: 'text' as const, text },
+      { type: 'text' as const, text: receiptLine }
+    ],
+    structuredContent: receipt,
+    _meta: { 'io.402index/receipt': receipt }
   };
 }
