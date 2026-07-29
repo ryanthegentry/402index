@@ -1,0 +1,31 @@
+{
+  "_source": "real T0 artifacts 2026-07-28; invoices spent, preimage revealed on settlement (public)",
+  "pingInvoice1sat": "lnbc10n1p4xja9rdqlds6rqv3wwdcxzcm9yr3gdy3qwp5kuecnp4qwpn62g900yjkkkaafl2ttjyanmc78m7gzr3v338fda3h7errc5h7pp5qf8ptwuek7yr0sq58v347h4rjsj9n99xg8kafsw9zrla7y0sxd7qsp5xnhrypezltacjhh8nyzrue0dzvuwl6p069wejl7xtm878quuenrq9qyysgqcqzp2xqyz5vqv3vrh4y0kavau5h66jqd8426l09t7vqhrg7l9uky6gm3cw63yr84lqg253w0a3mzq4yqlja88l0jcxlvcamrnrp6da80y8dff2kdtxcqs4k86k",
+  "paidInvoice580": "lnbc5800n1p4xja5ad9lds6rqv3wwdcxzcm9yr3gdy3qdp68gurn8ghj7mrfva58gmnfdenkvct4vdjhgtnrdakj7ctsdyhkcdpsxghkcmrd94c8ymmdwp6r7urjdakhqapa2fjhqmre9dmkjarg9djhsctrw3k8jw3twphkueetveex7mftxscry6twv3jhs2mjda6hgetj9dgx7scnp4qwpn62g900yjkkkaafl2ttjyanmc78m7gzr3v338fda3h7errc5h7pp5vl9m8zsctzrhdkxstg35dkyg0jsfyx9vrnytgk2g5eusfaw7nk0ssp57d3jltenm8zhuvtmc4gekkgym7jqe7pvj4eje7tavnmh055rqzxq9qyysgqcqzp2xqyz5vqn4qkrs63gp937n38mlm3jrxrw4vdul7jj8gxclgut9jekcdfdhhjtarlxd9vvufusttwjmyt3ndcrl350mfp7zue2rwja69wq535j8gqhzcm09",
+  "preimage580": "9228d3c419f70452b07bac57590e14600f85d604f7a9668f560be8f19e556f93",
+  "swapRecord": {
+    "id": "FgHvvTR5LtKd",
+    "type": "submarine",
+    "createdAt": 1785296550,
+    "request": {
+      "invoice": "lnbc5800n1p4xja5ad9lds6rqv3wwdcxzcm9yr3gdy3qdp68gurn8ghj7mrfva58gmnfdenkvct4vdjhgtnrdakj7ctsdyhkcdpsxghkcmrd94c8ymmdwp6r7urjdakhqapa2fjhqmre9dmkjarg9djhsctrw3k8jw3twphkueetveex7mftxscry6twv3jhs2mjda6hgetj9dgx7scnp4qwpn62g900yjkkkaafl2ttjyanmc78m7gzr3v338fda3h7errc5h7pp5vl9m8zsctzrhdkxstg35dkyg0jsfyx9vrnytgk2g5eusfaw7nk0ssp57d3jltenm8zhuvtmc4gekkgym7jqe7pvj4eje7tavnmh055rqzxq9qyysgqcqzp2xqyz5vqn4qkrs63gp937n38mlm3jrxrw4vdul7jj8gxclgut9jekcdfdhhjtarlxd9vvufusttwjmyt3ndcrl350mfp7zue2rwja69wq535j8gqhzcm09",
+      "refundPublicKey": "03bf063f29ed10b0d31608dcf32c8f4d6ded949df17fd9fc450b8ca2a969c3ac37"
+    },
+    "response": {
+      "acceptZeroConf": true,
+      "expectedAmount": 581,
+      "id": "FgHvvTR5LtKd",
+      "address": "ark1qzpq904am6clw3pgqwyh4p02708fy4xs0hcpwt7rwfdttuxsjameeue6w6r0975a6a4ms7m9zrq63san68k9jzpe8nuamv66dehwflvmfvgkge",
+      "referralId": "golem",
+      "claimPublicKey": "03bf80f5463b568759bb32132fd774938d6371416273dc751acd92f62101e8f895",
+      "timeoutBlockHeights": {
+        "refund": 1786500004,
+        "unilateralClaim": 266752,
+        "unilateralRefund": 266752,
+        "unilateralRefundWithoutReceiver": 432128
+      }
+    },
+    "status": "transaction.claimed",
+    "preimage": "9228d3c419f70452b07bac57590e14600f85d604f7a9668f560be8f19e556f93"
+  }
+}
