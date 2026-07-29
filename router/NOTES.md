@@ -3,6 +3,22 @@
 One lesson per entry, summary line first. Sessions 2026-07-28/29 (PoC) and
 2026-07-29/30 (multirail + TTFP).
 
+## Railway Golem and Atlas Golem differ in exposed routes, not capability
+
+Checked 2026-07-29. `sendLightningPayment` lives in the SHARED `lightning/`
+module, and `sweep/auto-sweep.js` — a non-CLI caller — already invokes it
+directly. The hosted server simply never exposed a route for it; adding one
+wires an existing function rather than building a capability. Two blockers the
+PoC PRD recorded are also stale: the Railway wallet's public `/l402/status`
+now reads `spendableSats: 34882, pendingRecoverySats: 0` (was 0 / 34,882 — the
+ASP sweep completed), and `boltzReachable`/`aspReachable` are both true, so the
+historical "Railway egress breaks Boltz" story does not reproduce. The
+authenticated endpoints correctly refuse without a token, so this rests on the
+one public endpoint; confirm with a token before making funding decisions on
+it. What genuinely differs is custody posture, not technology: Atlas's wallet
+sits behind a home network with no inbound path, Railway's would be spendable
+over HTTP from a service accepting internet traffic.
+
 ## Today's Claude Code CAN pay through the router — but only the mandated path
 
 Legacy-shim spike, 2026-07-29. Setting `legacy: 'stateless'` (env
