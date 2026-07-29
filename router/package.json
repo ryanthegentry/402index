@@ -1,0 +1,33 @@
+{
+  "name": "@402index/router",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Settlement router PoC — card in, crypto out (MCP 2026-07-28 MRTR)",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test test/*.test.js",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/express": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "better-sqlite3": "^12.10.0",
+    "express": "^5.2.1",
+    "light-bolt11-decoder": "^3.2.0",
+    "stripe": "^18",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/core": "^2.0.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22",
+    "typescript": "^5.6.0"
+  }
+}

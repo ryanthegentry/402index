@@ -1,0 +1,115 @@
+{
+  "_source": "captured live from 402index.io/api/v1/services 2026-07-28 (protocol=L402&health=healthy), subset",
+  "page0": {
+    "services": [
+      {
+        "id": "86a46365-8d6f-4de4-923e-2e938e89d82e",
+        "url": "https://llm402.ai/v1/chat/completions/claude-fable-5%3Abatch",
+        "name": "claude-fable-5:batch",
+        "description": "anthropic/claude-fable-5:batch inference via L402 Lightning, 357 sats",
+        "price_sats": 357,
+        "price_usd": null,
+        "health_status": "healthy",
+        "lnget_compatible": 1,
+        "latency_p50_ms": 392,
+        "http_method": "POST",
+        "category": "ai/llm",
+        "capabilities": null,
+        "protocol": "L402"
+      },
+      {
+        "id": "8eb0ff26-b0e5-47fc-bd6c-c7a80246d43a",
+        "url": "https://llm402.ai/v1/chat/completions/gpt-5.2-pro",
+        "name": "gpt-5.2-pro (L402)",
+        "description": "openai/gpt-5.2-pro inference via x402 USDC on Base, 2397 sats",
+        "price_sats": 595,
+        "price_usd": null,
+        "health_status": "healthy",
+        "lnget_compatible": 1,
+        "latency_p50_ms": 139,
+        "http_method": "POST",
+        "category": "ai/llm",
+        "capabilities": null,
+        "protocol": "L402"
+      },
+      {
+        "id": "685a6fa4-6fe0-4627-91f1-ce0f987188d8",
+        "url": "https://llm402.ai/v1/chat/completions/claude-fable-5",
+        "name": "claude-fable-5 (L402)",
+        "description": "anthropic/claude-fable-5 inference via x402 USDC on Base, 713 sats",
+        "price_sats": 177,
+        "price_usd": null,
+        "health_status": "healthy",
+        "lnget_compatible": 1,
+        "latency_p50_ms": 156,
+        "http_method": "POST",
+        "category": "ai/llm",
+        "capabilities": null,
+        "protocol": "L402"
+      },
+      {
+        "id": "6319f465-d229-47b8-9c45-237fa9bf6aaf",
+        "url": "https://llm402.ai/v1/chat/completions/DeepSeek-V3",
+        "name": "DeepSeek-V3 (L402)",
+        "description": "deepseek-ai/DeepSeek-V3 inference via x402 USDC on Base, 21 sats",
+        "price_sats": 21,
+        "price_usd": null,
+        "health_status": "healthy",
+        "lnget_compatible": 1,
+        "latency_p50_ms": 141,
+        "http_method": "POST",
+        "category": "ai/llm",
+        "capabilities": null,
+        "protocol": "L402"
+      },
+      {
+        "id": "c4dc85a3-00be-4cc4-bb6b-72a226056c8e",
+        "url": "https://llm402.ai/v1/videos/generations/veo-2.0",
+        "name": "veo-2.0 (L402)",
+        "description": "google/veo-2.0 inference via x402 USDC on Base, 6701 sats",
+        "price_sats": 6696,
+        "price_usd": null,
+        "health_status": "healthy",
+        "lnget_compatible": 1,
+        "latency_p50_ms": 145,
+        "http_method": "POST",
+        "category": "ai/video",
+        "capabilities": null,
+        "protocol": "L402"
+      },
+      {
+        "id": "deb5335c-412d-418c-b2d4-1394e0f68f93",
+        "url": "https://api.lightningenable.com/api/l402/content/nwc-wallet-integration.md",
+        "name": "Advanced NWC Implementation",
+        "description": "Production-grade NWC patterns \ufffd relay infrastructure, payment orchestration, multi-wallet failover",
+        "price_sats": 3731,
+        "price_usd": 2.37687086,
+        "health_status": "healthy",
+        "lnget_compatible": 0,
+        "latency_p50_ms": 938,
+        "http_method": "GET",
+        "category": "guides",
+        "capabilities": null,
+        "protocol": "L402"
+      },
+      {
+        "id": "27993d1a-a39e-4610-9d54-50ba736557fe",
+        "url": "https://lightningfaucet.com/api/l402/llm-prompt",
+        "name": "lightningfaucet.com: Lightning Faucet LLM Prompt (500 sats)",
+        "description": "Lightning Faucet LLM Prompt (500 sats)",
+        "price_sats": 500,
+        "price_usd": 0.31853000000000004,
+        "health_status": "healthy",
+        "lnget_compatible": 0,
+        "latency_p50_ms": 232,
+        "http_method": "GET",
+        "category": "ai/ml",
+        "capabilities": null,
+        "protocol": "L402"
+      }
+    ]
+  },
+  "page1": {
+    "services": []
+  }
+}

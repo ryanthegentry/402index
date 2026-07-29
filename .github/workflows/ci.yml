@@ -60,6 +60,29 @@ jobs:
         run: npm test
         working-directory: mcp-server
 
+  router-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [24, 20]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: router/package-lock.json
+      - name: Install router deps
+        run: npm ci
+        working-directory: router
+      - name: Run router tests
+        # Stripe-network tests skip themselves when STRIPE_SECRET_KEY is absent
+        run: npm test
+        working-directory: router
+        env:
+          ROUTER_STATE_KEY: abababababababababababababababababababababababababababababababab
+
   lint:
     runs-on: ubuntu-latest
     steps:

@@ -1,0 +1,86 @@
+# Router PoC — working notes
+
+One lesson per entry, summary line first. Session 2026-07-28/29.
+
+## Product constraint: card-in agentic payments have a hard ~$0.50 floor per job
+
+Stripe's minimum PaymentIntent is $0.50 USD — every sub-$0.50 charge 400s with
+amount_too_small. Combined with Boltz's 333-sat outbound floor, the router's real
+per-job economics are: minimum ~$0.50 inbound (Stripe, hard), minimum 333 sats
+outbound (Boltz). Stripe is the binding constraint. Billing floors the card charge
+at $0.50 and the difference over the quote is margin, not a bug; the consent
+message must show the floored charge, and nothing below 50 cents may ever be sent
+to Stripe. The PRD's ~19% margin model is wrong at the floor — minimum viable
+markup is 40%+ once both floors are respected. This shapes the whole product, not
+just the PoC: micro-priced jobs need batching or credit, not per-job cards.
+
+## Candidate selection reads the LIVE 402index.io API, never the local DB copy
+
+data/402index.db on Atlas is dated 2026-05-26 — two months stale. The live API is
+the product finding its own payable endpoints: GET /api/v1/services?protocol=L402
+&health=healthy&limit=200&offset=N. Gotchas verified by Ryan against production:
+`health=healthy` is the filter (`health_status=` is silently ignored); `limit`
+caps server-side at 200, paginate by offset; `price_usd` is 0.000 on most rows —
+filter on price_sats and convert yourself. Router filter: price_sats >= 333 AND
+lnget_compatible == 1 (standard L402 challenge shape), prefer low latency_p50_ms.
+A timeout is a stale candidate, not a bug — move on; three dead in a row, stop.
+
+## Catalog prices are static probe prices — the dynamic quote can undercut the floor
+
+llm402.ai's catalog row says 357 sats, but the gateway prices the actual request:
+our small chat request quoted 103 sats — under the Boltz floor — and the first
+happy-path run discovered it only after consent, settling nothing but voiding a
+hold it never needed to open. Fix that stuck: check quote.amountSats against
+adapter.minSats at quote time and skip the candidate. Job sizing (max_tokens)
+is what pushes an LLM request into the settleable band (~100 sats/1000 tokens
+fable-tier, ~4x premium).
+
+## llm402.ai quotes fine but delivery 502s through l402.space — family-level failure
+
+Three different llm402.ai endpoints (fable-batch, opus-4.7-fast, and the
+non-batch quote leg) failed on the paid leg tonight while quoting normally.
+Cost: 403 + 1,532 sats absorbed (holds voided both times — the guarantee ran
+for real). Per the 3-dead rule the whole family went into degraded_candidates
+and the proven fallback (lightningfaucet.com, lnget=0, via ROUTER_PROVEN_FALLBACKS)
+carried the demo. Check whether llm402.ai↔l402.space recovers before trusting it.
+
+## Golem CLI never exits on its own — parse stdout, then kill the child
+
+`node dist/cli/index.js balance` printed complete output then sat past 120s (open
+Ark-server connection keeps the event loop alive). Anything that spawns the CLI must
+treat stdout as the completion signal and kill the process, not wait for exit.
+
+## Boltz floor: no Lightning payment under 333 sats from this wallet — design constraint
+
+Golem's outbound Lightning path is an Ark→Boltz submarine swap; Boltz rejects swaps
+under 333 sats (live error: `"1 is less than minimal of 333"`; Ryan confirmed
+ARK->BTC min=333, pct_fee=0.1, miner=0). This is not a one-off: every job the router
+settles over Lightning must be quoted ≥333 sats, so ~1-sat pings and micro-priced
+endpoints are unpayable on this rail. Caps raised accordingly (per-job 2000,
+total 20000, per Ryan mid-session). Sub-333 jobs need batching/credit or another
+rail — out of scope tonight.
+
+## An impatient redeem burns the credit — hold the redemption connection open for minutes
+
+l402.space receipts are one-shot per upstream settlement. First T0 run: paid 580 sats,
+then redeemed with a 30s curl timeout; the upstream (lightningfaucet LLM) took longer,
+the gateway delivered to my dead connection, and the next attempt got 402 "prepaid
+credit is spent". Concurrent retries during delivery get 409 "already being delivered"
+— do not fire parallel redeems. Router rule: single redemption request, client timeout
+≥300s, never abort mid-delivery.
+
+## Golem CLI truncates the preimage — read the full one from boltz-swaps.db
+
+`pay <bolt11>` prints `Preimage: xxxxxxxx...` (8 chars). The full 64-hex preimage is in
+`~/.golem/data/boltz-swaps.db`, table `boltz_swaps`, newest row's `data` JSON at
+`.preimage`, matched by `.request.invoice`. Verify `sha256(preimage) == paymentHash`
+from the invoice before trusting it. GolemSettlement reads it there after the CLI exits.
+
+## Golem cannot parse l402.space's challenge — router parses, Golem pays raw bolt11
+
+`golem pay <l402.space URL>` fails with "could not parse L402 challenge": l402.space
+sends `WWW-Authenticate: L402 version="0" token="..." invoice="..."` and Golem's parser
+wants `macaroon=`. Golem is out of scope to change. Workaround that is also the better
+architecture: the router fetches/parses the 402 itself (it must anyway, to quote), then
+uses `golem pay <bolt11>` purely as "pay invoice, return preimage". Deviation from PRD
+T6 ("spawns golem pay-l402") recorded in the journal.
