@@ -3,16 +3,43 @@
 One lesson per entry, summary line first. Sessions 2026-07-28/29 (PoC) and
 2026-07-29/30 (multirail + TTFP).
 
-## The gateway's paid delivery leg fails across providers while quoting normally
+## CORRECTION: llm402.ai's 502s are the PROVIDER's fault, not the gateway's
 
-Two consecutive l402.space redemptions to lightningfaucet 502'd tonight AFTER
-settlement (1,162 sats absorbed), while the DIRECT route to the same host
-delivered 2/2 — at 500 sats vs the gateway's 580, and in 1-2s vs last night's
-39s. Combined with llm402.ai's gateway-leg 502s last night: the failure lives
-in l402.space's upstream-settlement leg, not in the providers. The ledger now
-shows it with real money: direct 2 jobs 0 lost; gateway 7 jobs 5 lost. This is
-simultaneously the strongest argument for the direct route and the dataset the
-business sells.
+The 2026-07-29 direct-route test overturns the entry below it. Pinned to
+direct-only (no gateway rescue), the router paid 1,024 real sats straight to
+llm402.ai/claude-opus-4.7-fast and got the SAME 502 after settlement. Free
+probes then isolated the layer: their quote leg answers 402 in 135ms with a
+valid macaroon; their host serves 200; a deliberately wrong preimage is
+rejected in 125ms with `invalid_l402 / "Preimage does not match payment
+hash"`. So payment verification works and the failure is downstream of it —
+llm402.ai takes valid payment and then its own inference backend 502s.
+l402.space was the messenger both nights. Method lesson: two failures over
+one route prove nothing about that route; only a second INDEPENDENT route
+isolates the layer, and that test is worth its cost. Cost of the correction:
+1,024 sats. Cost of shipping the wrong belief: an Alby conversation built on
+a false premise.
+
+## A failed redemption throws away a credential we already paid for
+
+The 1,024 sats bought a macaroon that is still valid — L402 credentials
+survive a failed delivery, and the 502 may well be transient. The router
+deletes the pending_jobs row BEFORE redeeming, so on failure the macaroon
+and preimage are unrecoverable and the paid credential can never be retried.
+Every absorbed loss in the ledger is potentially a retry we discarded. Fix:
+keep the credential + preimage on the ledger row when delivered=0, and add a
+retry path (a paid credential is an asset, not a receipt). This is the
+cheapest available reduction in the loss rate.
+
+## The gateway costs 16% and was slower, but its delivery record is per-provider
+
+SUPERSEDED IN PART by the correction above — read that first. What still
+stands: two l402.space redemptions to lightningfaucet 502'd (1,162 sats
+absorbed) while the DIRECT route to the same host delivered 2/2, at 500 sats
+vs 580 and in 1-2s vs 39s. So direct is cheaper, faster, and keeps the data.
+What does NOT stand: the inference that l402.space's settlement leg is
+therefore broken in general — llm402.ai fails identically without it. Read
+the gateway's per-provider rows as evidence about the PAIR, never about the
+gateway alone.
 
 ## Degradation is per-service but failures are per-route — a design gap
 
