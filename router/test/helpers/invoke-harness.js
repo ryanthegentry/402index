@@ -78,10 +78,10 @@ export function fakeBilling() {
   let n = 0;
   return {
     calls,
-    async authorize(quotedUsd) {
+    async authorize(quotedUsd, opts = {}) {
       n += 1;
       const paymentIntentId = `pi_test_${n}`;
-      calls.authorize.push({ quotedUsd, paymentIntentId });
+      calls.authorize.push({ quotedUsd, paymentIntentId, opts });
       return {
         paymentIntentId,
         status: 'requires_capture',

@@ -11,12 +11,16 @@ import { issueToken } from './auth.js';
 // SQLite file, and SQLite has one writer; the main 402index app links here.
 
 interface SetupStripeLike {
+  customers: {
+    create(params?: Record<string, unknown>): Promise<{ id: string }>;
+  };
   checkout: {
     sessions: {
       create(params: Record<string, unknown>): Promise<{ id: string; url: string | null }>;
       retrieve(id: string): Promise<{
         id: string;
         status: string | null;
+        customer?: string | { id: string } | null;
         metadata?: Record<string, string> | null;
         setup_intent: string | { id: string } | null;
       }>;
@@ -98,8 +102,15 @@ and it can read its own receipt.</p>
     async createSession(form: Record<string, unknown>, reqBase: string): Promise<{ url: string }> {
       const budgetUsd = Math.min(500, Math.max(1, Math.round(Number(form.budget_usd) || 20)));
       const budgetDays = Math.min(90, Math.max(1, Math.round(Number(form.budget_days) || 30)));
+      // The Customer must exist before Checkout so the collected card is
+      // ATTACHED to it — an unattached PaymentMethod cannot be charged later,
+      // which is exactly how the first live walkthrough failed.
+      const customer = await stripe.customers.create({
+        metadata: { source: '402index-router-setup' }
+      });
       const session = await stripe.checkout.sessions.create({
         mode: 'setup',
+        customer: customer.id,
         payment_method_types: ['card'],
         metadata: { budget_usd: String(budgetUsd), budget_days: String(budgetDays) },
         success_url: `${base(reqBase)}/setup/complete?session_id={CHECKOUT_SESSION_ID}`
@@ -134,10 +145,12 @@ it, run setup again from the start — the old token can be revoked on request.<
         return htmlPage('Not finished', '<h1>No payment method on the session yet</h1><p>Retry the Checkout step.</p>');
       }
 
+      const customerId =
+        typeof session.customer === 'string' ? session.customer : (session.customer?.id ?? null);
       const budgetUsd = Number(session.metadata?.budget_usd) || 20;
       const budgetDays = Number(session.metadata?.budget_days) || 30;
       const principal = `agent-${randomBytes(4).toString('hex')}`;
-      db.prepare('INSERT INTO cards (principal, payment_method) VALUES (?, ?)').run(principal, pm);
+      db.prepare('INSERT INTO cards (principal, payment_method, customer) VALUES (?, ?, ?)').run(principal, pm, customerId);
       db.prepare(
         `INSERT INTO mandates (principal, budget_usd, spent_usd, expires_at) VALUES (?, ?, 0, datetime('now', ?))`
       ).run(principal, budgetUsd, `+${budgetDays} days`);

@@ -24,7 +24,7 @@ Names only; values live in Railway. Nothing here may appear in a transcript.
 | Variable | Value shape | Why |
 |---|---|---|
 | `ROUTER_STATE_KEY` | 64 hex chars, freshly generated for prod | requestState AES key — do NOT reuse the dev key |
-| `STRIPE_SECRET_KEY` | `rk_test_…` restricted TEST key | D10: test mode only; the fintech-legal gate governs live keys |
+| `STRIPE_SECRET_KEY` | `rk_test_…` restricted TEST key | D10: test mode only; the fintech-legal gate governs live keys. Required scopes: Checkout Sessions W, SetupIntents W, PaymentIntents W, **Customers W** (setup binds every card to a Customer) |
 | `ROUTER_DATA_DIR` | `/data` | on the volume |
 | `ROUTER_BIND_HOST` | `::` | Railway healthchecks/edge reach containers over IPv6 — `0.0.0.0` never becomes healthy; config refuses any non-loopback bind unless auth is required |
 | `ROUTER_AUTH_MODE` | `required` | reject unauthenticated /mcp (PRD constraint) |
