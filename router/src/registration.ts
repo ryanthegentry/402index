@@ -9,10 +9,18 @@ import type { Database } from 'better-sqlite3';
 // 2026-07-29.
 
 interface StripeLike {
+  customers: {
+    create(params?: Record<string, unknown>): Promise<{ id: string }>;
+  };
   checkout: {
     sessions: {
       create(params: Record<string, unknown>): Promise<{ id: string; url: string | null; status: string | null }>;
-      retrieve(id: string): Promise<{ id: string; status: string | null; setup_intent: string | { id: string } | null }>;
+      retrieve(id: string): Promise<{
+        id: string;
+        status: string | null;
+        customer?: string | { id: string } | null;
+        setup_intent: string | { id: string } | null;
+      }>;
       expire?(id: string): Promise<unknown>;
     };
   };
@@ -46,7 +54,7 @@ export function createRegistration(
   const getPending = db.prepare('SELECT session_id, checkout_url FROM pending_registrations WHERE principal = ?');
   const putPending = db.prepare('INSERT OR REPLACE INTO pending_registrations (principal, session_id, checkout_url) VALUES (?, ?, ?)');
   const dropPending = db.prepare('DELETE FROM pending_registrations WHERE principal = ?');
-  const putCard = db.prepare('INSERT OR REPLACE INTO cards (principal, payment_method) VALUES (?, ?)');
+  const putCard = db.prepare('INSERT OR REPLACE INTO cards (principal, payment_method, customer) VALUES (?, ?, ?)');
 
   return {
     async checkoutUrlFor(principal: string): Promise<string> {
@@ -56,8 +64,14 @@ export function createRegistration(
         if (session.status === 'open') return pending.checkout_url;
         dropPending.run(principal);
       }
+      // Customer first, so Checkout attaches the card to it — an unattached
+      // PaymentMethod cannot be charged on later invokes.
+      const customer = await stripe.customers.create({
+        metadata: { source: '402index-router-registration', principal }
+      });
       const session = await stripe.checkout.sessions.create({
         mode: 'setup',
+        customer: customer.id,
         payment_method_types: ['card'],
         client_reference_id: principal,
         success_url: successUrl
@@ -76,7 +90,9 @@ export function createRegistration(
       const si = await stripe.setupIntents.retrieve(setupIntentId);
       const pm = typeof si.payment_method === 'string' ? si.payment_method : si.payment_method?.id;
       if (!pm) return false;
-      putCard.run(principal, pm);
+      const customerId =
+        typeof session.customer === 'string' ? session.customer : (session.customer?.id ?? null);
+      putCard.run(principal, pm, customerId);
       dropPending.run(principal);
       return true;
     },

@@ -21,6 +21,11 @@ function fakeSetupStripe(overridesByShape = {}) {
   return {
     calls,
     state,
+    customers: {
+      async create() {
+        return { id: 'cus_test_setup_1' };
+      }
+    },
     checkout: {
       sessions: {
         async create(params) {
@@ -29,7 +34,7 @@ function fakeSetupStripe(overridesByShape = {}) {
         },
         async retrieve(id) {
           calls.retrieve.push(id);
-          return { id, status: state.status, metadata: state.metadata, setup_intent: state.setupIntent };
+          return { id, status: state.status, customer: 'cus_test_setup_1', metadata: state.metadata, setup_intent: state.setupIntent };
         }
       }
     },

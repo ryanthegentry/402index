@@ -26,7 +26,7 @@ const MAX_DEAD_CANDIDATES = 3;
 const DEFAULT_REDEEM_TIMEOUT_MS = 300_000; // an impatient redeem burns the credit (see NOTES.md)
 
 interface BillingLike {
-  authorize(quotedUsd: number, opts?: { paymentMethod?: string }): Promise<{ paymentIntentId: string; chargedUsd: number }>;
+  authorize(quotedUsd: number, opts?: { paymentMethod?: string; customer?: string }): Promise<{ paymentIntentId: string; chargedUsd: number }>;
   capture(paymentIntentId: string): Promise<{ status: string }>;
   void(paymentIntentId: string): Promise<{ status: string }>;
 }
@@ -172,7 +172,7 @@ async function prepareJob(
   deps: InvokeDeps,
   args: InvokeArgs,
   limits: PrincipalLimits,
-  card: { payment_method: string }
+  card: { payment_method: string; customer?: string | null }
 ): Promise<{ ok: true; material: Omit<JobMaterial, 'paymentIntentId' | 'chargedUsd'> & { quoteUsd: number; chargedUsd: number } } | { ok: false; error: string }> {
   const stages: Record<string, number> = {};
   let t = Date.now();
@@ -264,13 +264,13 @@ async function handleColdCall(
   argsDigest: string
 ) {
   console.log(`[invoke] cold call from "${principal}": ${args.capability} (max $${args.max_price_usd})`);
-  const cardStmt = deps.routerDb.prepare('SELECT payment_method FROM cards WHERE principal = ?');
-  let card = cardStmt.get(principal) as { payment_method: string } | undefined;
+  const cardStmt = deps.routerDb.prepare('SELECT payment_method, customer FROM cards WHERE principal = ?');
+  let card = cardStmt.get(principal) as { payment_method: string; customer?: string | null } | undefined;
   if (!card && deps.registration) {
     // the agent may be retrying after the human finished the hosted Checkout
     try {
       if (await deps.registration.completeIfRegistered(principal)) {
-        card = cardStmt.get(principal) as { payment_method: string } | undefined;
+        card = cardStmt.get(principal) as { payment_method: string; customer?: string | null } | undefined;
       }
     } catch (err) {
       return errResult(`REGISTRATION_CHECK_FAILED: ${(err as Error).message}`);
@@ -303,7 +303,10 @@ async function handleColdCall(
   const m = prepared.material;
 
   const authStart = Date.now();
-  const auth = await deps.billing.authorize(m.quoteUsd, { paymentMethod: card.payment_method });
+  const auth = await deps.billing.authorize(m.quoteUsd, {
+    paymentMethod: card.payment_method,
+    customer: card.customer ?? undefined
+  });
   m.stageTimings.authorize_ms = Date.now() - authStart;
 
   // A standing budget the agent granted earlier covers this charge: execute

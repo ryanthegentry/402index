@@ -76,6 +76,18 @@ function migrateDegradedCandidates(db: Database.Database): void {
   `);
 }
 
+// A saved PaymentMethod is only chargeable later when attached to a Stripe
+// Customer, and the PaymentIntent must name that Customer — learned live on
+// the first hosted walkthrough. The customer id lives beside the card.
+function migrateCards(db: Database.Database): void {
+  const existing = new Set(
+    (db.prepare('PRAGMA table_info(cards)').all() as { name: string }[]).map((c) => c.name)
+  );
+  if (!existing.has('customer')) {
+    db.exec('ALTER TABLE cards ADD COLUMN customer TEXT');
+  }
+}
+
 function migratePendingJobs(db: Database.Database): void {
   const existing = new Set(
     (db.prepare('PRAGMA table_info(pending_jobs)').all() as { name: string }[]).map((c) => c.name)
@@ -162,5 +174,6 @@ export function openRouterDb(dataDir: string): Database.Database {
   migrateSpendLedger(db);
   migratePendingJobs(db);
   migrateDegradedCandidates(db);
+  migrateCards(db);
   return db;
 }

@@ -14,6 +14,9 @@ import { startInvokeRouter } from './helpers/invoke-harness.js';
 
 function fakeStripe(state) {
   return {
+    customers: {
+      create: async () => ({ id: 'cus_fake_1' })
+    },
     checkout: {
       sessions: {
         create: async (params) => {
@@ -23,6 +26,7 @@ function fakeStripe(state) {
         retrieve: async (id) => ({
           id,
           status: state.completed ? 'complete' : 'open',
+          customer: 'cus_fake_1',
           setup_intent: state.completed ? 'seti_fake_1' : null
         })
       }

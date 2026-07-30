@@ -27,7 +27,7 @@ export class BillingError extends Error {
 }
 
 export interface Billing {
-  authorize(quotedUsd: number, opts?: { paymentMethod?: string }): Promise<Authorization>;
+  authorize(quotedUsd: number, opts?: { paymentMethod?: string; customer?: string }): Promise<Authorization>;
   capture(paymentIntentId: string): Promise<{ status: string }>;
   void(paymentIntentId: string): Promise<{ status: string }>;
   retrieve(paymentIntentId: string): Promise<{ status: string; amountCents: number }>;
@@ -54,12 +54,16 @@ export function createBilling(secretKey: string = process.env.STRIPE_SECRET_KEY 
     async authorize(quotedUsd, opts = {}) {
       const amountCents = Math.max(Math.round(quotedUsd * 100), MIN_CHARGE_CENTS);
       try {
+        // A card saved through Checkout is attached to a Customer, and Stripe
+        // only accepts it when the PaymentIntent names that Customer;
+        // off_session marks this as the merchant-initiated reuse it is.
         const intent = await stripe.paymentIntents.create({
           amount: amountCents,
           currency: 'usd',
           payment_method_types: ['card'],
           capture_method: 'manual',
           payment_method: opts.paymentMethod ?? 'pm_card_visa',
+          ...(opts.customer ? { customer: opts.customer, off_session: true } : {}),
           confirm: true
         });
         return {
