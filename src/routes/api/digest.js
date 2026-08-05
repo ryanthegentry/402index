@@ -1,7 +1,53 @@
 import { Router } from 'express'
 import db from '../../db.js'
+import { getProvider } from '../../services/l402-provider.js'
 
 const router = Router()
+
+/**
+ * Read payment counters from the partner gateway.
+ *
+ * The index has no payment ledger — no macaroon, token or settlement table exists here — so
+ * every revenue question has to be answered by the gateway or not at all. On 2026-08-03 that
+ * gap turned a user-agent slipping below a top-15 traffic cutoff into a reported lost sale,
+ * when the gateway's own counters said what was actually true: challenges issued, none ever
+ * paid, nothing earned.
+ *
+ * Failure is reported, never thrown. This block feeds the daily digest, which is how outages
+ * get noticed; a gateway that is down is exactly when the digest most needs to still render.
+ * An unreadable gateway yields nulls plus the reason — deliberately not zeroes, which would
+ * read as "we know, and the answer is none".
+ */
+async function readPaymentStatus() {
+  const unavailable = (error) => ({
+    gateway_reachable: false,
+    active_macaroons: null,
+    paid_macaroons: null,
+    unpaid_macaroons: null,
+    sats_earned_total: null,
+    error,
+  })
+
+  try {
+    const status = await getProvider().getStatus()
+    if (!status) return unavailable('no L402 gateway configured')
+
+    return {
+      gateway_reachable: true,
+      active_macaroons: status.activeMacaroons ?? null,
+      paid_macaroons: status.paidMacaroons ?? null,
+      unpaid_macaroons: status.unpaidMacaroons ?? null,
+      sats_earned_total: status.satsEarnedTotal ?? null,
+      // Present once the gateway reports swap-creation capability; null against older
+      // gateway builds. Absence is not evidence that creation works.
+      swap_creation: status.swapCreation ?? null,
+      gateway_healthy: status.healthy ?? null,
+      error: null,
+    }
+  } catch (err) {
+    return unavailable(err.message)
+  }
+}
 
 // Classify a raw User-Agent string into a coarse client type for the digest's
 // top-agents breakdown. Restored here after the #276 route-split moved the
@@ -14,8 +60,9 @@ function classifyAgent(ua) {
   return 'api'
 }
 
-router.get('/digest', (req, res) => {
+router.get('/digest', async (req, res) => {
   try {
+    const payments = await readPaymentStatus()
     const ACTIVE = "(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
 
     // ── Totals ──
@@ -203,6 +250,7 @@ router.get('/digest', (req, res) => {
         newly_down_24h: newlyDown,
         recovered_24h: recovered,
       },
+      payments,
     })
   } catch (err) {
     console.error('GET /api/v1/digest error:', err)
