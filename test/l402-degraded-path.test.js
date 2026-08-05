@@ -114,17 +114,47 @@ describe('L402 degraded path (2026-08-03 Boltz outage)', () => {
         `message must not claim a rate limit was exceeded, got: ${body.message}`,
       )
       assert.ok(
-        /upstream outage/i.test(body.message),
+        /upstream/i.test(body.message),
         `message should name the real cause, got: ${body.message}`,
       )
     })
 
-    it('sends a Retry-After that does not promise near-term recovery', async () => {
+    /**
+     * Raised from 300s on 2026-08-05. Boltz announced the shutdown is indefinite — "do not
+     * expect swap services to resume shortly", no ETA, and the company is unsure it will
+     * resume at all. A five-minute Retry-After against that is a smaller version of the same
+     * lie the 429 told: it implies the problem is nearly over. An hour is the floor now, and
+     * operators can raise it without a deploy.
+     */
+    it('sends a Retry-After sized to an outage with no estimated end', async () => {
       useBrokenGateway()
       const res = await fetch(`${API}/api/v1/export.csv`)
       const retryAfter = Number(res.headers.get('retry-after'))
       assert.ok(Number.isFinite(retryAfter), 'Retry-After must be present')
-      assert.ok(retryAfter >= 300, `Retry-After should discourage hot retry, got ${retryAfter}`)
+      assert.ok(retryAfter >= 3600, `Retry-After should not imply near-term recovery, got ${retryAfter}`)
+    })
+
+    it('lets an operator set Retry-After without a deploy', async () => {
+      useBrokenGateway()
+      process.env.L402_UNAVAILABLE_RETRY_AFTER_SECONDS = '7200'
+      try {
+        const res = await fetch(`${API}/api/v1/export.csv`)
+        assert.equal(res.headers.get('retry-after'), '7200')
+        const body = await res.json()
+        assert.equal(body.retry_after, 7200)
+      } finally {
+        delete process.env.L402_UNAVAILABLE_RETRY_AFTER_SECONDS
+      }
+    })
+
+    it('does not describe an indefinite shutdown as a passing outage', async () => {
+      useBrokenGateway()
+      const res = await fetch(`${API}/api/v1/export.csv`)
+      const body = await res.json()
+      assert.ok(
+        !/temporar|shortly|soon|brief/i.test(body.message),
+        `message must not imply near-term recovery, got: ${body.message}`,
+      )
     })
 
     it('offers no WWW-Authenticate header, because there is no challenge to answer', async () => {
