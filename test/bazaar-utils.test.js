@@ -91,6 +91,37 @@ describe('normalizeItem', () => {
     assert.equal(result.provider, 'example')
   })
 
+  it('normalizes x402 v2 amount and top-level Bazaar description', () => {
+    const item = {
+      resource: 'https://gpt55.example/v1/chat/completions/standard',
+      serviceName: 'gpt55-token-gateway',
+      description: 'GPT-5.6 Luna chat for mainstream short answers and buyer trials.',
+      accepts: [{
+        amount: '2930',
+        network: 'eip155:8453',
+        extra: { name: 'USD Coin' },
+      }],
+    }
+
+    const result = normalizeItem(item)
+    assert.equal(result.price_usd, 0.00293)
+    assert.equal(result.description, item.description)
+    assert.equal(result.name, item.description)
+    assert.equal(result.payment_asset, 'USD Coin')
+    assert.equal(result.payment_network, 'eip155:8453')
+  })
+
+  it('uses x402 v2 serviceName when no description is available', () => {
+    const item = {
+      resource: 'https://example.com/api',
+      serviceName: 'Example paid API',
+      accepts: [{ amount: '1000', network: 'eip155:8453' }],
+    }
+
+    const result = normalizeItem(item)
+    assert.equal(result.name, 'Example paid API')
+  })
+
   it('throws when no accepts array', () => {
     assert.throws(() => normalizeItem({}), /missing accepts/)
     assert.throws(() => normalizeItem({ accepts: [] }), /missing accepts/)
