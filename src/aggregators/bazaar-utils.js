@@ -86,16 +86,16 @@ export function normalizeItem(item) {
   if (!rawUrl) throw new Error('missing resource URL')
   const url = normalizeUrl(rawUrl)
 
-  const maxAmount = accept.maxAmountRequired
+  const maxAmount = accept.maxAmountRequired ?? accept.amount
   const priceUsd = maxAmount ? parseFloat(maxAmount) / 1e6 : null
 
   const paymentAsset = accept.extra?.name || 'USDC'
 
-  const description = accept.description || null
+  const description = accept.description || item.description || null
   const provider = extractProviderFromUrl(url)
   const name = description
     ? description.substring(0, 80) + (description.length > 80 ? '...' : '')
-    : url
+    : item.serviceName || url
 
   const sourceId = url
 
