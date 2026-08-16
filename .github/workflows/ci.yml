@@ -15,7 +15,7 @@ jobs:
         node-version: [24, 20]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -46,7 +46,7 @@ jobs:
       matrix:
         node-version: [20]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v6
         with:
@@ -86,7 +86,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Use Node.js 22
         uses: actions/setup-node@v6
@@ -105,7 +105,7 @@ jobs:
     needs: test
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Use Node.js 20
         uses: actions/setup-node@v6
@@ -127,7 +127,7 @@ jobs:
     needs: test
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Use Node.js 20
         uses: actions/setup-node@v6
