@@ -1,0 +1,10 @@
+name: "Colombia TRM"
+url: "https://x402.lagaceta.net/trm"
+protocol: x402
+price_usd: 0.005
+payment_asset: "USDC"
+payment_network: "Base"
+category: "real-time-data"
+description: "Official Superfinanciera daily USD/COP (datos.gov.co mcec-87by). Optional mode=live BanRep intradía. Fail-closed."
+provider: "TemporalOps"
+http_method: "GET"
