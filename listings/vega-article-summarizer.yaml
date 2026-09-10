@@ -1,0 +1,13 @@
+name: "Vega Article Summarizer"
+description: "Summarize articles and URLs into key points. x402 on Base mainnet."
+url: "https://summarize.kramsg1online.com/summarize"
+protocol: "x402"
+price_usd: 0.02
+payment_asset: "USDC"
+payment_network: "eip155:8453"
+category: "ai/ml"
+provider: "kramsg1online"
+wallet: "0x047b2A7fc72862a0e3E772eb53b19d35929BEd46"
+method: "POST"
+request_body: '{"url": "string (required)"}'
+response: "JSON with summary, key_points, and extracted_text"
