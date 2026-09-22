@@ -648,6 +648,12 @@ describe('isKnownNativeAsset', () => {
     assert.equal(result.chain, 'Bitcoin')
   })
 
+  it('recognizes XNO → { known: true, chain: "Nano" }', () => {
+    const result = isKnownNativeAsset('XNO')
+    assert.equal(result.known, true)
+    assert.equal(result.chain, 'Nano')
+  })
+
   it('returns unknown for random string', () => {
     const result = isKnownNativeAsset('DOGE')
     assert.equal(result.known, false)
