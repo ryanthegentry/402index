@@ -23,8 +23,8 @@ function stmt(key, sql) {
 // Bug A fix: removed WHERE guard so re-listed soft-deleted services are reactivated.
 // Added provider_deleted = 0 and conditional approval_reason to SET clause.
 const upsert = () => stmt('upsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id, hostname)
-  VALUES (@id, @name, @description, @url, 'x402', @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'bazaar', @source_id, @hostname)
+  INSERT INTO services (id, name, description, url, protocol, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id, http_method, hostname)
+  VALUES (@id, @name, @description, @url, 'x402', @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'bazaar', @source_id, COALESCE(@http_method, 'GET'), @hostname)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = CASE WHEN services.domain_verified = 1 THEN services.name ELSE excluded.name END,
     description = CASE WHEN services.domain_verified = 1 THEN services.description ELSE excluded.description END,
@@ -34,6 +34,8 @@ const upsert = () => stmt('upsert', `
     category = CASE WHEN services.domain_verified = 1 THEN services.category ELSE excluded.category END,
     input_schema = excluded.input_schema,
     output_schema = excluded.output_schema,
+    -- A declared method wins; an undeclared one leaves the stored method alone (#353).
+    http_method = COALESCE(@http_method, services.http_method),
     provider = CASE WHEN services.domain_verified = 1 THEN services.provider ELSE excluded.provider END,
     source_id = excluded.source_id,
     hostname = COALESCE(excluded.hostname, services.hostname),
