@@ -1,5 +1,8 @@
 name: "Aomi Labs Task API (Arc Mainnet)"
-description: "Aomi Labs builds the execution harness for onchain finance. Its production Task API lets an agent inspect a simulated onchain action before buying the exact unsigned transaction bundle. Preparation costs 0.01 USDC over x402 on Arc Mainnet; status and the signed preview are free. Retrieval is a separate purchase priced at 3% of simulated gross outgoing USDC, free for zero outflow. The buyer's wallet alone signs and broadcasts."
+description: |-
+  Aomi Task API sells transaction bundles that delivers arbitrary intent onchain, for example, “Rebalance my treasury: swap 20,000 USDC into EURC, put half into a euro yield vault, and keep half liquid. Stop if the FX spread and fees exceed 0.5%.” - Aomi’s agentic runtime plans across supported protocols and routes, returning the transactions that fulfills the intent.
+
+  Task API lets an agent check the outcome of an onchain action before buying the transactions needed to carry it out. On Arc Mainnet, the agent pays 0.01 USDC over x402 for Aomi to prepare and simulate an intent. It can inspect a signed preview for free, including the constraint checks, simulated effects, frozen bundle hash, and quoted retrieval price. If it chooses to proceed, a separate x402 purchase delivers the exact unsigned bundle; the buyer's wallet alone signs and broadcasts. A direct two-purchase Mainnet run is documented in the live demo and supporting package. The demo's FX intent is illustrative; pool-aware swap preparation remains on the roadmap. The Task API integration guide is live and explains the two purchases, free status checks, signed preview, and unsigned delivery.
 url: "https://api.aomi.dev/v1/task/build"
 protocol: x402
 http_method: POST
