@@ -1,0 +1,17 @@
+name: "Vega Article Summarizer"
+url: "https://summarize.kramsg1online.com/summarize"
+protocol: x402
+price_usd: 0.02
+payment_asset: "USDC"
+category: "ai-llm"
+description: "Summarize articles and URLs into key points. x402 payment-gated on Base mainnet."
+provider: "kramsg1online"
+payment_wallet: "0x047b2A7fc72862a0e3E772eb53b19d35929BEd46"
+payment_network: "eip155:8453"
+payment_token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+method: "POST"
+input_schema: |
+  {"type": "object", "properties": {"url": {"type": "string", "format": "uri"}, "text": {"type": "string"}}}
+output_schema: "summary content"
+openapi_spec: "https://github.com/kramsg1405/revenue-apis/blob/main/docs/summarize-openapi.json"
+discovery_endpoint: "https://summarize.kramsg1online.com/.well-known/x402.json"
