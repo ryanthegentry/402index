@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import { healthChecksTableDDL, COUNTERS_TABLE_DDL } from '../../src/db.js'
 
 /**
  * Create a fresh :memory: SQLite DB with the full canonical schema.
@@ -6,6 +7,9 @@ import Database from 'better-sqlite3'
  * Source of truth: src/db.js
  * SYNC WARNING: Any ALTER TABLE migration added to src/db.js must be
  * reflected here. Run `PRAGMA table_info(services)` on both to compare.
+ *
+ * health_checks and counters are generated from src/db.js rather than copied: a hand-maintained
+ * copy of the status enum here is one of the three that drifted in #313.
  */
 export function createTestDb() {
   const db = new Database(':memory:')
@@ -74,16 +78,10 @@ export function createTestDb() {
     CREATE UNIQUE INDEX idx_services_url_protocol ON services(url, protocol);
     CREATE INDEX idx_services_hostname ON services(hostname);
 
-    CREATE TABLE health_checks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      service_id TEXT NOT NULL REFERENCES services(id),
-      checked_at TEXT NOT NULL DEFAULT (datetime('now')),
-      status TEXT NOT NULL CHECK(status IN ('healthy', 'degraded', 'down', 'timeout', 'error', 'rate_limited', 'method_not_allowed')),
-      response_time_ms INTEGER,
-      http_status INTEGER,
-      error_message TEXT
-    );
+    ${healthChecksTableDDL()};
     CREATE INDEX idx_health_checks_service ON health_checks(service_id, checked_at);
+
+    ${COUNTERS_TABLE_DDL};
 
     CREATE TABLE daily_snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

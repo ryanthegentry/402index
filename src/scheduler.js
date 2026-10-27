@@ -6,7 +6,7 @@ import { pollSponge } from './aggregators/sponge.js'
 import { pollL402Directory } from './aggregators/l402directory.js'
 import { pollMPP } from './aggregators/mpp.js'
 import { pollMppscan } from './aggregators/mppscan.js'
-import { runHealthChecks } from './health/checker.js'
+import { runHealthChecks, formatCycleSummary } from './health/checker.js'
 import { classifyServices } from './services/classify.js'
 import { captureSnapshot } from './services/daily-snapshot.js'
 
@@ -81,7 +81,10 @@ function runHealthCheckGuarded() {
   if (healthCheckRunning) return
   healthCheckRunning = true
   runHealthChecks()
-    .then(() => runDailySnapshot())
+    .then(result => {
+      console.log(`[scheduler] ${formatCycleSummary(result)}`)
+      return runDailySnapshot()
+    })
     .catch(err => console.error('[scheduler] Health check failed:', err.message))
     .finally(() => { healthCheckRunning = false })
 }

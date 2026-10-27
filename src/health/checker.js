@@ -3,7 +3,13 @@ import dns from 'dns'
 import { statfs } from 'fs/promises'
 import { isIPv4, isIPv6 } from 'net'
 import { dirname } from 'path'
-import db, { DB_PATH } from '../db.js'
+import db, {
+  DB_PATH,
+  HEALTH_CHECK_STATUSES,
+  COUNTER_KEYS,
+  incrementCounter,
+  setCounter,
+} from '../db.js'
 import { parseWwwAuthenticate, isValidMacaroon, isValidInvoice } from '../services/l402-utils.js'
 import { parsePaymentRequired, parsePaymentRequiredBody, validatePaymentRequirements } from '../services/x402-utils.js'
 import { detectProtocol, getPrimaryDetection } from '../services/detect-protocol.js'
@@ -12,6 +18,23 @@ import { probeEndpoint } from '../services/probe-endpoint.js'
 const TIMEOUT_MS = 5000
 const CONCURRENCY = 10
 const HEALTH_CHECK_RETENTION_DAYS = 3
+
+// ─── Uptime semantics, pinned per status ─────────────────────────────────────
+//
+// Up counts toward numerator and denominator; down toward the denominator only; excluded statuses
+// carry no availability signal at all and are left out of both. A 429 means the provider throttled
+// our prober — scoring that as downtime punished the most popular endpoints in the index.
+
+export const UPTIME_UP_STATUSES = ['healthy', 'degraded']
+export const UPTIME_EXCLUDED_STATUSES = ['rate_limited']
+export const UPTIME_DOWN_STATUSES = HEALTH_CHECK_STATUSES.filter(
+  s => !UPTIME_UP_STATUSES.includes(s) && !UPTIME_EXCLUDED_STATUSES.includes(s)
+)
+
+/** Diagnostic stored with a 406 row: the provider rejected the request before the paywall ran. */
+export const NOT_ACCEPTABLE_MESSAGE = 'HTTP 406: provider rejected request format before paywall'
+
+const sqlStatusList = statuses => statuses.map(s => `'${s}'`).join(', ')
 
 /**
  * Check if a resolved IP address is private/reserved.
@@ -125,10 +148,11 @@ const updateService = () => stmt('updateService', `
 const getUptime = () => stmt('getUptime', `
   SELECT
     COUNT(*) as total,
-    SUM(CASE WHEN status IN ('healthy', 'degraded') THEN 1 ELSE 0 END) as up
+    SUM(CASE WHEN status IN (${sqlStatusList(UPTIME_UP_STATUSES)}) THEN 1 ELSE 0 END) as up
   FROM health_checks
   WHERE service_id = ?
-    AND checked_at > datetime('now', '-3 days')
+    AND checked_at > datetime('now', '-${HEALTH_CHECK_RETENTION_DAYS} days')
+    AND status NOT IN (${sqlStatusList(UPTIME_EXCLUDED_STATUSES)})
 `)
 
 const getRecentLatencies = () => stmt('getRecentLatencies', `
@@ -426,8 +450,45 @@ async function checkFacilitatorReachable(url) {
   return reachable
 }
 
+/** Row-level diagnostic for statuses whose HTTP code alone does not explain the failure. */
+function diagnosticMessage(checkStatus, httpStatus) {
+  if (checkStatus === 'not_acceptable') return NOT_ACCEPTABLE_MESSAGE
+  if (httpStatus >= 500) return `HTTP ${httpStatus}`
+  return null
+}
+
+/**
+ * Run one persist attempt in isolation.
+ *
+ * A failed write must not abort the remaining rows for this URL, nor the cycle. Failures are
+ * counted in the DB (so the count survives restarts and the scripts/healthcheck.js process
+ * boundary) and reported in their own category — a rejected write is not a probe error.
+ */
+function persistIsolated(persist, serviceId, payload, { role, protocol, url }, failures) {
+  try {
+    persist(serviceId, payload)
+    return true
+  } catch (err) {
+    failures.push({
+      category: 'persist',
+      role,
+      serviceId,
+      protocol: protocol || null,
+      url: url || null,
+      status: payload.checkStatus ?? null,
+      error: err.message,
+    })
+    incrementCounter(COUNTER_KEYS.HEALTH_WRITE_FAILURES, 1)
+    console.error(
+      `[health] persist failed (${role}) service=${serviceId} protocol=${protocol || '?'} ` +
+      `status=${payload.checkStatus ?? '?'} url=${url || '?'}: ${err.message}`
+    )
+    return false
+  }
+}
+
 /** Persist health check result and update service record. */
-function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, consecutiveLatencySpikes, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown, l402Compliant, l402DegradeReason, l402Format, lngetCompatible }) {
+export function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus, responseTimeMs, errorMessage, consecutiveFailures, consecutiveLatencySpikes, historicalP50, registeredAt, x402PaymentValid, x402FacilitatorReachable, x402AssetKnown, l402Compliant, l402DegradeReason, l402Format, lngetCompatible }) {
   try {
     // Read current status before update (for event emission)
     const oldStatus = db.prepare('SELECT health_status FROM services WHERE id = ?').get(serviceId)?.health_status
@@ -437,7 +498,7 @@ function persistHealthResult(serviceId, { checkStatus, healthStatus, httpStatus,
       status: checkStatus,
       response_time_ms: responseTimeMs,
       http_status: httpStatus,
-      error_message: errorMessage || (httpStatus >= 500 ? `HTTP ${httpStatus}` : null),
+      error_message: errorMessage || diagnosticMessage(checkStatus, httpStatus),
     })
 
     const newP50 = errorMessage ? (historicalP50 || null) : (calculateP50(serviceId) ?? responseTimeMs)
@@ -649,15 +710,35 @@ export function detectProtocolChanges(url, serviceId, protocol, allDetections, h
 
 const getSiblings = () => stmt('getSiblings', "SELECT id, url, protocol, http_method, probe_body, latency_p50_ms, consecutive_failures, consecutive_latency_spikes, registered_at, x402_payment_valid, probe_status FROM services WHERE url = ? AND id != ? AND (status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)")
 
-/** Check a single service: HTTP probe, classify result, persist. */
-export async function checkService(service) {
+/**
+ * Check a single service: HTTP probe, classify result, persist.
+ *
+ * @param {object} service - Service row
+ * @param {object} [options]
+ * @param {Function} [options.persist=persistHealthResult] - Injectable persist (tests)
+ * @returns {Promise<{id: string, healthStatus: string, httpStatus: number|null, skipReason?: 'unprobeable'|'dedup',
+ *   persisted: boolean, persistFailures: object[], siblingsUpdated: {id: string, protocol: string}[]}>}
+ */
+export async function checkService(service, { persist = persistHealthResult } = {}) {
   const { id, url, protocol, http_method, probe_body, latency_p50_ms: historicalP50, consecutive_failures: prevFailures, consecutive_latency_spikes: prevLatencySpikes, x402_payment_valid: currentPaymentValid } = service
 
+  const persistFailures = []
+  const siblingsUpdated = []
+  const skipped = reason => ({
+    id,
+    healthStatus: 'skipped',
+    httpStatus: null,
+    skipReason: reason,
+    persisted: false,
+    persistFailures,
+    siblingsUpdated,
+  })
+
   // Skip unprobeable services — their health_status is managed via admin endpoint
-  if (service.probe_status === 'unprobeable') return { id, healthStatus: 'skipped', httpStatus: null }
+  if (service.probe_status === 'unprobeable') return skipped('unprobeable')
 
   // Dedup guard: skip if already checked by a sibling in this cycle
-  if (checkedThisCycle.has(id)) return { id, healthStatus: 'skipped', httpStatus: null }
+  if (checkedThisCycle.has(id)) return skipped('dedup')
   checkedThisCycle.add(id)
 
   // Per-host rate limiting: wait if we probed this host recently
@@ -710,7 +791,7 @@ export async function checkService(service) {
   // Build protocol-specific fields via extracted helper
   const protoFields = await buildProtocolFields(protocol, getPrimaryDetection(result.detection, protocol), result, service)
 
-  persistHealthResult(id, {
+  const persisted = persistIsolated(persist, id, {
     ...classification,
     httpStatus: result.httpStatus,
     responseTimeMs: result.responseTimeMs,
@@ -721,7 +802,7 @@ export async function checkService(service) {
     l402DegradeReason: protocol === 'L402'
       ? (classification.degradeReason?.includes('payment hash') ? classification.degradeReason : null)
       : null,
-  })
+  }, { role: 'primary', protocol, url }, persistFailures)
 
   // ─── Sibling lookup and update ──────────────────────────────────────────
   const siblings = getSiblings().all(url, id)
@@ -747,7 +828,7 @@ export async function checkService(service) {
         sibling.consecutive_failures || 0, sibling.latency_p50_ms,
         result.responseTimeMs, sibling.consecutive_latency_spikes || 0
       )
-      persistHealthResult(sibling.id, {
+      if (persistIsolated(persist, sibling.id, {
         ...sibClassification,
         httpStatus: result.httpStatus,
         responseTimeMs: result.responseTimeMs,
@@ -761,7 +842,9 @@ export async function checkService(service) {
         l402DegradeReason: null,
         l402Format: null,
         lngetCompatible: null,
-      })
+      }, { role: 'sibling', protocol: sibling.protocol, url }, persistFailures)) {
+        siblingsUpdated.push({ id: sibling.id, protocol: sibling.protocol })
+      }
     } else if (hasSiblingProtocol) {
       // Sibling's protocol detected — run protocol-specific validation
       const sibClassification = classifyHealthStatus(
@@ -784,7 +867,7 @@ export async function checkService(service) {
       }
 
       const sibProtoFields = await buildProtocolFields(sibling.protocol, siblingDetection, result, sibling)
-      persistHealthResult(sibling.id, {
+      if (persistIsolated(persist, sibling.id, {
         ...sibClassification,
         httpStatus: result.httpStatus,
         responseTimeMs: result.responseTimeMs,
@@ -795,10 +878,12 @@ export async function checkService(service) {
         l402DegradeReason: sibling.protocol === 'L402'
           ? (sibClassification.degradeReason?.includes('payment hash') ? sibClassification.degradeReason : null)
           : null,
-      })
+      }, { role: 'sibling', protocol: sibling.protocol, url }, persistFailures)) {
+        siblingsUpdated.push({ id: sibling.id, protocol: sibling.protocol })
+      }
     } else {
       // Sibling's protocol NOT in detection array — mark degraded
-      persistHealthResult(sibling.id, {
+      if (persistIsolated(persist, sibling.id, {
         healthStatus: 'degraded',
         checkStatus: 'degraded',
         httpStatus: result.httpStatus,
@@ -815,7 +900,9 @@ export async function checkService(service) {
         l402DegradeReason: sibling.protocol === 'x402' ? null : 'protocol not detected in probe response',
         l402Format: null,
         lngetCompatible: null,
-      })
+      }, { role: 'sibling', protocol: sibling.protocol, url }, persistFailures)) {
+        siblingsUpdated.push({ id: sibling.id, protocol: sibling.protocol })
+      }
     }
   }
 
@@ -837,10 +924,17 @@ export async function checkService(service) {
     console.warn(`[health] Protocol change detection failed for ${url}: ${err.message}`)
   }
 
-  return { id, healthStatus: classification.healthStatus, httpStatus: result.httpStatus }
+  return {
+    id,
+    healthStatus: classification.healthStatus,
+    httpStatus: result.httpStatus,
+    persisted,
+    persistFailures,
+    siblingsUpdated,
+  }
 }
 
-function calculateUptime(serviceId) {
+export function calculateUptime(serviceId) {
   const row = getUptime().get(serviceId)
   if (!row || row.total === 0) return null
   return Math.round((row.up / row.total) * 10000) / 10000
@@ -906,15 +1000,165 @@ export async function checkDiskSpace({ statfsFn = statfs, database = db } = {}) 
   }
 }
 
+// Rows a cycle never probes, classified exactly the way getServices selects them. getServices'
+// exclusions are intentional (#236) and unchanged — reconciliation only has to account for them
+// honestly, which means mirroring its predicates rather than approximating them.
+const ACTIVE_PREDICATE = "(status = 'active' OR status IS NULL) AND (provider_deleted = 0 OR provider_deleted IS NULL)"
+const PROBEABLE_PREDICATE = "(probe_status = 'probeable' OR probe_status IS NULL)"
+
+const emptyProbedBreakdown = () => ({ healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 })
+
+/**
+ * Every services row as it stood when the cycle started.
+ *
+ * Reconciling a cycle-start probe set against end-of-cycle counts is not reconciliation: the
+ * pollers run on the same hourly interval and insert with status defaulting to 'active', so a
+ * multi-minute cycle routinely races inserts, deactivations and purges. Buckets are a partition of
+ * this fixed id set, which is the only thing that can make `unaccounted` reliably 0 — and which
+ * stops a row deactivated after being probed from landing in two buckets at once.
+ *
+ * @returns {{id: string, protocol: string, active: number, unprobeable: number}[]}
+ */
+export function snapshotServicesForCycle(database = db) {
+  return database.prepare(
+    `SELECT id,
+            COALESCE(protocol, 'unknown') AS protocol,
+            CASE WHEN ${ACTIVE_PREDICATE} THEN 1 ELSE 0 END AS active,
+            CASE WHEN ${PROBEABLE_PREDICATE} THEN 0 ELSE 1 END AS unprobeable
+     FROM services`
+  ).all()
+}
+
+/**
+ * Account for every services row carrying each protocol.
+ *
+ * The denominator is every row with that protocol in the cycle-start snapshot — the number the
+ * digest calls "1,218". Buckets partition it: probed (by result status, including unknown and
+ * error), sibling_updated (deduped but health-updated: checked, never "skipped"),
+ * skipped_unprobeable, excluded_inactive, and persist_failed. `unaccounted` is the residual and
+ * must be 0.
+ *
+ * Rows that appear or disappear while the cycle runs are reported in their own symmetric counters
+ * — added_mid_cycle and vanished_mid_cycle — and never folded into the partition, because neither
+ * one had a full cycle's worth of chances to land in a bucket.
+ *
+ * @returns {{byProtocol: Object<string, object>, vanished: number, added: number}}
+ */
+function buildReconciliation({ snapshot, probedById, siblingUpdatedIds, persistFailedIds, database = db }) {
+  const recon = {}
+  const bucketFor = protocol => {
+    const key = protocol || 'unknown'
+    if (!recon[key]) {
+      recon[key] = {
+        denominator: 0,
+        probed: emptyProbedBreakdown(),
+        probed_total: 0,
+        sibling_updated: 0,
+        skipped_unprobeable: 0,
+        excluded_inactive: 0,
+        persist_failed: 0,
+        unaccounted: 0,
+        added_mid_cycle: 0,
+        vanished_mid_cycle: 0,
+      }
+    }
+    return recon[key]
+  }
+
+  // Precedence, applied to a fixed id set so no row can be counted twice: what actually happened
+  // to the row outranks what the table says about it now. A row probed at 00:05 and deactivated at
+  // 00:30 was probed — reporting it as excluded_inactive as well is the double-count.
+  const snapshotIds = new Set()
+  for (const row of snapshot) {
+    snapshotIds.add(row.id)
+    const bucket = bucketFor(row.protocol)
+    bucket.denominator++
+
+    if (probedById.has(row.id)) {
+      const status = probedById.get(row.id)
+      bucket.probed[status] = (bucket.probed[status] || 0) + 1
+      bucket.probed_total++
+    } else if (siblingUpdatedIds.has(row.id)) {
+      bucket.sibling_updated++
+    } else if (persistFailedIds.has(row.id)) {
+      bucket.persist_failed++
+    } else if (!row.active) {
+      bucket.excluded_inactive++
+    } else if (row.unprobeable) {
+      bucket.skipped_unprobeable++
+    }
+  }
+
+  let added = 0
+  let vanished = 0
+  const endIds = new Set()
+  for (const row of database.prepare(
+    "SELECT id, COALESCE(protocol, 'unknown') AS protocol FROM services"
+  ).all()) {
+    endIds.add(row.id)
+    if (!snapshotIds.has(row.id)) {
+      added++
+      bucketFor(row.protocol).added_mid_cycle++
+    }
+  }
+  for (const row of snapshot) {
+    if (!endIds.has(row.id)) {
+      vanished++
+      bucketFor(row.protocol).vanished_mid_cycle++
+    }
+  }
+
+  for (const bucket of Object.values(recon)) {
+    bucket.unaccounted = bucket.denominator - (
+      bucket.probed_total + bucket.sibling_updated + bucket.skipped_unprobeable +
+      bucket.excluded_inactive + bucket.persist_failed
+    )
+  }
+
+  return { byProtocol: recon, vanished, added }
+}
+
+/**
+ * One-line cycle summary, shared by both callers so the scheduler and scripts/healthcheck.js
+ * report identically.
+ * @param {object} result - runHealthChecks() return value
+ * @returns {string}
+ */
+export function formatCycleSummary(result) {
+  const recon = result?.reconciliation || {}
+  const unaccounted = Object.values(recon).reduce((sum, r) => sum + (r.unaccounted || 0), 0)
+  const perProtocol = Object.entries(recon).map(([proto, r]) =>
+    `${proto}[denominator=${r.denominator} probed=${r.probed_total} sibling_updated=${r.sibling_updated} ` +
+    `unprobeable=${r.skipped_unprobeable} inactive=${r.excluded_inactive} ` +
+    `persist_failed=${r.persist_failed} unaccounted=${r.unaccounted}]`
+  ).join(' ')
+
+  return [
+    `cycle: healthy=${result?.healthy ?? 0} degraded=${result?.degraded ?? 0} down=${result?.down ?? 0}`,
+    `unknown=${result?.unknown ?? 0} error=${result?.error ?? 0}`,
+    `persist_failed=${result?.persistFailed ?? 0} unaccounted=${unaccounted}`,
+    `added_mid_cycle=${result?.cycle?.added_mid_cycle ?? 0} vanished_mid_cycle=${result?.cycle?.vanished_mid_cycle ?? 0}`,
+    perProtocol,
+  ].join(' ').trim()
+}
+
 /**
  * Run health checks for all services (prunes old records first).
- * @returns {Promise<{healthy: number, degraded: number, down: number, unknown: number, error: number}>} Counts by status
+ *
+ * @param {object} [options]
+ * @param {number} [options.concurrency=10] - Endpoints probed in parallel per batch
+ * @returns {Promise<{healthy: number, degraded: number, down: number, unknown: number, error: number,
+ *   skipped: number, persistFailed: number, byProtocol: object, reconciliation: object,
+ *   persistFailures: object[], cycle: object|null}>}
  */
-export async function runHealthChecks() {
+export async function runHealthChecks({ concurrency = CONCURRENCY } = {}) {
   // Check disk space — skip run if volume is too full
   const diskCheck = await checkDiskSpace()
   if (diskCheck === 'skip') {
-    return { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 }
+    return {
+      healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0, skipped: 0, persistFailed: 0,
+      byProtocol: {}, reconciliation: {}, persistFailures: [], cycle: null,
+    }
   }
 
   // Prune old records before running new checks
@@ -924,19 +1168,27 @@ export async function runHealthChecks() {
   hostLastProbe.clear()
   checkedThisCycle.clear()
 
+  // Snapshot first, then select: a row inserted between the two calls is reported as
+  // added_mid_cycle rather than becoming an unaccounted residual.
+  const snapshot = snapshotServicesForCycle()
+
   // Shuffle to distribute same-host endpoints across the full check cycle
   const services = shuffleArray(getServices().all())
   console.log(`[health] Checking ${services.length} services...`)
 
-  const results = { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0, skipped: 0 }
+  const results = { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0, skipped: 0, persistFailed: 0 }
   const byProtocol = {}
   const errors = []
+  const persistFailures = []
+  const probedById = new Map()          // service id → result status bucket
+  const siblingUpdatedIds = new Set()   // deduped rows whose health was updated by a sibling pass
+  const persistFailedIds = new Set()
   let checked = 0
   const startTime = Date.now()
 
   // Process in batches for concurrency control
-  for (let i = 0; i < services.length; i += CONCURRENCY) {
-    const batch = services.slice(i, i + CONCURRENCY)
+  for (let i = 0; i < services.length; i += concurrency) {
+    const batch = services.slice(i, i + concurrency)
     const batchResults = await Promise.allSettled(
       batch.map(s => checkService(s))
     )
@@ -947,19 +1199,33 @@ export async function runHealthChecks() {
       const service = batch[j]
       const proto = service.protocol || 'unknown'
 
-      if (!byProtocol[proto]) byProtocol[proto] = { healthy: 0, degraded: 0, down: 0, unknown: 0, error: 0 }
+      if (!byProtocol[proto]) byProtocol[proto] = emptyProbedBreakdown()
 
       if (result.status === 'fulfilled') {
         const status = result.value.healthStatus
+
+        for (const sibling of result.value.siblingsUpdated || []) {
+          siblingUpdatedIds.add(sibling.id)
+        }
+
+        for (const failure of result.value.persistFailures || []) {
+          persistFailures.push(failure)
+          persistFailedIds.add(failure.serviceId)
+          results.persistFailed++
+        }
+
         if (status === 'skipped') {
           results.skipped++
-        } else {
+        } else if (result.value.persisted) {
           results[status] = (results[status] || 0) + 1
           byProtocol[proto][status] = (byProtocol[proto][status] || 0) + 1
+          probedById.set(service.id, status)
         }
+        // A probed row whose write was rejected is reported under persist_failed, not as a result.
       } else {
         results.error++
         byProtocol[proto].error++
+        probedById.set(service.id, 'error')
         if (errors.length < 10) {
           errors.push({ url: service.url, protocol: proto, error: result.reason?.message || 'unknown' })
         }
@@ -972,11 +1238,57 @@ export async function runHealthChecks() {
   }
 
   const durationSec = ((Date.now() - startTime) / 1000).toFixed(1)
+  const { byProtocol: reconciliation, vanished, added } = buildReconciliation({
+    snapshot, probedById, siblingUpdatedIds, persistFailedIds,
+  })
+  const unaccounted = Object.values(reconciliation).reduce((sum, r) => sum + r.unaccounted, 0)
+
+  const cycle = {
+    finished_at: new Date().toISOString(),
+    duration_sec: Number(durationSec),
+    concurrency,
+    dispatched: services.length,
+    results: { ...results },
+    persist_failed: results.persistFailed,
+    unaccounted,
+    // The two directions the table can move under a running cycle. Reported, never folded into the
+    // snapshot's partition — that is what keeps `unaccounted` an integrity signal instead of noise.
+    vanished_mid_cycle: vanished,
+    added_mid_cycle: added,
+    by_protocol: reconciliation,
+  }
+  if (vanished > 0 || added > 0) {
+    console.log(
+      `[health] table changed under the cycle: ${added} row(s) added, ${vanished} row(s) deleted — ` +
+      'reported separately, outside the cycle-start denominator'
+    )
+  }
+
+  // Written from whichever process ran the cycle, so the digest reports the real last cycle.
+  setCounter(COUNTER_KEYS.LAST_HEALTH_CYCLE, JSON.stringify(cycle))
+
   console.log(`[health] Done in ${durationSec}s. healthy=${results.healthy} degraded=${results.degraded} down=${results.down} unknown=${results.unknown}`)
 
-  // Per-protocol breakdown
-  for (const [proto, counts] of Object.entries(byProtocol)) {
-    console.log(`[health] ${proto}: healthy=${counts.healthy} degraded=${counts.degraded} down=${counts.down}`)
+  // Per-protocol reconciliation — the full breakdown, not just healthy/degraded/down
+  for (const [proto, r] of Object.entries(reconciliation)) {
+    console.log(
+      `[health] ${proto}: denominator=${r.denominator} probed=${r.probed_total} ` +
+      `(healthy=${r.probed.healthy} degraded=${r.probed.degraded} down=${r.probed.down} ` +
+      `unknown=${r.probed.unknown} error=${r.probed.error}) sibling_updated=${r.sibling_updated} ` +
+      `skipped_unprobeable=${r.skipped_unprobeable} excluded_inactive=${r.excluded_inactive} ` +
+      `persist_failed=${r.persist_failed} unaccounted=${r.unaccounted} ` +
+      `added_mid_cycle=${r.added_mid_cycle} vanished_mid_cycle=${r.vanished_mid_cycle}`
+    )
+  }
+
+  // Persist failures are their own category — never folded into the probe-error count
+  if (persistFailures.length > 0) {
+    const shown = persistFailures.slice(0, 10)
+    const truncated = persistFailures.length > shown.length ? ' — list truncated' : ''
+    console.error(`[health] Persist failures (${persistFailures.length} total, showing ${shown.length}${truncated}):`)
+    for (const f of shown) {
+      console.error(`[health]   ${f.role} ${f.protocol || '?'} service=${f.serviceId} status=${f.status}: ${f.error}`)
+    }
   }
 
   // First N errors for debugging
@@ -987,5 +1299,5 @@ export async function runHealthChecks() {
     }
   }
 
-  return results
+  return { ...results, byProtocol, reconciliation, persistFailures, cycle }
 }
