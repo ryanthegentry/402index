@@ -18,6 +18,8 @@ export const registerUpsert = () => stmt('registerUpsert', `
     payment_network = COALESCE(excluded.payment_network, services.payment_network),
     category = COALESCE(excluded.category, services.category),
     provider = COALESCE(excluded.provider, services.provider),
+    -- Explicit registration must not inherit Bazaar's upstream-retirement lifecycle.
+    source = CASE WHEN services.source = 'bazaar' THEN excluded.source ELSE services.source END,
     contact_email = COALESCE(excluded.contact_email, services.contact_email),
     http_method = COALESCE(excluded.http_method, services.http_method),
     probe_body = COALESCE(excluded.probe_body, services.probe_body),
