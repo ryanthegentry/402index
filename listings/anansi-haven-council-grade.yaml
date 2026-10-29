@@ -1,0 +1,9 @@
+name: "Anansi Haven Council Grade"
+description: "Trade postmortem grade for trading agents: deterministic scoring (entry and exit efficiency, stop placement against MFE/MAE benchmarks, R-multiple capture, rule checks). Pay-per-call, no API key"
+url: "https://anansi-haven.anansidata.workers.dev/v1/paid/council_grade"
+protocol: "x402"
+price_usd: 0.02
+payment_asset: "USDC"
+payment_network: "Base"
+category: "finance"
+provider: "Anansi Data"
