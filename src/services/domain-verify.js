@@ -240,11 +240,6 @@ export async function verifyClaim(domain, { fetchFn = fetch } = {}) {
     "UPDATE domain_claims SET status = 'verified', verified_at = datetime('now') WHERE id = ? AND status = 'pending'"
   ).run(claim.id)
 
-  // Flag all services under this domain as domain-verified (protects from poller overwrites)
-  db.prepare(
-    "UPDATE services SET domain_verified = 1 WHERE hostname = ? AND (status = 'active' OR status IS NULL)"
-  ).run(normalizedDomain)
-
   // Retroactively approve all pending services from this newly verified domain
   const retroApproved = db.prepare(
     `UPDATE services SET status = 'active', approval_reason = 'domain-verified', updated_at = datetime('now')
@@ -253,6 +248,12 @@ export async function verifyClaim(domain, { fetchFn = fetch } = {}) {
   if (retroApproved.changes > 0) {
     console.log(`[domain-verify] Retroactively approved ${retroApproved.changes} pending services for ${normalizedDomain}`)
   }
+
+  // Flag all services under this domain as domain-verified (protects from poller overwrites).
+  // Runs after the retro-approval so the rows it just activated are flagged too (#300).
+  db.prepare(
+    "UPDATE services SET domain_verified = 1 WHERE hostname = ? AND (status = 'active' OR status IS NULL)"
+  ).run(normalizedDomain)
 
   // Count services under this domain
   const serviceCount = db.prepare(
@@ -268,6 +269,16 @@ export async function verifyClaim(domain, { fetchFn = fetch } = {}) {
       retroactively_approved: retroApproved.changes,
     },
   }
+}
+
+/**
+ * Approve a service registered on an already-verified domain. Sets domain_verified
+ * along with the approval, so it matches the rows verifyClaim flags (#300).
+ */
+export function approveDomainVerified(serviceId) {
+  stmt('approveDomainVerified',
+    "UPDATE services SET status = 'active', approval_reason = 'domain-verified', domain_verified = 1, updated_at = datetime('now') WHERE id = ?"
+  ).run(serviceId)
 }
 
 /**
