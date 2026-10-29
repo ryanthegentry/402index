@@ -852,6 +852,31 @@ export function migrateTokenHashes() {
 // Run migration on boot
 migrateTokenHashes()
 
+/**
+ * Set domain_verified on active services whose hostname has a verified claim.
+ * Repairs rows approved by domain verification before #300 was fixed, which got
+ * approval_reason = 'domain-verified' but not the flag. Same row predicate as
+ * verifyClaim. Idempotent: only touches rows still at 0/NULL. Returns rows changed.
+ */
+export function backfillDomainVerified(database = db) {
+  const { changes } = database.prepare(`
+    UPDATE services SET domain_verified = 1
+    WHERE (domain_verified = 0 OR domain_verified IS NULL)
+      AND (status = 'active' OR status IS NULL)
+      AND hostname IN (SELECT domain FROM domain_claims WHERE status = 'verified')
+  `).run()
+  return changes
+}
+
+try {
+  const flagged = backfillDomainVerified()
+  if (flagged > 0) {
+    console.log(`[db] Backfilled domain_verified for ${flagged} services`)
+  }
+} catch (err) {
+  console.warn(`[db] domain_verified backfill note: ${err.message}`)
+}
+
 // ─── Protocol Changes (detected during health checks) ───────────────────────
 
 db.exec(`

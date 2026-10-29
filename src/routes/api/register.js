@@ -12,6 +12,7 @@ import { emit } from '../../services/events.js'
 import { discoverProbeConfig } from '../../services/wellknown-discovery.js'
 import { generateEmbedding } from '../../services/embeddings.js'
 import { registerUpsert } from '../../services/service-registration.js'
+import { approveDomainVerified } from '../../services/domain-verify.js'
 
 const router = Router()
 
@@ -475,10 +476,8 @@ router.post('/register', async (req, res) => {
 
     // Auto-approve if registering domain is verified (reuse lookup from rate limit check)
     if (service.status === 'pending' && isVerifiedDomain) {
-      db.prepare(
-        "UPDATE services SET status = 'active', approval_reason = 'domain-verified', updated_at = datetime('now') WHERE id = ?"
-      ).run(service.id)
-      service = { ...service, status: 'active', approval_reason: 'domain-verified' }
+      approveDomainVerified(service.id)
+      service = { ...service, status: 'active', approval_reason: 'domain-verified', domain_verified: 1 }
       console.log(`[register] Auto-approved domain-verified registration: ${url}`)
     }
 
@@ -537,10 +536,8 @@ router.post('/register', async (req, res) => {
       }
 
       if (bonusService.status === 'pending' && isVerifiedDomain) {
-        db.prepare(
-          "UPDATE services SET status = 'active', approval_reason = 'domain-verified', updated_at = datetime('now') WHERE id = ?"
-        ).run(bonusService.id)
-        bonusService = { ...bonusService, status: 'active', approval_reason: 'domain-verified' }
+        approveDomainVerified(bonusService.id)
+        bonusService = { ...bonusService, status: 'active', approval_reason: 'domain-verified', domain_verified: 1 }
       }
 
       // Fire event for genuinely new bonus registrations
