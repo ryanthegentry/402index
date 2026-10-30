@@ -19,8 +19,8 @@ function stmt(key, sql) {
 }
 
 const upsert = () => stmt('upsert', `
-  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id, hostname)
-  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'exclusive', @source_id, @hostname)
+  INSERT INTO services (id, name, description, url, protocol, price_sats, price_usd, payment_asset, payment_network, category, input_schema, output_schema, provider, source, source_id, hostname, http_method, probe_body)
+  VALUES (@id, @name, @description, @url, @protocol, @price_sats, @price_usd, @payment_asset, @payment_network, @category, @input_schema, @output_schema, @provider, 'exclusive', @source_id, @hostname, @http_method, @probe_body)
   ON CONFLICT(url, protocol) DO UPDATE SET
     name = excluded.name,
     description = excluded.description,
@@ -32,6 +32,11 @@ const upsert = () => stmt('upsert', `
     input_schema = excluded.input_schema,
     output_schema = excluded.output_schema,
     provider = excluded.provider,
+    source = 'exclusive',
+    source_id = excluded.source_id,
+    status = 'active',
+    http_method = excluded.http_method,
+    probe_body = excluded.probe_body,
     hostname = COALESCE(excluded.hostname, services.hostname),
     updated_at = datetime('now')
   RETURNING *
@@ -60,6 +65,17 @@ export function loadListings() {
       }
 
       const listingUrl = normalizeUrl(listing.url)
+      const httpMethod = String(listing.http_method || 'GET').toUpperCase()
+      if (!['GET', 'POST', 'PUT', 'DELETE'].includes(httpMethod)) {
+        throw new Error(`invalid http_method: ${httpMethod}`)
+      }
+      let probeBody = null
+      if (listing.probe_body != null) {
+        if (httpMethod !== 'POST') throw new Error('probe_body requires http_method: POST')
+        probeBody = typeof listing.probe_body === 'string' ? listing.probe_body : JSON.stringify(listing.probe_body)
+        JSON.parse(probeBody)
+        if (Buffer.byteLength(probeBody) > 4000) throw new Error('probe_body exceeds 4000 bytes')
+      }
       const row = upsert().get({
         id: randomUUID(),
         name: listing.name || 'Unknown',
@@ -76,6 +92,8 @@ export function loadListings() {
         output_schema: listing.output ? JSON.stringify(listing.output) : null,
         provider: listing.provider || null,
         source_id: file,
+        http_method: httpMethod,
+        probe_body: probeBody,
       })
       if (row && row.registered_at === row.updated_at) {
         setImmediate(() => generateEmbedding(row.id).catch(() => {}))

@@ -25,6 +25,8 @@ const KNOWN_USDC = {
   '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 'Polygon',
   // Base Sepolia (testnet)
   '0x036cbd53842c5426634e7929541ec2318f3dcf7e': 'Base Sepolia',
+  // Arc mainnet and testnet share this USDC predeploy address.
+  '0x3600000000000000000000000000000000000000': 'Arc',
 }
 
 // Known native assets (non-contract, chain-native currencies)

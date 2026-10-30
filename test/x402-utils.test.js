@@ -280,6 +280,12 @@ describe('isKnownUSDC', () => {
     assert.equal(result.known, true)
     assert.equal(result.chain, 'Base Sepolia')
   })
+
+  it('recognizes Arc USDC on the shared mainnet and testnet predeploy', () => {
+    const result = isKnownUSDC('0x3600000000000000000000000000000000000000')
+    assert.equal(result.known, true)
+    assert.equal(result.chain, 'Arc')
+  })
 })
 
 // ─── extractFacilitatorUrl ──────────────────────────────────────────────────

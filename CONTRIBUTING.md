@@ -39,6 +39,11 @@ payment_asset: "BTC"
 payment_network: "Lightning"
 category: "ai/ml"         # See categories below
 provider: "Your Org Name"
+# For a body-bound POST endpoint, add both fields below. The probe body is
+# sent without payment, so it must be safe to call repeatedly.
+# http_method: POST
+# probe_body:
+#   query: "example"
 ```
 
 3. Open a PR titled `Add listing: [Your Service Name]`.
