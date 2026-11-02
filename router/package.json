@@ -15,7 +15,7 @@
   "dependencies": {
     "@modelcontextprotocol/express": "^2.0.0",
     "@modelcontextprotocol/node": "^2.0.0",
-    "@modelcontextprotocol/server": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.4.0",
     "better-sqlite3": "^12.10.0",
     "express": "^5.2.1",
     "light-bolt11-decoder": "^3.2.0",
