@@ -1,0 +1,10 @@
+name: "Clear"
+description: "Fetch a public URL as markdown. $0.005 USDC on Base via x402 v2 / PayAI. Fail is free."
+url: "https://clear-agent-fetch.fly.dev/v1/fetch"
+protocol: "x402"
+price_usd: 0.005
+payment_asset: "USDC"
+payment_network: "Base"
+category: "tools"
+provider: "Clear"
+http_method: "POST"
