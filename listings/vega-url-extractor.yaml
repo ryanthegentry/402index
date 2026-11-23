@@ -1,0 +1,17 @@
+name: "Vega URL Extractor"
+url: "https://extract.kramsg1online.com/extract"
+protocol: x402
+price_usd: 0.05
+payment_asset: "USDC"
+category: "data-extraction"
+description: "Clean web article text extraction from any URL. x402 payment-gated on Base mainnet."
+provider: "kramsg1online"
+payment_wallet: "0x047b2A7fc72862a0e3E772eb53b19d35929BEd46"
+payment_network: "eip155:8453"
+payment_token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+method: "POST"
+input_schema: |
+  {"type": "object", "required": ["url"], "properties": {"url": {"type": "string", "format": "uri"}}}
+output_schema: "extracted text content"
+openapi_spec: "https://github.com/kramsg1405/revenue-apis/blob/main/docs/extract-openapi.json"
+discovery_endpoint: "https://extract.kramsg1online.com/.well-known/x402.json"
