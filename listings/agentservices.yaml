@@ -1,0 +1,22 @@
+name: "AgentServices"
+url: "https://agentservices.to/v1/indicators/BTC"
+base_url: "https://agentservices.to"
+protocol: x402
+price_usd: 0.02
+payment_asset: "USDC"
+category: "data"
+description: "52 paid API endpoints for AI agents — crypto data, technical indicators, DeFi yields, market intelligence, portfolio analysis, DeFi strategy, cross-DEX arbitrage scanning, inference gateway, and MCP integration. Agents pay per-request in USDC on Base via x402. No API keys, no billing dashboards."
+provider: "agentservices.to"
+website: "https://agentservices.to"
+repository: "https://github.com/vbkotecha/aiservices-api"
+networks:
+  - "eip155:8453"
+endpoint_count: 52
+free_endpoints: 13
+tags:
+  - "crypto"
+  - "defi"
+  - "market-data"
+  - "inference"
+  - "mcp"
+  - "analytics"
