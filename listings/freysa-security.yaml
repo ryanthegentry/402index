@@ -1,0 +1,10 @@
+name: "Freysa Security"
+url: "https://economic-agent-369.freysa.dev/api/honeypot-check"
+protocol: x402
+price_usd: 0.25
+payment_asset: "USDC"
+payment_network: "Base"
+category: "security"
+description: "On-chain security intelligence for autonomous AI agents. 27 x402-enabled endpoints on Base: token honeypot detection & bytecode analysis, wallet forensics, address risk scoring, approval risk analysis, pre-trade safety checks, agent transaction preflight ($2.50), CAPTCHA solving ($0.01), smart contract code review, web scraping, deep reasoning, and market data. No API keys, no signup — pay per request in USDC on Base via x402 protocol."
+provider: "Freysa Data Services"
+contact_email: "admin@economic-agent-369.freysa.dev"
