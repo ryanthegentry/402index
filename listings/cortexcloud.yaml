@@ -1,0 +1,9 @@
+name: "CortexCloud Optimization API"
+url: "https://api.cortexcloud.org/v1/optimize"
+protocol: x402
+price_usd: 0.05
+payment_asset: "USDC"
+payment_network: "Base"
+category: "ai/optimization"
+description: "Pay-per-call QUBO/Ising optimization for AI agents — classical exact ($0.05, n<=20), hybrid, and real quantum (D-Wave QPU) backends through one endpoint. Free estimate first (POST /v1/estimate returns mode + exact USDC price before any payment), no API keys, no subscriptions. Agent-discoverable: agentsearch.txt, llms.txt, MCP server, .well-known/x402.json v2 manifest. Example payloads incl. routing/portfolio/scheduling at /v1/examples."
+provider: "CortexCloud"
