@@ -1,0 +1,9 @@
+name: "AutoTasker Hub"
+description: "China trending and 100+ data endpoints for AI agents, paid per call"
+url: "https://autotasker.highkingflower.com/api/x402/hotlist"
+protocol: "x402"
+price_usd: 0.05
+payment_asset: "USDC"
+payment_network: "Base"
+category: "real-time-data"
+provider: "AutoTasker Hub"
